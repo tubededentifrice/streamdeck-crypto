@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name=viewport
+        content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,minimal-ui,viewport-fit=cover">
+    <meta name=apple-mobile-web-app-capable content=yes>
+    <meta name=apple-mobile-web-app-status-bar-style content=black>
+    <title>com.courcelle.cryptoticker.ticker.property_inspector</title>
+    <link rel="stylesheet" href="css/pi.css">
+</head>
+
+<body>
+    <div class="sdpi-wrapper">
+
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Crypto pair</div>
+            <select class="sdpi-item-value select" id="select-pair" name="select-pair">
+
+            </select>
+        </div>
+
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Multiplier</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="multiplier" name="multiplier" value=""
+                placeholder="Enter a multiplier (integer), defaults to 1" pattern="[0-9]*">
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Digits</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="digits" name="digits" value=""
+                placeholder="Enter the number of digits to round values" pattern="[0-9]*">
+        </div>
+
+        <script src="js/pi.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,40 @@
+{
+  "Actions": [
+    {
+      "Icon": "actionIcon",
+      "Name": "Crypto ticker",
+      "States": [
+        {
+          "Image": "images/actionDefaultImage",
+          "TitleAlignment": "middle",
+          "FontSize": "12"
+        }
+      ],
+      "SupportedInMultiActions": false,
+      "Tooltip": "Keep track of crytocurrencies prices (uses Bitfinex API)",
+      "UUID": "com.courcelle.cryptoticker.ticker"
+    }
+  ],
+  "SDKVersion": 2,
+  "Author": "Vincent Courcelle",
+  "CodePath": "index.html",
+  "PropertyInspectorPath": "index_pi.html",
+  "Name": "Crypto ticker",
+  "Description": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Clicking the icon forces a refresh.",
+  "Icon": "images/pluginIcon",
+  "URL": "https://github.com/tubededentifrice/streamdeck-crypto",
+  "Version": "1",
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.1"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "7"
+    }
+  ],
+  "Software": {
+    "MinimumVersion": "4.1"
+  }
+}

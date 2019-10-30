@@ -1,0 +1,8 @@
+{
+  "Name": "Crypto ticker",
+  "Description": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Clicking the icon forces a refresh.",
+  "com.courcelle.cryptoticker.ticker": {
+    "Name": "Crypto ticker",
+    "Tooltip": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Clicking the icon forces a refresh."
+  }
+}
