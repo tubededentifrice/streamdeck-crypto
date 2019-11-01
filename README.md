@@ -13,7 +13,10 @@
 - Can customize fonts, colors, which info to display, etc.
 - Fully open source!
 
-![](screenshot.png)
+![](screenshot1.png)
+![](screenshot2.png)
+![](screenshot3.png)
+![](screenshot4.png)
 
 ## Installation
 In the Release folder, you can find the file `com.courcelle.cryptoticker.streamDeckPlugin`. If you double-click this file on your machine, Stream Deck will install the plugin.
