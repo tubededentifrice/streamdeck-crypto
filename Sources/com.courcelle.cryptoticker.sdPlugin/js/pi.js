@@ -13,9 +13,21 @@ var websocket = null,
 let currentPair = "BTCUSD";
 let currentMultiplier = 1;
 let currentDigits = 2;
+let currentFont = "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif";
+let currentBackgroundColor = "#000000";
+let currentTextColor = "#ffffff";
+let currentDisplayHighLow = "on";
+let currentDisplayHighLowBar = "on";
+
 const pairsDropDown = document.getElementById("select-pair");
 const multiplierInput = document.getElementById("multiplier");
 const digitsInput = document.getElementById("digits");
+const fontInput = document.getElementById("font");
+const backgroundColorInput = document.getElementById("backgroundColor");
+const textColorInput = document.getElementById("textColor");
+const highLowCheck = document.getElementById("displayHighLow");
+const highLowBarCheck = document.getElementById("displayHighLowBar");
+
 let pi = {
     initDom: function() {
         this.initPairsDropDown();
@@ -25,15 +37,26 @@ let pi = {
             jThis.checkNewSettings();
         }
         pairsDropDown.onchange = callback;
+
         multiplierInput.onchange = callback;
         multiplierInput.onkeyup = callback;
+
         digitsInput.onchange = callback;
         digitsInput.onkeyup = callback;
+
+        fontInput.onchange = callback;
+        fontInput.onkeyup = callback;
+
+        backgroundColorInput.onchange = callback;
+        textColorInput.onchange = callback;
+
+        highLowCheck.onchange = callback;
+        highLowBarCheck.onchange = callback;
     },
     initPairsDropDown: async function () {
         const pairs = await this.getPairs();
         //console.log(pairs);
-
+        pairs.sort();
         pairs.forEach(function (pair) {
             var option = document.createElement("option");
             option.text = pair;
@@ -53,11 +76,21 @@ let pi = {
         currentPair = settings["pair"] || currentPair;
         currentMultiplier = settings["multiplier"] || currentMultiplier;
         currentDigits = settings["digits"] || currentDigits;
+        currentFont = settings["font"] || currentFont;
+        currentBackgroundColor = settings["backgroundColor"] || currentBackgroundColor;
+        currentTextColor = settings["textColor"] || currentTextColor;
+        currentDisplayHighLow = settings["displayHighLow"] || currentDisplayHighLow;
+        currentDisplayHighLowBar = settings["displayHighLowBar"] || currentDisplayHighLowBar;
     },
     checkNewSettings: function() {
         currentPair = pairsDropDown.value;
         currentMultiplier = multiplierInput.value;
         currentDigits = digitsInput.value;
+        currentFont = fontInput.value;
+        currentBackgroundColor = backgroundColorInput.value;
+        currentTextColor = textColorInput.value;
+        currentDisplayHighLow = highLowCheck.checked?"on":"off";
+        currentDisplayHighLowBar = highLowBarCheck.checked?"on":"off";
 
         this.saveSettings();
     },
@@ -65,14 +98,25 @@ let pi = {
         pairsDropDown.value = currentPair;
         multiplierInput.value = currentMultiplier;
         digitsInput.value = currentDigits;
+        fontInput.value = currentFont;
+        backgroundColorInput.value = currentBackgroundColor;
+        textColorInput.value = currentTextColor;
+
+        highLowCheck.checked = currentDisplayHighLow!="off";
+        highLowBarCheck.checked = currentDisplayHighLowBar!="off";
     },
     saveSettings: function() {
         const newSettings = {
             "pair": currentPair,
             "multiplier": currentMultiplier,
             "digits": currentDigits,
+            "font": currentFont,
+            "backgroundColor": currentBackgroundColor,
+            "textColor": currentTextColor,
+            "displayHighLow": currentDisplayHighLow,
+            "displayHighLowBar": currentDisplayHighLowBar,
         };
-        //console.log(newSettings);
+        console.log(newSettings);
 
         if (websocket && (websocket.readyState === 1)) {
             const jsonSetSettings = {

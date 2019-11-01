@@ -13,7 +13,7 @@
 
 <body>
     <div class="sdpi-wrapper">
-
+        <!-- See https://github.com/elgatosf/streamdeck-pisamples/blob/master/Sources/com.elgato.pisamples.sdPlugin/index_pi.html -->
         <div class="sdpi-item">
             <div class="sdpi-item-label">Crypto pair</div>
             <select class="sdpi-item-value select" id="select-pair" name="select-pair">
@@ -30,6 +30,38 @@
             <div class="sdpi-item-label">Digits</div>
             <input type="number" inputmode="numeric" class="sdpi-item-value" id="digits" name="digits" value=""
                 placeholder="Enter the number of digits to round values" pattern="[0-9]*">
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Font</div>
+            <input type="text" class="sdpi-item-value" id="font" name="font"
+                placeholder="Font to use, comma separated (like CSS)">
+        </div>
+        <div type="color" class="sdpi-item">
+            <div class="sdpi-item-label">Background color</div>
+            <input type="color" id="backgroundColor" name="backgroundColor" class="sdpi-item-value" value="">
+        </div>
+        <div type="color" class="sdpi-item">
+            <div class="sdpi-item-label">Text color</div>
+            <input type="color" id="textColor" name="textColor" class="sdpi-item-value" value="">
+        </div>
+        <div type="checkbox" class="sdpi-item">
+            <div class="sdpi-item-label empty"></div>
+            <div class="sdpi-item-value">
+                <div class="sdpi-item-child">
+                    <input id="displayHighLow" type="checkbox" value="on">
+                    <label for="displayHighLow" class="sdpi-item-label"><span></span> Display daily low/high</label>
+                </div>
+            </div>
+        </div>
+        <div type="checkbox" class="sdpi-item">
+            <div class="sdpi-item-label empty"></div>
+            <div class="sdpi-item-value">
+                <div class="sdpi-item-child">
+                    <input id="displayHighLowBar" type="checkbox" value="on">
+                    <label for="displayHighLowBar" class="sdpi-item-label"><span></span> Display daily low/high
+                        bar</label>
+                </div>
+            </div>
         </div>
 
         <script src="js/pi.js"></script>

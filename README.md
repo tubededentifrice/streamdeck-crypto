@@ -11,7 +11,7 @@
 - All Bitfinex pairs are supported (~420 pairs)
 - Clicking the button forces the refresh (otherwise refreshes every minute)
 - Allows setting a multiplier and number of digits (eg. for very small values, or very big)
-- TODO: Real time update
+- Real time updates (WS connection to Bitfinex)
 
 ![](screenshot.png)
 
