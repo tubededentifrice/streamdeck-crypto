@@ -18,6 +18,7 @@ let currentBackgroundColor = "#000000";
 let currentTextColor = "#ffffff";
 let currentDisplayHighLow = "on";
 let currentDisplayHighLowBar = "on";
+let currentAlertRule = "";
 
 const pairsDropDown = document.getElementById("select-pair");
 const multiplierInput = document.getElementById("multiplier");
@@ -27,6 +28,7 @@ const backgroundColorInput = document.getElementById("backgroundColor");
 const textColorInput = document.getElementById("textColor");
 const highLowCheck = document.getElementById("displayHighLow");
 const highLowBarCheck = document.getElementById("displayHighLowBar");
+const alertRuleInput = document.getElementById("alertRule");
 
 let pi = {
     initDom: function() {
@@ -52,6 +54,9 @@ let pi = {
 
         highLowCheck.onchange = callback;
         highLowBarCheck.onchange = callback;
+
+        alertRuleInput.onchange = callback;
+        alertRuleInput.onkeyup = callback;
     },
     initPairsDropDown: async function () {
         const pairs = await this.getPairs();
@@ -81,6 +86,7 @@ let pi = {
         currentTextColor = settings["textColor"] || currentTextColor;
         currentDisplayHighLow = settings["displayHighLow"] || currentDisplayHighLow;
         currentDisplayHighLowBar = settings["displayHighLowBar"] || currentDisplayHighLowBar;
+        currentAlertRule = settings["alertRule"] || currentAlertRule;
     },
     checkNewSettings: function() {
         currentPair = pairsDropDown.value;
@@ -91,6 +97,7 @@ let pi = {
         currentTextColor = textColorInput.value;
         currentDisplayHighLow = highLowCheck.checked?"on":"off";
         currentDisplayHighLowBar = highLowBarCheck.checked?"on":"off";
+        currentAlertRule = alertRuleInput.value;
 
         this.saveSettings();
     },
@@ -104,6 +111,8 @@ let pi = {
 
         highLowCheck.checked = currentDisplayHighLow!="off";
         highLowBarCheck.checked = currentDisplayHighLowBar!="off";
+
+        alertRuleInput.value = currentAlertRule;
     },
     saveSettings: function() {
         const newSettings = {
@@ -115,6 +124,7 @@ let pi = {
             "textColor": currentTextColor,
             "displayHighLow": currentDisplayHighLow,
             "displayHighLowBar": currentDisplayHighLowBar,
+            "alertRule": currentAlertRule
         };
         console.log(newSettings);
 
@@ -149,7 +159,7 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, 
 
     /** let's see, if we have some settings */
     pi.extractSettings(actionInfo.payload.settings);
-    console.log(actionInfo.payload.settings);
+    // console.log(actionInfo.payload.settings);
 
     // if connection was established, the websocket sends
     // an 'onopen' event, where we need to register our PI

@@ -36,6 +36,8 @@ var tickerAction = {
         }
     },
     refreshTimer: function(context, settings) {
+        this.refreshSettings(context, settings);
+
         var currentWs = bitfinexWsByContext[context] || {};
         bitfinexWsByContext[context] = currentWs;
 
@@ -47,8 +49,6 @@ var tickerAction = {
 
             const jThis = this;
             currentWs.pair = settings.pair;
-            currentWs.context = context;
-            currentWs.settings = settings;
             currentWs.ws = new WebSocket("wss://api-pub.bitfinex.com/ws/2");
             currentWs.ws.onmessage = function(msg) {
                 //console.log(msg);
@@ -57,8 +57,8 @@ var tickerAction = {
                     if (Array.isArray(dataObj) && Array.isArray(dataObj[1]) && dataObj[1].length>=10) {
                         //console.log("Data", dataObj);
                         jThis.updateCanvas(
-                            context,
-                            settings,
+                            currentWs.context,
+                            currentWs.settings,
                             jThis.extractValues(dataObj[1])
                         );
 
@@ -73,8 +73,11 @@ var tickerAction = {
                 }))
             };
         }
-
-
+    },
+    refreshSettings: function(context, settings) {
+        var currentWs = bitfinexWsByContext[context] || {};
+        currentWs.context = context;
+        currentWs.settings = settings;
     },
 
     updateTicker: async function(context, settings) {
@@ -94,10 +97,19 @@ var tickerAction = {
         const pair = settings.pair || "";
         const multiplier = settings.multiplier || 1;
         const digits = settings.digits || 2;
-        const backgroundColor = settings.backgroundColor || "#000000";
-        const textColor = settings.textColor || "#ffffff";
+        let backgroundColor = settings.backgroundColor || "#000000";
+        let textColor = settings.textColor || "#ffffff";
         //console.log(settings);
-        //console.log(pair+" => "+values.last);
+        console.log(new Date()+" "+pair+" => "+values.last);
+
+        if (settings.alertRule) {
+            const value = values.last;
+            if (eval(settings.alertRule)) {
+                const tmp = backgroundColor;
+                backgroundColor = textColor;
+                textColor = tmp;
+            }
+        }
 
         canvasContext.clearRect(0, 0, canvas.width, canvas.height);
         canvasContext.fillStyle = backgroundColor;
@@ -154,7 +166,7 @@ var tickerAction = {
             canvasContext.fill();
         }
 
-        // console.log(canvas.toDataURL("image/png"));
+        //console.log(canvas.toDataURL("image/png"));
         var json = {
             "event": "setImage",
             "context": context,
@@ -171,15 +183,21 @@ var tickerAction = {
 
         let valueString = ""+Math.round(value*multiplier*digitPow)/digitPow;
 
-        // Make sure we always have the correct number of digits, even when rounded
-        let digitPosition = valueString.indexOf(".");
-        if (digitPosition>0) {
+        if (digits>0) {
+            // Make sure we always have the correct number of digits, even when rounded
+            let digitPosition = valueString.indexOf(".");
+            if (digitPosition<0) {
+                valueString+=".";
+                digitPosition = valueString.length - 1;
+            }
+
             let actualDigits = valueString.length - digitPosition - 1;
             while (actualDigits<digits) {
                 valueString+="0";
                 actualDigits++;
             }
         }
+
 
         return valueString;
     },
@@ -237,6 +255,7 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
 
         if (settings!=null) {
             //console.log("Received settings",settings);
+            tickerAction.refreshSettings(context, settings);
             tickerAction.refreshTimer(context, settings);
             tickerAction.updateTicker(context, settings);
         }

@@ -1,8 +1,8 @@
 {
-  "Name": "Crypto ticker",
-  "Description": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Clicking the icon forces a refresh.",
+  "Name": "Crypto ticker PRO",
+  "Description": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Supports a very wide range of customizations.",
   "com.courcelle.cryptoticker.ticker": {
-    "Name": "Crypto ticker",
-    "Tooltip": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Clicking the icon forces a refresh."
+    "Name": "Crypto ticker PRO",
+    "Tooltip": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Supports a very wide range of customizations."
   }
 }

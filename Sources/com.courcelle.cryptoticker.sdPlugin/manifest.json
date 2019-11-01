@@ -1,8 +1,8 @@
 {
   "Actions": [
     {
-      "Icon": "actionIcon",
-      "Name": "Crypto ticker",
+      "Icon": "images/actionIcon",
+      "Name": "Crypto ticker PRO",
       "States": [
         {
           "Image": "images/actionDefaultImage",
@@ -19,8 +19,8 @@
   "Author": "Vincent Courcelle",
   "CodePath": "index.html",
   "PropertyInspectorPath": "index_pi.html",
-  "Name": "Crypto ticker",
-  "Description": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Clicking the icon forces a refresh.",
+  "Name": "Crypto ticker PRO",
+  "Description": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Supports a very wide range of customizations.",
   "Icon": "images/pluginIcon",
   "URL": "https://github.com/tubededentifrice/streamdeck-crypto",
   "Version": "1",

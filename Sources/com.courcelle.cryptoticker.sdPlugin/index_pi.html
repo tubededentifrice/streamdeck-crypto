@@ -44,6 +44,18 @@
             <div class="sdpi-item-label">Text color</div>
             <input type="color" id="textColor" name="textColor" class="sdpi-item-value" value="">
         </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Alert rule</div>
+            <input type="text" class="sdpi-item-value" id="alertRule" name="alertRule"
+                placeholder="Example: value&gt;10 || value&lt;100">
+        </div>
+        <details>
+                <summary>How alert rules work</summary>
+                <p>Alert rule are JavaScript snippets that will be evaluated upon value change.</p>
+                <p>When returning true, the text and background colors will be inverted.</p>
+                <p><em>value</em> is the displayed value.</p>
+        </details>
+
         <div type="checkbox" class="sdpi-item">
             <div class="sdpi-item-label empty"></div>
             <div class="sdpi-item-value">
