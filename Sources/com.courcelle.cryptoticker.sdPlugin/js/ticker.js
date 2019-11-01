@@ -136,6 +136,7 @@ var tickerAction = {
         if (settings["displayHighLowBar"]!="off") {
             const lineY = 104;
             const padding = 5;
+            const lineWidth = 6;
 
             const percent = (values.last - values.low)/(values.high - values.low);
             const lineLength = canvasWidth-padding*2;
@@ -147,14 +148,14 @@ var tickerAction = {
             canvasContext.beginPath();
             canvasContext.moveTo(padding, lineY);
             canvasContext.lineTo(cursorPositionX, lineY);
-            canvasContext.lineWidth = 2;
+            canvasContext.lineWidth = lineWidth;
             canvasContext.strokeStyle = "green";
             canvasContext.stroke();
 
             canvasContext.beginPath();
             canvasContext.moveTo(cursorPositionX, lineY);
             canvasContext.lineTo(canvasWidth-padding, lineY);
-            canvasContext.lineWidth = 2;
+            canvasContext.lineWidth = lineWidth;
             canvasContext.strokeStyle = "red";
             canvasContext.stroke();
 
