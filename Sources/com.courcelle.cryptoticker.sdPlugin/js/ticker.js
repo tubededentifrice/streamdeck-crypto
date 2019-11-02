@@ -13,11 +13,22 @@ var bitfinexWsByContext = {};
 var tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
     onKeyDown: function (context, settings, coordinates, userDesiredState) {
+        // State machine between modes
+        const currentWs = this.getCurrentWs(context);
+        switch(currentWs.mode) {
+            case "candles":
+                currentWs.mode = "normal";
+                break;
+            case "normal":
+            default:
+                currentWs.mode = "candles";
+                break;
+        }
 
-    },
-    onKeyUp: function (context, settings, coordinates, userDesiredState) {
         this.refreshTimer(context, settings);
         this.updateTicker(context, settings);
+    },
+    onKeyUp: function (context, settings, coordinates, userDesiredState) {
     },
     onWillAppear: function (context, settings, coordinates) {
         this.initCanvas();
@@ -28,7 +39,7 @@ var tickerAction = {
     refreshTimers: function() {
         // Make sure everybody is connected
         for (var ctx in bitfinexWsByContext) {
-            var currentWs = bitfinexWsByContext[ctx];
+            const currentWs = bitfinexWsByContext[ctx];
             this.refreshTimer(
                 currentWs.context,
                 currentWs.settings
@@ -38,10 +49,9 @@ var tickerAction = {
     refreshTimer: function(context, settings) {
         this.refreshSettings(context, settings);
 
-        var currentWs = bitfinexWsByContext[context] || {};
-        bitfinexWsByContext[context] = currentWs;
+        const currentWs = this.getCurrentWs(context);
 
-        if (currentWs.pair!=settings.pair || currentWs.ws.readyState>1) {
+        if (currentWs.pair!=settings.pair || !currentWs.ws || currentWs.ws.readyState>1) {
             console.log("Reopening WS because "+currentWs.pair+"!="+settings.pair+" || "+(currentWs.ws || {}).readyState+">1");
             if (currentWs.ws) {
                 currentWs.ws.close();
@@ -73,9 +83,12 @@ var tickerAction = {
                 }))
             };
         }
+
+        // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
+        this.updateTicker(context, settings);
     },
     refreshSettings: function(context, settings) {
-        var currentWs = bitfinexWsByContext[context] || {};
+        const currentWs = this.getCurrentWs(context);
         currentWs.context = context;
         currentWs.settings = settings;
     },
@@ -89,7 +102,19 @@ var tickerAction = {
         canvas = document.getElementById("ticker");
         canvasContext = canvas.getContext("2d");
     },
-    updateCanvas: function(context, settings, values) {
+    updateCanvas: async function(context, settings, tickerValues) {
+        const currentWs = this.getCurrentWs(context);
+        switch(currentWs.mode) {
+            case "candles":
+                this.updateCanvasCandles(context, settings, await this.getCandles(settings));
+                break;
+            case "normal":
+            default:
+                this.updateCanvasTicker(context, settings, tickerValues);
+                break;
+        }
+    },
+    updateCanvasTicker: function(context, settings, values) {
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
         const textPadding = 10;
@@ -111,9 +136,9 @@ var tickerAction = {
             }
         }
 
-        canvasContext.clearRect(0, 0, canvas.width, canvas.height);
+        canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
         canvasContext.fillStyle = backgroundColor;
-        canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+        canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
 
         var font = settings["font"] || "Lato";
         canvasContext.font = "25px "+font;
@@ -167,7 +192,51 @@ var tickerAction = {
             canvasContext.fill();
         }
 
+        this.sendCanvas(context);
+    },
+    updateCanvasCandles: function(context, settings, candlesNormalized) {
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const padding = 10;
+        let backgroundColor = settings.backgroundColor || "#000000";
+        let textColor = settings.textColor || "#ffffff";
+
+        canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
+        canvasContext.fillStyle = backgroundColor;
+        canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        //console.log(candlesNormalized);
+        candlesNormalized.forEach(function(candleNormalized) {
+            const xPosition = Math.round(padding+candleNormalized.timePercent*(canvasWidth-2*padding));
+
+            // Draw the high/low bar
+            canvasContext.beginPath();
+            canvasContext.moveTo(xPosition, padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding));
+            canvasContext.lineTo(xPosition, padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding));
+            canvasContext.lineWidth = 2;
+            canvasContext.strokeStyle = textColor;
+            canvasContext.stroke();
+
+            // Choose open/close color
+            let candleColor = "green";
+            if (candleNormalized.closePercent<candleNormalized.openPercent) {
+                candleColor = "red";
+            }
+
+            // Draw the open/close bar
+            canvasContext.beginPath();
+            canvasContext.moveTo(xPosition, padding+(1-candleNormalized.closePercent)*(canvasHeight-2*padding));
+            canvasContext.lineTo(xPosition, padding+(1-candleNormalized.openPercent)*(canvasHeight-2*padding));
+            canvasContext.lineWidth = 5;
+            canvasContext.strokeStyle = candleColor;
+            canvasContext.stroke();
+        });
+
+        this.sendCanvas(context);
+    },
+    sendCanvas: function(context) {
         //console.log(canvas.toDataURL("image/png"));
+
         var json = {
             "event": "setImage",
             "context": context,
@@ -215,6 +284,62 @@ var tickerAction = {
             "high": rawTicker[8],
             "low": rawTicker[9],
         };
+    },
+    getCandles: async function(settings) {
+        const pair = settings["pair"] || "BTCUSD";
+        const interval = settings["candlesInterval"] || "1h";
+
+        const response = await fetch("https://api-pub.bitfinex.com/v2/candles/trade:"+interval+":t"+pair+"/hist?limit=20");
+        const responseJson = await response.json();
+        //console.log(responseJson);
+        return this.getCandlesNormalized(responseJson);
+    },
+    getCandlesNormalized: function(candles) {
+        //console.log(candles);
+
+        let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
+        candles.forEach(function(candle) {
+            timeMin = Math.min(timeMin, candle[0]);
+            timeMax = Math.max(timeMax, candle[0]);
+
+            // Some shouldn't be necessary, but doesn't cost much and avoid mistakes
+            min = Math.min(min, candle[1]);
+            min = Math.min(min, candle[2]);
+            min = Math.min(min, candle[3]);
+            min = Math.min(min, candle[4]);
+
+            max = Math.max(max, candle[1]);
+            max = Math.max(max, candle[2]);
+            max = Math.max(max, candle[3]);
+            max = Math.max(max, candle[4]);
+
+            volumeMin = Math.min(volumeMin, candle[5]);
+            volumeMax = Math.max(volumeMax, candle[5]);
+        });
+
+        const jThis = this;
+        const candlesNormalized = [];
+        candles.forEach(function(candle) {
+            candlesNormalized.push({
+                timePercent: jThis.normalizeValue(candle[0], timeMin, timeMax),
+                openPercent: jThis.normalizeValue(candle[1], min, max),
+                closePercent: jThis.normalizeValue(candle[2], min, max),
+                highPercent: jThis.normalizeValue(candle[3], min, max),
+                lowPercent: jThis.normalizeValue(candle[4], min, max),
+                volumePercent: jThis.normalizeValue(candle[5], volumeMin, volumeMax)
+            });
+        });
+
+        return candlesNormalized;
+    },
+    normalizeValue: function(value, min, max) {
+        return (value-min)/(max-min);
+    },
+
+    getCurrentWs: function(context) {
+        const currentWs = bitfinexWsByContext[context] || {};
+        bitfinexWsByContext[context] = currentWs;
+        return currentWs;
     },
 };
 

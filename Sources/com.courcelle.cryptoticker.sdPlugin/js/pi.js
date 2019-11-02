@@ -11,6 +11,7 @@ var websocket = null,
 
 
 let currentPair = "BTCUSD";
+let currentCandlesInterval = "1h";
 let currentMultiplier = 1;
 let currentDigits = 2;
 let currentFont = "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif";
@@ -21,6 +22,7 @@ let currentDisplayHighLowBar = "on";
 let currentAlertRule = "";
 
 const pairsDropDown = document.getElementById("select-pair");
+const candlesIntervalDropDown = document.getElementById("candlesInterval");
 const multiplierInput = document.getElementById("multiplier");
 const digitsInput = document.getElementById("digits");
 const fontInput = document.getElementById("font");
@@ -39,6 +41,7 @@ let pi = {
             jThis.checkNewSettings();
         }
         pairsDropDown.onchange = callback;
+        candlesIntervalDropDown.onchange = callback;
 
         multiplierInput.onchange = callback;
         multiplierInput.onkeyup = callback;
@@ -79,6 +82,7 @@ let pi = {
     },
     extractSettings: function(settings) {
         currentPair = settings["pair"] || currentPair;
+        currentCandlesInterval = settings["candlesInterval"] || currentCandlesInterval;
         currentMultiplier = settings["multiplier"] || currentMultiplier;
         currentDigits = settings["digits"] || currentDigits;
         currentFont = settings["font"] || currentFont;
@@ -90,6 +94,7 @@ let pi = {
     },
     checkNewSettings: function() {
         currentPair = pairsDropDown.value;
+        currentCandlesInterval = candlesIntervalDropDown.value;
         currentMultiplier = multiplierInput.value;
         currentDigits = digitsInput.value;
         currentFont = fontInput.value;
@@ -103,6 +108,7 @@ let pi = {
     },
     refreshValues: function() {
         pairsDropDown.value = currentPair;
+        candlesIntervalDropDown.value = currentCandlesInterval;
         multiplierInput.value = currentMultiplier;
         digitsInput.value = currentDigits;
         fontInput.value = currentFont;
@@ -117,6 +123,7 @@ let pi = {
     saveSettings: function() {
         const newSettings = {
             "pair": currentPair,
+            "candlesInterval": currentCandlesInterval,
             "multiplier": currentMultiplier,
             "digits": currentDigits,
             "font": currentFont,

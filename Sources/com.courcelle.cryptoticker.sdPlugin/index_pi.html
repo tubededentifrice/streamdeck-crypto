@@ -16,9 +16,7 @@
         <!-- See https://github.com/elgatosf/streamdeck-pisamples/blob/master/Sources/com.elgato.pisamples.sdPlugin/index_pi.html -->
         <div class="sdpi-item">
             <div class="sdpi-item-label">Crypto pair</div>
-            <select class="sdpi-item-value select" id="select-pair" name="select-pair">
-
-            </select>
+            <select class="sdpi-item-value select" id="select-pair" name="select-pair"></select>
         </div>
 
         <div class="sdpi-item">
@@ -55,6 +53,24 @@
                 <p>When returning true, the text and background colors will be inverted.</p>
                 <p><em>value</em> is the displayed value.</p>
         </details>
+
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Candles interval</div>
+            <select class="sdpi-item-value select" id="candlesInterval" name="candlesInterval">
+                    <option value="1m">1 minute</option>
+                    <option value="5m">5 minutes</option>
+                    <option value="15m">15 minutes</option>
+                    <option value="30m">30 minutes</option>
+                    <option value="1h">1 hour</option>
+                    <option value="3h">3 hours</option>
+                    <option value="6h">6 hours</option>
+                    <option value="12h">12 hours</option>
+                    <option value="1D">1 day</option>
+                    <option value="7D">7 days</option>
+                    <option value="14D">14 days</option>
+                    <option value="1M">1 month</option>
+            </select>
+        </div>
 
         <div type="checkbox" class="sdpi-item">
             <div class="sdpi-item-label empty"></div>
