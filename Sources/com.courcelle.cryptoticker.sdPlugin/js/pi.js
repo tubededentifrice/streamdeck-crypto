@@ -3,11 +3,7 @@
 var websocket = null,
     uuid = null,
     actionInfo = {},
-    inInfo = {},
-    runningApps = [],
-    settings = {},
-    isQT = navigator.appVersion.includes('QtWebEngine'),
-    onchangeevt = 'onchange'; // 'oninput'; // change this, if you want interactive elements act on any change, or while they're modified
+    inInfo = {};
 
 
 let currentPair = "BTCUSD";
@@ -20,6 +16,7 @@ let currentTextColor = "#ffffff";
 let currentDisplayHighLow = "on";
 let currentDisplayHighLowBar = "on";
 let currentAlertRule = "";
+let currentMode = "ticker";
 
 const pairsDropDown = document.getElementById("select-pair");
 const candlesIntervalDropDown = document.getElementById("candlesInterval");
@@ -91,6 +88,7 @@ let pi = {
         currentDisplayHighLow = settings["displayHighLow"] || currentDisplayHighLow;
         currentDisplayHighLowBar = settings["displayHighLowBar"] || currentDisplayHighLowBar;
         currentAlertRule = settings["alertRule"] || currentAlertRule;
+        currentMode = settings["mode"] || currentMode;
     },
     checkNewSettings: function() {
         currentPair = pairsDropDown.value;
@@ -131,9 +129,10 @@ let pi = {
             "textColor": currentTextColor,
             "displayHighLow": currentDisplayHighLow,
             "displayHighLowBar": currentDisplayHighLowBar,
-            "alertRule": currentAlertRule
+            "alertRule": currentAlertRule,
+            "mode": currentMode,
         };
-        console.log(newSettings);
+        // console.log(newSettings);
 
         if (websocket && (websocket.readyState === 1)) {
             const jsonSetSettings = {
@@ -183,6 +182,6 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, 
         // Received message from Stream Deck
         var jsonObj = JSON.parse(evt.data);
         var event = jsonObj['event'];
-        console.log("Received message", jsonObj);
+        // console.log("Received message", jsonObj);
     };
 }

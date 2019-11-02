@@ -14,16 +14,22 @@ var tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
     onKeyDown: function (context, settings, coordinates, userDesiredState) {
         // State machine between modes
-        const currentWs = this.getCurrentWs(context);
-        switch(currentWs.mode) {
+        switch(settings.mode) {
             case "candles":
-                currentWs.mode = "normal";
+                settings.mode = "ticker";
                 break;
-            case "normal":
+            case "ticker":
             default:
-                currentWs.mode = "candles";
+                settings.mode = "candles";
                 break;
         }
+
+        // Update settings with current mode
+        websocket.send(JSON.stringify({
+            "event": "setSettings",
+            "context": context,
+            "payload": settings
+        }));
 
         this.refreshTimer(context, settings);
         this.updateTicker(context, settings);
@@ -103,12 +109,11 @@ var tickerAction = {
         canvasContext = canvas.getContext("2d");
     },
     updateCanvas: async function(context, settings, tickerValues) {
-        const currentWs = this.getCurrentWs(context);
-        switch(currentWs.mode) {
+        switch(settings.mode) {
             case "candles":
                 this.updateCanvasCandles(context, settings, await this.getCandles(settings));
                 break;
-            case "normal":
+            case "ticker":
             default:
                 this.updateCanvasTicker(context, settings, tickerValues);
                 break;
@@ -119,7 +124,7 @@ var tickerAction = {
         const canvasHeight = canvas.height;
         const textPadding = 10;
 
-        const pair = settings.pair || "";
+        const pair = settings.pair || "BTCUSD";
         const multiplier = settings.multiplier || 1;
         const digits = settings.digits || 2;
         let backgroundColor = settings.backgroundColor || "#000000";
@@ -207,15 +212,17 @@ var tickerAction = {
 
         //console.log(candlesNormalized);
         candlesNormalized.forEach(function(candleNormalized) {
-            const xPosition = Math.round(padding+candleNormalized.timePercent*(canvasWidth-2*padding));
+            const xPosition = Math.round(padding+Math.round(candleNormalized.timePercent*(canvasWidth-2*padding)));
 
             // Draw the high/low bar
             canvasContext.beginPath();
-            canvasContext.moveTo(xPosition, padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding));
-            canvasContext.lineTo(xPosition, padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding));
+            canvasContext.moveTo(xPosition, Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding)));
+            canvasContext.lineTo(xPosition, Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)));
             canvasContext.lineWidth = 2;
             canvasContext.strokeStyle = textColor;
             canvasContext.stroke();
+
+            //console.log(xPosition+", "+Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding))+" to "+xPosition+", "+Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)))
 
             // Choose open/close color
             let candleColor = "green";
@@ -225,8 +232,8 @@ var tickerAction = {
 
             // Draw the open/close bar
             canvasContext.beginPath();
-            canvasContext.moveTo(xPosition, padding+(1-candleNormalized.closePercent)*(canvasHeight-2*padding));
-            canvasContext.lineTo(xPosition, padding+(1-candleNormalized.openPercent)*(canvasHeight-2*padding));
+            canvasContext.moveTo(xPosition, Math.round(padding+(1-candleNormalized.closePercent)*(canvasHeight-2*padding)));
+            canvasContext.lineTo(xPosition, Math.round(padding+(1-candleNormalized.openPercent)*(canvasHeight-2*padding)));
             canvasContext.lineWidth = 5;
             canvasContext.strokeStyle = candleColor;
             canvasContext.stroke();
@@ -295,7 +302,6 @@ var tickerAction = {
         return this.getCandlesNormalized(responseJson);
     },
     getCandlesNormalized: function(candles) {
-        //console.log(candles);
 
         let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
         candles.forEach(function(candle) {
@@ -330,6 +336,7 @@ var tickerAction = {
             });
         });
 
+        // console.log(candlesNormalized);
         return candlesNormalized;
     },
     normalizeValue: function(value, min, max) {
@@ -377,21 +384,17 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
         var coordinates = jsonPayload['coordinates'];
         var userDesiredState = jsonPayload['userDesiredState'];
 
-
-
-        if (settings!=null) {
-            //console.log("Received settings",settings);
-            tickerAction.refreshSettings(context, settings);
-            tickerAction.refreshTimer(context, settings);
-            tickerAction.updateTicker(context, settings);
-        }
-
         if (event == "keyDown") {
             tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
         } else if (event == "keyUp") {
             tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
         } else if (event == "willAppear") {
             tickerAction.onWillAppear(context, settings, coordinates);
+        } else if (settings!=null) {
+            //console.log("Received settings",settings);
+            tickerAction.refreshSettings(context, settings);
+            tickerAction.refreshTimer(context, settings);
+            tickerAction.updateTicker(context, settings);
         }
     };
 
