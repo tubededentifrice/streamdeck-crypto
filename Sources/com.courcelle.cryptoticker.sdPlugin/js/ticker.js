@@ -32,7 +32,7 @@ var tickerAction = {
         }));
 
         this.refreshTimer(context, settings);
-        this.updateTicker(context, settings);
+        // this.updateTicker(context, settings); // Already done by refreshTimer
     },
     onKeyUp: function (context, settings, coordinates, userDesiredState) {
     },
@@ -40,7 +40,7 @@ var tickerAction = {
         this.initCanvas();
 
         this.refreshTimer(context, settings);
-        this.updateTicker(context, settings);
+        // this.updateTicker(context, settings); // Already done by refreshTimer
     },
     refreshTimers: function() {
         // Make sure everybody is connected
@@ -109,9 +109,14 @@ var tickerAction = {
         canvasContext = canvas.getContext("2d");
     },
     updateCanvas: async function(context, settings, tickerValues) {
+        const currentWs = this.getCurrentWs(context);
+        currentWs.latestTickerValues = tickerValues;
+
         switch(settings.mode) {
             case "candles":
-                this.updateCanvasCandles(context, settings, await this.getCandles(settings));
+                const candleValues = await this.getCandles(settings);
+                currentWs.latestCandleValues = candleValues;
+                this.updateCanvasCandles(context, settings, candleValues);
                 break;
             case "ticker":
             default:
@@ -280,6 +285,7 @@ var tickerAction = {
     },
 
     getTickerValue: async function(pair) {
+        // console.log("getTickerValue API call");
         const response = await fetch("https://api-pub.bitfinex.com/v2/ticker/t"+pair);
         const responseJson = await response.json();
         //console.log(responseJson);
@@ -293,6 +299,8 @@ var tickerAction = {
         };
     },
     getCandles: async function(settings) {
+        // console.log("getCandles API call");
+
         const pair = settings["pair"] || "BTCUSD";
         const interval = settings["candlesInterval"] || "1h";
 
@@ -394,7 +402,7 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
             //console.log("Received settings",settings);
             tickerAction.refreshSettings(context, settings);
             tickerAction.refreshTimer(context, settings);
-            tickerAction.updateTicker(context, settings);
+            // tickerAction.updateTicker(context, settings);    // Already done by refreshTimer
         }
     };
 
