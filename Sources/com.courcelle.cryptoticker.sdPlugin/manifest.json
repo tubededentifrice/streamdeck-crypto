@@ -27,11 +27,11 @@
   "OS": [
     {
       "Platform": "mac",
-      "MinimumVersion": "10.1"
+      "MinimumVersion": "10.12"
     },
     {
       "Platform": "windows",
-      "MinimumVersion": "7"
+      "MinimumVersion": "10"
     }
   ],
   "Software": {
