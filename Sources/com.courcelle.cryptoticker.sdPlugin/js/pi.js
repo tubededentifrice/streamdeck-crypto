@@ -16,6 +16,8 @@ let currentTextColor = "#ffffff";
 let currentDisplayHighLow = "on";
 let currentDisplayHighLowBar = "on";
 let currentAlertRule = "";
+let currentBackgroundColorRule = "";
+let currentTextColorRule = "";
 let currentMode = "ticker";
 
 const pairsDropDown = document.getElementById("select-pair");
@@ -28,6 +30,8 @@ const textColorInput = document.getElementById("textColor");
 const highLowCheck = document.getElementById("displayHighLow");
 const highLowBarCheck = document.getElementById("displayHighLowBar");
 const alertRuleInput = document.getElementById("alertRule");
+const backgroundColorRuleInput = document.getElementById("backgroundColorRule");
+const textColorRuleInput = document.getElementById("textColorRule");
 
 let pi = {
     initDom: function() {
@@ -57,6 +61,12 @@ let pi = {
 
         alertRuleInput.onchange = callback;
         alertRuleInput.onkeyup = callback;
+
+        backgroundColorRuleInput.onchange = callback;
+        backgroundColorRuleInput.onkeyup = callback;
+
+        textColorRuleInput.onchange = callback;
+        textColorRuleInput.onkeyup = callback;
     },
     initPairsDropDown: async function () {
         const pairs = await this.getPairs();
@@ -88,6 +98,8 @@ let pi = {
         currentDisplayHighLow = settings["displayHighLow"] || currentDisplayHighLow;
         currentDisplayHighLowBar = settings["displayHighLowBar"] || currentDisplayHighLowBar;
         currentAlertRule = settings["alertRule"] || currentAlertRule;
+        currentBackgroundColorRule = settings["backgroundColorRule"] || currentBackgroundColorRule;
+        currentTextColorRule = settings["textColorRule"] || currentTextColorRule;
         currentMode = settings["mode"] || currentMode;
     },
     checkNewSettings: function() {
@@ -101,6 +113,8 @@ let pi = {
         currentDisplayHighLow = highLowCheck.checked?"on":"off";
         currentDisplayHighLowBar = highLowBarCheck.checked?"on":"off";
         currentAlertRule = alertRuleInput.value;
+        currentBackgroundColorRule = backgroundColorRuleInput.value;
+        currentTextColorRule = textColorRuleInput.value;
 
         this.saveSettings();
     },
@@ -117,6 +131,8 @@ let pi = {
         highLowBarCheck.checked = currentDisplayHighLowBar!="off";
 
         alertRuleInput.value = currentAlertRule;
+        backgroundColorRuleInput.value = currentBackgroundColorRule;
+        textColorRuleInput.value = currentTextColorRule;
     },
     saveSettings: function() {
         const newSettings = {
@@ -130,6 +146,8 @@ let pi = {
             "displayHighLow": currentDisplayHighLow,
             "displayHighLowBar": currentDisplayHighLowBar,
             "alertRule": currentAlertRule,
+            "backgroundColorRule": currentBackgroundColorRule,
+            "textColorRule": currentTextColorRule,
             "mode": currentMode,
         };
         // console.log(newSettings);

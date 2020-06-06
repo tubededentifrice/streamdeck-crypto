@@ -135,15 +135,37 @@ var tickerAction = {
         let backgroundColor = settings.backgroundColor || "#000000";
         let textColor = settings.textColor || "#ffffff";
         //console.log(settings);
-        console.log(new Date()+" "+pair+" => "+values.last);
+        //// console.log(new Date()+" "+pair+" => "+values.last);
 
+        let alertMode = false;
         if (settings.alertRule) {
             const value = values.last;
-            if (eval(settings.alertRule)) {
-                const tmp = backgroundColor;
-                backgroundColor = textColor;
-                textColor = tmp;
+            try {
+                if (eval(settings.alertRule)) {
+                    alertMode = true;
+                    const tmp = backgroundColor;
+                    backgroundColor = textColor;
+                    textColor = tmp;
+                }
             }
+            catch(err) { console.error(err); }
+        }
+
+        if (settings.backgroundColorRule) {
+            const value = values.last;
+            const alert = alertMode;
+            try {
+                backgroundColor = eval(settings.backgroundColorRule) || backgroundColor;
+            }
+            catch(err) { console.error(err); }
+        }
+        if (settings.textColorRule) {
+            const value = values.last;
+            const alert = alertMode;
+            try {
+                textColor = eval(settings.textColorRule) || textColor;
+            }
+            catch(err) { console.error(err); }
         }
 
         canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);

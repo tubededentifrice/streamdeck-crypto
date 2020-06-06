@@ -54,6 +54,24 @@
                 <p><em>value</em> is the displayed value.</p>
                 <p>Alerts are only supported in "ticker" mode (ie not candlebars).</p>
         </details>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Background color rule</div>
+            <input type="text" class="sdpi-item-value" id="backgroundColorRule" name="backgroundColorRule"
+                placeholder="Example: alert?'#cc0000':''">
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Text color rule</div>
+            <input type="text" class="sdpi-item-value" id="textColorRule" name="textColorRule"
+                placeholder="Example: alert?'blue':''">
+        </div>
+        <details>
+                <summary>How color rules work</summary>
+                <p>Color rule are JavaScript snippets that will be evaluated upon value change.</p>
+                <p>When returning a non empty color, it will override the default ones.</p>
+                <p><em>value</em> is the displayed value.</p>
+                <p><em>alert</em> is a boolean indicating whether the alert mode is triggered (ie. the &quot;Alert rule&quot;).</p>
+                <p>Color rules are only supported in "ticker" mode (ie not candlebars).</p>
+        </details>
 
         <div class="sdpi-item">
             <div class="sdpi-item-label">Candles interval</div>
