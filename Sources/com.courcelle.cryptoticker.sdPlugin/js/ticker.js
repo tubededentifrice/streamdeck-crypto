@@ -4,7 +4,7 @@ var DestinationEnum = Object.freeze({
     "SOFTWARE_ONLY": 2
 });
 
-const loggingEnabled = true;
+const loggingEnabled = false;
 var websocket = null;
 var pluginUUID = null;
 var canvas;
