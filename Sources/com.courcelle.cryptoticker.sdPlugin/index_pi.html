@@ -50,7 +50,13 @@
                 <summary>How alert rules work</summary>
                 <p>Alert rule are JavaScript snippets that will be evaluated upon value change.</p>
                 <p>When returning true, the text and background colors will be inverted.</p>
-                <p><em>value</em> is the displayed value.</p>
+                <p><em>value</em> is the last price (displayed value).</p>
+                <p><em>changeDaily</em> is the amount that the last price has changed since yesterday.</p>
+                <p><em>changeDailyPercent</em> is the relative price change since yesterday (*100 for percentage change).</p>
+                <p><em>volume</em> is daily volume.</p>
+                <p><em>high</em> is the daily high.</p>
+                <p><em>low</em> is the daily low.</p>
+
                 <p>Alerts are only supported in "ticker" mode (ie not candlebars).</p>
         </details>
         <div class="sdpi-item">
@@ -67,8 +73,13 @@
                 <summary>How color rules work</summary>
                 <p>Color rule are JavaScript snippets that will be evaluated upon value change.</p>
                 <p>When returning a non empty color, it will override the default ones.</p>
-                <p><em>value</em> is the displayed value.</p>
                 <p><em>alert</em> is a boolean indicating whether the alert mode is triggered (ie. the &quot;Alert rule&quot;).</p>
+                <p><em>value</em> is the last price (displayed value).</p>
+                <p><em>changeDaily</em> is the amount that the last price has changed since yesterday.</p>
+                <p><em>changeDailyPercent</em> is the relative price change since yesterday (*100 for percentage change).</p>
+                <p><em>volume</em> is daily volume.</p>
+                <p><em>high</em> is the daily high.</p>
+                <p><em>low</em> is the daily low.</p>
                 <p>Color rules are only supported in "ticker" mode (ie not candlebars).</p>
         </details>
 

@@ -4,6 +4,7 @@ var DestinationEnum = Object.freeze({
     "SOFTWARE_ONLY": 2
 });
 
+const loggingEnabled = true;
 var websocket = null;
 var pluginUUID = null;
 var canvas;
@@ -12,6 +13,12 @@ var bitfinexWsByContext = {};
 
 var tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
+    log: function(...data) {
+        if (loggingEnabled) {
+            console.log(...data);
+        }
+    },
+
     onKeyDown: function (context, settings, coordinates, userDesiredState) {
         // State machine between modes
         switch(settings.mode) {
@@ -58,7 +65,7 @@ var tickerAction = {
         const currentWs = this.getCurrentWs(context);
 
         if (currentWs.pair!=settings.pair || !currentWs.ws || currentWs.ws.readyState>1) {
-            console.log("Reopening WS because "+currentWs.pair+"!="+settings.pair+" || "+(currentWs.ws || {}).readyState+">1");
+            this.log("Reopening WS because "+currentWs.pair+"!="+settings.pair+" || "+(currentWs.ws || {}).readyState+">1");
             if (currentWs.ws) {
                 currentWs.ws.close();
             }
@@ -67,7 +74,7 @@ var tickerAction = {
             currentWs.pair = settings.pair;
             currentWs.ws = new WebSocket("wss://api-pub.bitfinex.com/ws/2");
             currentWs.ws.onmessage = function(msg) {
-                //console.log(msg);
+                //this.log("onmessage", msg);
                 if (msg!=null && msg.data!=null) {
                     dataObj = JSON.parse(msg.data);
                     if (Array.isArray(dataObj) && Array.isArray(dataObj[1]) && dataObj[1].length>=10) {
@@ -109,6 +116,8 @@ var tickerAction = {
         canvasContext = canvas.getContext("2d");
     },
     updateCanvas: async function(context, settings, tickerValues) {
+        this.log("updateCanvas", context, settings, tickerValues);
+
         const currentWs = this.getCurrentWs(context);
         currentWs.latestTickerValues = tickerValues;
 
@@ -125,6 +134,8 @@ var tickerAction = {
         }
     },
     updateCanvasTicker: function(context, settings, values) {
+        this.log("updateCanvasTicker", context, settings, values);
+
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
         const textPadding = 10;
@@ -138,8 +149,13 @@ var tickerAction = {
         //// console.log(new Date()+" "+pair+" => "+values.last);
 
         let alertMode = false;
+        const changeDaily = values.changeDaily;
+        const changeDailyPercent = values.changeDailyPercent;
+        const value = values.last;
+        const volume = values.volume;
+        const high = values.high;
+        const low = values.low;
         if (settings.alertRule) {
-            const value = values.last;
             try {
                 if (eval(settings.alertRule)) {
                     alertMode = true;
@@ -152,7 +168,6 @@ var tickerAction = {
         }
 
         if (settings.backgroundColorRule) {
-            const value = values.last;
             const alert = alertMode;
             try {
                 backgroundColor = eval(settings.backgroundColorRule) || backgroundColor;
@@ -160,7 +175,6 @@ var tickerAction = {
             catch(err) { console.error(err); }
         }
         if (settings.textColorRule) {
-            const value = values.last;
             const alert = alertMode;
             try {
                 textColor = eval(settings.textColorRule) || textColor;
@@ -237,7 +251,7 @@ var tickerAction = {
         canvasContext.fillStyle = backgroundColor;
         canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
 
-        //console.log(candlesNormalized);
+        //this.log("updateCanvasCandles", candlesNormalized);
         candlesNormalized.forEach(function(candleNormalized) {
             const xPosition = Math.round(padding+Math.round(candleNormalized.timePercent*(canvasWidth-2*padding)));
 
@@ -249,7 +263,7 @@ var tickerAction = {
             canvasContext.strokeStyle = textColor;
             canvasContext.stroke();
 
-            //console.log(xPosition+", "+Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding))+" to "+xPosition+", "+Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)))
+            //this.log(xPosition+", "+Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding))+" to "+xPosition+", "+Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)))
 
             // Choose open/close color
             let candleColor = "green";
@@ -269,8 +283,6 @@ var tickerAction = {
         this.sendCanvas(context);
     },
     sendCanvas: function(context) {
-        //console.log(canvas.toDataURL("image/png"));
-
         var json = {
             "event": "setImage",
             "context": context,
@@ -307,32 +319,35 @@ var tickerAction = {
     },
 
     getTickerValue: async function(pair) {
-        // console.log("getTickerValue API call");
+        // this.log("getTickerValue API call");
         const response = await fetch("https://api-pub.bitfinex.com/v2/ticker/t"+pair);
         const responseJson = await response.json();
-        //console.log(responseJson);
+        //this.log("getTickerValue", responseJson);
         return this.extractValues(responseJson);
     },
     extractValues: function(rawTicker) {
+        this.log("extractValues", rawTicker);
+
         return {
+            "changeDaily": rawTicker[4],
+            "changeDailyPercent": rawTicker[5],
             "last": rawTicker[6],
+            "volume": rawTicker[7],
             "high": rawTicker[8],
             "low": rawTicker[9],
         };
     },
     getCandles: async function(settings) {
-        // console.log("getCandles API call");
-
         const pair = settings["pair"] || "BTCUSD";
         const interval = settings["candlesInterval"] || "1h";
 
         const response = await fetch("https://api-pub.bitfinex.com/v2/candles/trade:"+interval+":t"+pair+"/hist?limit=20");
         const responseJson = await response.json();
-        //console.log(responseJson);
+        this.log("getCandles", responseJson);
+
         return this.getCandlesNormalized(responseJson);
     },
     getCandlesNormalized: function(candles) {
-
         let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
         candles.forEach(function(candle) {
             timeMin = Math.min(timeMin, candle[0]);
@@ -366,7 +381,7 @@ var tickerAction = {
             });
         });
 
-        // console.log(candlesNormalized);
+        this.log("getCandlesNormalized", candlesNormalized);
         return candlesNormalized;
     },
     normalizeValue: function(value, min, max) {
@@ -401,7 +416,7 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
     };
 
     websocket.onmessage = function (evt) {
-        //console.log("Message received", evt);
+        //this.log("Message received", evt);
 
         // Received message from Stream Deck
         var jsonObj = JSON.parse(evt.data);
@@ -421,7 +436,7 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
         } else if (event == "willAppear") {
             tickerAction.onWillAppear(context, settings, coordinates);
         } else if (settings!=null) {
-            //console.log("Received settings",settings);
+            //this.log("Received settings",settings);
             tickerAction.refreshSettings(context, settings);
             tickerAction.refreshTimer(context, settings);
             // tickerAction.updateTicker(context, settings);    // Already done by refreshTimer
