@@ -20,6 +20,7 @@ let currentBackgroundColorRule = "";
 let currentTextColorRule = "";
 let currentMode = "ticker";
 
+const loggingEnabled = false;
 const pairsDropDown = document.getElementById("select-pair");
 const candlesIntervalDropDown = document.getElementById("candlesInterval");
 const multiplierInput = document.getElementById("multiplier");
@@ -34,6 +35,12 @@ const backgroundColorRuleInput = document.getElementById("backgroundColorRule");
 const textColorRuleInput = document.getElementById("textColorRule");
 
 let pi = {
+    log: function(...data) {
+        if (loggingEnabled) {
+            console.log(...data);
+        }
+    },
+
     initDom: function() {
         this.initPairsDropDown();
 
@@ -70,7 +77,7 @@ let pi = {
     },
     initPairsDropDown: async function () {
         const pairs = await this.getPairs();
-        //console.log(pairs);
+        this.log("initPairsDropDown", pairs);
         pairs.sort();
         pairs.forEach(function (pair) {
             var option = document.createElement("option");
@@ -84,10 +91,13 @@ let pi = {
     getPairs: async function () {
         const response = await fetch("https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange");
         const responseJson = await response.json();
+        this.log("getPairs", responseJson)
 
         return responseJson[0];
     },
     extractSettings: function(settings) {
+        this.log("extractSettings", settings);
+
         currentPair = settings["pair"] || currentPair;
         currentCandlesInterval = settings["candlesInterval"] || currentCandlesInterval;
         currentMultiplier = settings["multiplier"] || currentMultiplier;
@@ -101,8 +111,11 @@ let pi = {
         currentBackgroundColorRule = settings["backgroundColorRule"] || currentBackgroundColorRule;
         currentTextColorRule = settings["textColorRule"] || currentTextColorRule;
         currentMode = settings["mode"] || currentMode;
+
+        this.refreshValues();
     },
     checkNewSettings: function() {
+        this.log("checkNewSettings");
         currentPair = pairsDropDown.value;
         currentCandlesInterval = candlesIntervalDropDown.value;
         currentMultiplier = multiplierInput.value;
@@ -119,6 +132,7 @@ let pi = {
         this.saveSettings();
     },
     refreshValues: function() {
+        this.log("refreshValues");
         pairsDropDown.value = currentPair;
         candlesIntervalDropDown.value = currentCandlesInterval;
         multiplierInput.value = currentMultiplier;
@@ -150,7 +164,7 @@ let pi = {
             "textColorRule": currentTextColorRule,
             "mode": currentMode,
         };
-        // console.log(newSettings);
+        this.log("saveSettings", newSettings);
 
         if (websocket && (websocket.readyState === 1)) {
             const jsonSetSettings = {
