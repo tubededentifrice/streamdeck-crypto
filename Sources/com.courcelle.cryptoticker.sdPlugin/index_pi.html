@@ -17,16 +17,22 @@
             <div class="sdpi-item-label">Crypto pair</div>
             <select class="sdpi-item-value select" id="select-pair" name="select-pair"></select>
         </div>
+        <div class="currencyRelated">
+            <div class="sdpi-item">
+                <div class="sdpi-item-label">Convert to</div>
+                <select class="sdpi-item-value select" id="select-currency" name="select-currency"></select>
+            </div>
+        </div>
 
         <div class="sdpi-item">
             <div class="sdpi-item-label">Multiplier</div>
-            <input type="number" inputmode="numeric" class="sdpi-item-value" id="multiplier" name="multiplier" value=""
-                placeholder="Enter a multiplier (integer), defaults to 1" pattern="[0-9]*">
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="multiplier" name="multiplier" value="" step="0.01"
+                placeholder="Enter a multiplier, defaults to 1" pattern="^\d*(\.\d+)?$">
         </div>
         <div class="sdpi-item">
             <div class="sdpi-item-label">Digits</div>
             <input type="number" inputmode="numeric" class="sdpi-item-value" id="digits" name="digits" value=""
-                placeholder="Enter the number of digits to round values" pattern="[0-9]*">
+                placeholder="Enter the number of digits to round values" pattern="^[0-9]*$">
         </div>
         <div class="sdpi-item">
             <div class="sdpi-item-label">Font</div>

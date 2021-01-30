@@ -7,6 +7,7 @@ var websocket = null,
 
 
 let currentPair = "BTCUSD";
+let currentCurrency = "USD";
 let currentCandlesInterval = "1h";
 let currentMultiplier = 1;
 let currentDigits = 2;
@@ -22,6 +23,8 @@ let currentMode = "ticker";
 
 const loggingEnabled = false;
 const pairsDropDown = document.getElementById("select-pair");
+const currencyRelatedElements = document.getElementsByClassName("currencyRelated");
+const currenciesDropDown = document.getElementById("select-currency");
 const candlesIntervalDropDown = document.getElementById("candlesInterval");
 const multiplierInput = document.getElementById("multiplier");
 const digitsInput = document.getElementById("digits");
@@ -43,12 +46,14 @@ let pi = {
 
     initDom: function() {
         this.initPairsDropDown();
+        this.initCurrenciesDropDown();
 
         var jThis = this;
         var callback = function() {
             jThis.checkNewSettings();
         }
         pairsDropDown.onchange = callback;
+        currenciesDropDown.onchange = callback;
         candlesIntervalDropDown.onchange = callback;
 
         multiplierInput.onchange = callback;
@@ -91,14 +96,39 @@ let pi = {
     getPairs: async function () {
         const response = await fetch("https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange");
         const responseJson = await response.json();
-        this.log("getPairs", responseJson)
+        this.log("getPairs", responseJson);
 
         return responseJson[0];
+    },
+    initCurrenciesDropDown: async function () {
+        const currencies = await this.getCurrencies();
+        this.log("initCurrenciesDropDown", currencies);
+        currencies.sort();
+        currencies.forEach(function (currency) {
+            var option = document.createElement("option");
+            option.text = currency;
+            option.value = currency;
+            currenciesDropDown.add(option);
+        });
+
+        this.refreshValues();
+    },
+    getCurrencies: async function() {
+        const response = await fetch("https://api.exchangeratesapi.io/latest");
+        const responseJson = await response.json();
+        this.log("getCurrencies", responseJson);
+
+        currencies =  new Set(Object.keys(responseJson["rates"]));
+        currencies.add(responseJson["base"]);
+
+        return Array.from(currencies);
+
     },
     extractSettings: function(settings) {
         this.log("extractSettings", settings);
 
         currentPair = settings["pair"] || currentPair;
+        currentCurrency = settings["currency"] || currentCurrency;
         currentCandlesInterval = settings["candlesInterval"] || currentCandlesInterval;
         currentMultiplier = settings["multiplier"] || currentMultiplier;
         currentDigits = settings["digits"] || currentDigits;
@@ -117,6 +147,7 @@ let pi = {
     checkNewSettings: function() {
         this.log("checkNewSettings");
         currentPair = pairsDropDown.value;
+        currentCurrency = currenciesDropDown.value;
         currentCandlesInterval = candlesIntervalDropDown.value;
         currentMultiplier = multiplierInput.value;
         currentDigits = digitsInput.value;
@@ -134,6 +165,7 @@ let pi = {
     refreshValues: function() {
         this.log("refreshValues");
         pairsDropDown.value = currentPair;
+        currenciesDropDown.value = currentCurrency;
         candlesIntervalDropDown.value = currentCandlesInterval;
         multiplierInput.value = currentMultiplier;
         digitsInput.value = currentDigits;
@@ -147,10 +179,24 @@ let pi = {
         alertRuleInput.value = currentAlertRule;
         backgroundColorRuleInput.value = currentBackgroundColorRule;
         textColorRuleInput.value = currentTextColorRule;
+
+        if (currentPair.indexOf("USD")>=0) {
+            this.applyDisplay(currencyRelatedElements, "block");
+        } else {
+            this.applyDisplay(currencyRelatedElements, "none");
+        }
+    },
+    applyDisplay: function(elements, display) {
+        console.log(elements);
+        for(i in Object.keys(elements)) {
+            console.log(elements[i]);
+            elements[i].style.display = display;
+         }
     },
     saveSettings: function() {
         const newSettings = {
             "pair": currentPair,
+            "currency": currentCurrency,
             "candlesInterval": currentCandlesInterval,
             "multiplier": currentMultiplier,
             "digits": currentDigits,
