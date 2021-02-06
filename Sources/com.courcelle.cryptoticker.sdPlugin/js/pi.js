@@ -51,6 +51,7 @@ let pi = {
         var jThis = this;
         var callback = function() {
             jThis.checkNewSettings();
+            this.refreshMenus();
         }
         pairsDropDown.onchange = callback;
         currenciesDropDown.onchange = callback;
@@ -180,6 +181,9 @@ let pi = {
         backgroundColorRuleInput.value = currentBackgroundColorRule;
         textColorRuleInput.value = currentTextColorRule;
 
+        this.refreshMenus();
+    },
+    refreshMenus: function() {
         if (currentPair.indexOf("USD")>=0) {
             this.applyDisplay(currencyRelatedElements, "block");
         } else {
@@ -187,9 +191,7 @@ let pi = {
         }
     },
     applyDisplay: function(elements, display) {
-        console.log(elements);
         for(i in Object.keys(elements)) {
-            console.log(elements[i]);
             elements[i].style.display = display;
          }
     },

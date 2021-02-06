@@ -155,6 +155,7 @@ const tickerAction = {
         const changeDaily = values.changeDaily;
         const changeDailyPercent = values.changeDailyPercent;
         const value = values.last;
+        const valueDisplay = value*multiplier;
         const volume = values.volume;
         const high = values.high;
         const low = values.low;
