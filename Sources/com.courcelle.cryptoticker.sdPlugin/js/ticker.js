@@ -142,6 +142,7 @@ const tickerAction = {
         const textPadding = 10;
 
         const pair = settings.pair || "BTCUSD";
+        const exchange = settings.exchange || "BITFINEX";
         const pairDisplay = values.pair || pair;
         const currency = settings.currency || "USD";
         const multiplier = settings.multiplier || 1;
@@ -336,9 +337,12 @@ const tickerAction = {
     },
 
     getTickerValue: async function(pair, toCurrency) {
+        return await this.getTickerValueBitfinex(pair, toCurrency);
+    },
+    getTickerValueBitfinex: async function(pair, toCurrency) {
         const response = await fetch("https://api-pub.bitfinex.com/v2/ticker/t"+pair);
         const responseJson = await response.json();
-        //this.log("getTickerValue", responseJson);
+        //this.log("getTickerValueBitfinex", responseJson);
         return await this.extractValues(responseJson, pair, toCurrency);
     },
     extractValues: async function(rawTicker, pair, toCurrency) {
@@ -360,12 +364,15 @@ const tickerAction = {
         };
     },
     getCandles: async function(settings) {
+        return await this.getCandlesBitfinex(settings);
+    },
+    getCandlesBitfinex: async function(settings) {
         const pair = settings["pair"] || "BTCUSD";
         const interval = settings["candlesInterval"] || "1h";
 
         const response = await fetch("https://api-pub.bitfinex.com/v2/candles/trade:"+interval+":t"+pair+"/hist?limit=20");
         const responseJson = await response.json();
-        this.log("getCandles", responseJson);
+        this.log("getCandlesBitfinex", responseJson);
 
         return this.getCandlesNormalized(responseJson);
     },
