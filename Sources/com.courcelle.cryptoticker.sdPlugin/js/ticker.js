@@ -72,34 +72,85 @@ const tickerAction = {
                 currentWs.ws.close();
             }
 
-            const jThis = this;
-            currentWs.pair = settings.pair;
-            currentWs.ws = new WebSocket("wss://api-pub.bitfinex.com/ws/2");
-            currentWs.ws.onmessage = async function(msg) {
-                //this.log("onmessage", msg);
-                if (msg!=null && msg.data!=null) {
-                    dataObj = JSON.parse(msg.data);
-                    if (Array.isArray(dataObj) && Array.isArray(dataObj[1]) && dataObj[1].length>=10) {
-                        //console.log("Data", dataObj);
-                        await jThis.updateCanvas(
-                            currentWs.context,
-                            currentWs.settings,
-                            await jThis.extractValues(dataObj[1], settings.pair, settings.currency)
-                        );
-                    }
-                }
-            };
-            currentWs.ws.onopen = function() {
-                currentWs.ws.send(JSON.stringify({
-                    event: "subscribe",
-                    channel: "ticker",
-                    symbol: "t"+settings.pair
-                }))
-            };
+            switch(settings.exchange) {
+                case "BINANCE":
+                    this.subscribeBinance(settings, currentWs);
+                    break;
+                default:
+                    this.subscribeBitfinex(settings, currentWs);
+                    break;
+            }
         }
 
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
         this.updateTicker(context, settings);
+    },
+    subscribeBinance: function(settings, currentWs) {
+        const jThis = this;
+        currentWs.pair = settings.pair;
+        currentWs.ws = new WebSocket("wss://stream.binance.com:9443/ws/ticker");
+        currentWs.ws.onmessage = async function(msg) {
+            //this.log("onmessage", msg);
+            //console.log(msg);
+            if (msg!=null && msg.data!=null) {
+                dataObj = JSON.parse(msg.data);
+                if (dataObj != null && dataObj["e"]) {
+                    const changeDaily = await jThis.convertValue(parseFloat(dataObj["p"]), settings.pair, settings.currency);
+                    const last = await jThis.convertValue(parseFloat(dataObj["c"]), settings.pair, settings.currency);
+                    const high = await jThis.convertValue(parseFloat(dataObj["h"]), settings.pair, settings.currency);
+                    const low = await jThis.convertValue(parseFloat(dataObj["l"]), settings.pair, settings.currency);
+
+                    await jThis.updateCanvas(
+                        currentWs.context,
+                        currentWs.settings,
+                        {
+                            "changeDaily": changeDaily.value,
+                            "changeDailyPercent": parseFloat(dataObj["P"]),
+                            "last": last.value,
+                            "volume": parseFloat(dataObj["v"]),
+                            "high": high.value,
+                            "low": low.value,
+                            "pair": last.pair,
+                        }
+                    );
+                }
+            }
+        };
+        currentWs.ws.onopen = function() {
+            currentWs.ws.send(JSON.stringify({
+                method: "SUBSCRIBE",
+                params: [
+                    settings.pair.toLowerCase() + "@ticker",
+                ],
+                "id": 1
+            }))
+        };
+    },
+    subscribeBitfinex: function(settings, currentWs) {
+        const jThis = this;
+        currentWs.pair = settings.pair;
+        currentWs.ws = new WebSocket("wss://api-pub.bitfinex.com/ws/2");
+        currentWs.ws.onmessage = async function(msg) {
+            //this.log("onmessage", msg);
+            if (msg!=null && msg.data!=null) {
+                dataObj = JSON.parse(msg.data);
+                if (Array.isArray(dataObj) && Array.isArray(dataObj[1]) && dataObj[1].length>=10) {
+                    //console.log("Data", dataObj);
+                    await jThis.updateCanvas(
+                        currentWs.context,
+                        currentWs.settings,
+                        await jThis.extractValues(dataObj[1], settings.pair, settings.currency)
+                    );
+                }
+            }
+        };
+        currentWs.ws.onopen = function() {
+            currentWs.ws.send(JSON.stringify({
+                event: "subscribe",
+                channel: "ticker",
+                symbol: "t"+settings.pair
+            }))
+        };
     },
     refreshSettings: function(context, settings) {
         const currentWs = this.getCurrentWs(context);
