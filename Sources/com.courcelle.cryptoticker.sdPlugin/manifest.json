@@ -23,7 +23,7 @@
   "Description": "This lets you display the price of a crypto currency (all Bitfinex pairs are supported). Supports a very wide range of customizations.",
   "Icon": "images/pluginIcon",
   "URL": "https://github.com/tubededentifrice/streamdeck-crypto",
-  "Version": "1.3.0",
+  "Version": "1.4.0",
   "OS": [
     {
       "Platform": "mac",

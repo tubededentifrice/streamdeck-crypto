@@ -12,6 +12,7 @@ let canvasContext;
 let bitfinexWsByContext = {};
 let rates = null;
 let ratesUpdate = 0;
+const candlesCache = {};
 
 const tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
@@ -72,34 +73,85 @@ const tickerAction = {
                 currentWs.ws.close();
             }
 
-            const jThis = this;
-            currentWs.pair = settings.pair;
-            currentWs.ws = new WebSocket("wss://api-pub.bitfinex.com/ws/2");
-            currentWs.ws.onmessage = async function(msg) {
-                //this.log("onmessage", msg);
-                if (msg!=null && msg.data!=null) {
-                    dataObj = JSON.parse(msg.data);
-                    if (Array.isArray(dataObj) && Array.isArray(dataObj[1]) && dataObj[1].length>=10) {
-                        //console.log("Data", dataObj);
-                        await jThis.updateCanvas(
-                            currentWs.context,
-                            currentWs.settings,
-                            await jThis.extractValues(dataObj[1], settings.pair, settings.currency)
-                        );
-                    }
-                }
-            };
-            currentWs.ws.onopen = function() {
-                currentWs.ws.send(JSON.stringify({
-                    event: "subscribe",
-                    channel: "ticker",
-                    symbol: "t"+settings.pair
-                }))
-            };
+            switch(settings.exchange) {
+                case "BINANCE":
+                    this.subscribeBinance(settings, currentWs);
+                    break;
+                default:
+                    this.subscribeBitfinex(settings, currentWs);
+                    break;
+            }
         }
 
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
         this.updateTicker(context, settings);
+    },
+    subscribeBinance: function(settings, currentWs) {
+        const jThis = this;
+        currentWs.pair = settings.pair;
+        currentWs.ws = new WebSocket("wss://stream.binance.com:9443/ws/ticker");
+        currentWs.ws.onmessage = async function(msg) {
+            //this.log("onmessage", msg);
+            //console.log(msg);
+            if (msg!=null && msg.data!=null) {
+                dataObj = JSON.parse(msg.data);
+                if (dataObj != null && dataObj["e"]) {
+                    const changeDaily = await jThis.convertValue(parseFloat(dataObj["p"]), settings.pair, settings.currency);
+                    const last = await jThis.convertValue(parseFloat(dataObj["c"]), settings.pair, settings.currency);
+                    const high = await jThis.convertValue(parseFloat(dataObj["h"]), settings.pair, settings.currency);
+                    const low = await jThis.convertValue(parseFloat(dataObj["l"]), settings.pair, settings.currency);
+
+                    await jThis.updateCanvas(
+                        currentWs.context,
+                        currentWs.settings,
+                        {
+                            "changeDaily": changeDaily.value,
+                            "changeDailyPercent": parseFloat(dataObj["P"]),
+                            "last": last.value,
+                            "volume": parseFloat(dataObj["v"]),
+                            "high": high.value,
+                            "low": low.value,
+                            "pair": last.pair,
+                        }
+                    );
+                }
+            }
+        };
+        currentWs.ws.onopen = function() {
+            currentWs.ws.send(JSON.stringify({
+                method: "SUBSCRIBE",
+                params: [
+                    settings.pair.toLowerCase() + "@ticker",
+                ],
+                "id": 1
+            }))
+        };
+    },
+    subscribeBitfinex: function(settings, currentWs) {
+        const jThis = this;
+        currentWs.pair = settings.pair;
+        currentWs.ws = new WebSocket("wss://api-pub.bitfinex.com/ws/2");
+        currentWs.ws.onmessage = async function(msg) {
+            //this.log("onmessage", msg);
+            if (msg!=null && msg.data!=null) {
+                dataObj = JSON.parse(msg.data);
+                if (Array.isArray(dataObj) && Array.isArray(dataObj[1]) && dataObj[1].length>=10) {
+                    //console.log("Data", dataObj);
+                    await jThis.updateCanvas(
+                        currentWs.context,
+                        currentWs.settings,
+                        await jThis.extractValues(dataObj[1], settings.pair, settings.currency)
+                    );
+                }
+            }
+        };
+        currentWs.ws.onopen = function() {
+            currentWs.ws.send(JSON.stringify({
+                event: "subscribe",
+                channel: "ticker",
+                symbol: "t"+settings.pair
+            }))
+        };
     },
     refreshSettings: function(context, settings) {
         const currentWs = this.getCurrentWs(context);
@@ -109,7 +161,7 @@ const tickerAction = {
 
     updateTicker: async function(context, settings) {
         const pair = settings.pair || "BTCUSD";
-        const values = await this.getTickerValue(pair, settings.currency);
+        const values = await this.getTickerValue(pair, settings.currency, settings.exchange);
         this.updateCanvas(context, settings, values);
     },
     initCanvas: function() {
@@ -142,6 +194,7 @@ const tickerAction = {
         const textPadding = 10;
 
         const pair = settings.pair || "BTCUSD";
+        const exchange = settings.exchange || "BITFINEX";
         const pairDisplay = values.pair || pair;
         const currency = settings.currency || "USD";
         const multiplier = settings.multiplier || 1;
@@ -335,10 +388,39 @@ const tickerAction = {
         return valueString;
     },
 
-    getTickerValue: async function(pair, toCurrency) {
+    getTickerValue: async function(pair, toCurrency, exchange) {
+        switch(exchange) {
+            case "BINANCE":
+                return await this.getTickerValueBinance(pair, toCurrency);
+            case "BITFINEX":
+            default:
+                return await this.getTickerValueBitfinex(pair, toCurrency);
+        }
+    },
+    getTickerValueBinance: async function(pair, toCurrency) {
+        const response = await fetch("https://binance.com/api/v3/ticker/24hr?symbol="+pair);
+        const responseJson = await response.json();
+        this.log("getTickerValueBinance", responseJson);
+
+        const changeDaily = await this.convertValue(parseFloat(responseJson["priceChange"]), pair, toCurrency);
+        const last = await this.convertValue(parseFloat(responseJson["lastPrice"]), pair, toCurrency);
+        const high = await this.convertValue(parseFloat(responseJson["highPrice"]), pair, toCurrency);
+        const low = await this.convertValue(parseFloat(responseJson["lowPrice"]), pair, toCurrency);
+
+        return {
+            "changeDaily": changeDaily.value,
+            "changeDailyPercent": parseFloat(responseJson["priceChangePercent"]),
+            "last": last.value,
+            "volume": parseFloat(responseJson["volume"]),
+            "high": high.value,
+            "low": low.value,
+            "pair": last.pair,
+        };
+    },
+    getTickerValueBitfinex: async function(pair, toCurrency) {
         const response = await fetch("https://api-pub.bitfinex.com/v2/ticker/t"+pair);
         const responseJson = await response.json();
-        //this.log("getTickerValue", responseJson);
+        //this.log("getTickerValueBitfinex", responseJson);
         return await this.extractValues(responseJson, pair, toCurrency);
     },
     extractValues: async function(rawTicker, pair, toCurrency) {
@@ -360,46 +442,96 @@ const tickerAction = {
         };
     },
     getCandles: async function(settings) {
+        this.log("getCandles");
+        console.log("getCandles");
+
+        const exchange = settings.exchange;
         const pair = settings["pair"] || "BTCUSD";
         const interval = settings["candlesInterval"] || "1h";
+        const cacheKey = exchange + "_" + pair + "_" + interval;
+        const cache = candlesCache[cacheKey] || {};
+        const now = new Date().getTime();
 
+        // Refresh at most every minute
+        if (cache["time"] && cache["time"]>now-60*1000) {
+            return cache["candles"];
+        }
+
+        console.log("getCandles for real");
+        switch(exchange) {
+            case "BINANCE":
+                cache["candles"] = await this.getCandlesBinance(pair, interval);
+            case "BITFINEX":
+            default:
+                cache["candles"] = await this.getCandlesBitfinex(pair, interval);
+        }
+
+        cache["time"] = now;
+        candlesCache[cacheKey] = cache;
+        return cache["candles"];
+    },
+    getCandlesBinance: async function(pair, interval) {
+        // 0: open time, 1: open, 2: high, 3: low, 4: close, 5: volume, 6: close time, 7: volume, 8: trades, 9: buy base volume, 10: buy quote volume, 11: ignore
+        const response = await fetch("https://binance.com/api/v3/klines?symbol="+pair+"&interval="+interval.toLowerCase()+"&limit=20");
+        const responseJson = await response.json();
+
+        this.log("getCandlesBitfinex", responseJson);
+
+        return this.getCandlesNormalized(responseJson, {
+            "ts": 0,
+            "open": 1,
+            "close": 4,
+            "high": 2,
+            "low": 3,
+            "volume": 5
+        });
+    },
+    getCandlesBitfinex: async function(pair, interval) {
+        // 0: ts, 1: open, 2: close, 3: high, 4: low, 5: volume
         const response = await fetch("https://api-pub.bitfinex.com/v2/candles/trade:"+interval+":t"+pair+"/hist?limit=20");
         const responseJson = await response.json();
-        this.log("getCandles", responseJson);
+        this.log("getCandlesBitfinex", responseJson);
 
-        return this.getCandlesNormalized(responseJson);
+        return this.getCandlesNormalized(responseJson, {
+            "ts": 0,
+            "open": 1,
+            "close": 2,
+            "high": 3,
+            "low": 4,
+            "volume": 5
+        });
     },
-    getCandlesNormalized: function(candles) {
+    getCandlesNormalized: function(candles, parsing) {
         let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
         candles.forEach(function(candle) {
-            timeMin = Math.min(timeMin, candle[0]);
-            timeMax = Math.max(timeMax, candle[0]);
+            timeMin = Math.min(timeMin, candle[parsing["ts"]]);
+            timeMax = Math.max(timeMax, candle[parsing["ts"]]);
 
             // Some shouldn't be necessary, but doesn't cost much and avoid mistakes
-            min = Math.min(min, candle[1]);
-            min = Math.min(min, candle[2]);
-            min = Math.min(min, candle[3]);
-            min = Math.min(min, candle[4]);
+            min = Math.min(min, candle[parsing["open"]]);
+            min = Math.min(min, candle[parsing["close"]]);
+            min = Math.min(min, candle[parsing["high"]]);
+            min = Math.min(min, candle[parsing["low"]]);
 
-            max = Math.max(max, candle[1]);
-            max = Math.max(max, candle[2]);
-            max = Math.max(max, candle[3]);
-            max = Math.max(max, candle[4]);
+            max = Math.max(max, candle[parsing["open"]]);
+            max = Math.max(max, candle[parsing["close"]]);
+            max = Math.max(max, candle[parsing["high"]]);
+            max = Math.max(max, candle[parsing["low"]]);
 
-            volumeMin = Math.min(volumeMin, candle[5]);
-            volumeMax = Math.max(volumeMax, candle[5]);
+            volumeMin = Math.min(volumeMin, candle[parsing["volume"]]);
+            volumeMax = Math.max(volumeMax, candle[parsing["volume"]]);
         });
 
         const jThis = this;
         const candlesNormalized = [];
         candles.forEach(function(candle) {
             candlesNormalized.push({
-                timePercent: jThis.normalizeValue(candle[0], timeMin, timeMax),
-                openPercent: jThis.normalizeValue(candle[1], min, max),
-                closePercent: jThis.normalizeValue(candle[2], min, max),
-                highPercent: jThis.normalizeValue(candle[3], min, max),
-                lowPercent: jThis.normalizeValue(candle[4], min, max),
-                volumePercent: jThis.normalizeValue(candle[5], volumeMin, volumeMax)
+                timePercent: jThis.normalizeValue(candle[parsing["ts"]], timeMin, timeMax),
+                openPercent: jThis.normalizeValue(candle[parsing["open"]], min, max),
+                closePercent: jThis.normalizeValue(candle[parsing["close"]], min, max),
+                highPercent: jThis.normalizeValue(candle[parsing["high"]], min, max),
+                lowPercent: jThis.normalizeValue(candle[parsing["low"]], min, max),
+                volumePercent: jThis.normalizeValue(candle[parsing["volume"]], volumeMin, volumeMax)
             });
         });
 
