@@ -443,38 +443,41 @@ const tickerAction = {
     },
     getCandles: async function(settings) {
         this.log("getCandles");
-        console.log("getCandles");
 
-        const exchange = settings.exchange;
+        const exchange = settings.exchange || "BITFINEX";
         const pair = settings["pair"] || "BTCUSD";
         const interval = settings["candlesInterval"] || "1h";
         const cacheKey = exchange + "_" + pair + "_" + interval;
         const cache = candlesCache[cacheKey] || {};
         const now = new Date().getTime();
+        const t = "time";
+        const c = "candles";
 
         // Refresh at most every minute
-        if (cache["time"] && cache["time"]>now-60*1000) {
-            return cache["candles"];
+        if (cache[t] && cache[t]>now-60*1000) {
+            return cache[c];
         }
 
-        console.log("getCandles for real");
+        let val;
         switch(exchange) {
             case "BINANCE":
-                cache["candles"] = await this.getCandlesBinance(pair, interval);
+                val = await this.getCandlesBinance(pair, interval);
+                break;
             case "BITFINEX":
             default:
-                cache["candles"] = await this.getCandlesBitfinex(pair, interval);
+                val = await this.getCandlesBitfinex(pair, interval);
+                break;
         }
 
-        cache["time"] = now;
+        cache[t] = now;
+        cache[c] = val;
         candlesCache[cacheKey] = cache;
-        return cache["candles"];
+        return cache[c];
     },
     getCandlesBinance: async function(pair, interval) {
         // 0: open time, 1: open, 2: high, 3: low, 4: close, 5: volume, 6: close time, 7: volume, 8: trades, 9: buy base volume, 10: buy quote volume, 11: ignore
         const response = await fetch("https://binance.com/api/v3/klines?symbol="+pair+"&interval="+interval.toLowerCase()+"&limit=20");
         const responseJson = await response.json();
-
         this.log("getCandlesBitfinex", responseJson);
 
         return this.getCandlesNormalized(responseJson, {
