@@ -109,7 +109,7 @@ const tickerAction = {
 
     updateTicker: async function(context, settings) {
         const pair = settings.pair || "BTCUSD";
-        const values = await this.getTickerValue(pair, settings.currency);
+        const values = await this.getTickerValue(pair, settings.currency, settings.exchange);
         this.updateCanvas(context, settings, values);
     },
     initCanvas: function() {
@@ -336,8 +336,34 @@ const tickerAction = {
         return valueString;
     },
 
-    getTickerValue: async function(pair, toCurrency) {
-        return await this.getTickerValueBitfinex(pair, toCurrency);
+    getTickerValue: async function(pair, toCurrency, exchange) {
+        switch(exchange) {
+            case "BINANCE":
+                return await this.getTickerValueBinance(pair, toCurrency);
+            case "BITFINEX":
+            default:
+                return await this.getTickerValueBitfinex(pair, toCurrency);
+        }
+    },
+    getTickerValueBinance: async function(pair, toCurrency) {
+        const response = await fetch("https://binance.com/api/v3/ticker/24hr?symbol="+pair);
+        const responseJson = await response.json();
+        this.log("getTickerValueBinance", responseJson);
+
+        const changeDaily = await this.convertValue(parseFloat(responseJson["priceChange"]), pair, toCurrency);
+        const last = await this.convertValue(parseFloat(responseJson["lastPrice"]), pair, toCurrency);
+        const high = await this.convertValue(parseFloat(responseJson["highPrice"]), pair, toCurrency);
+        const low = await this.convertValue(parseFloat(responseJson["lowPrice"]), pair, toCurrency);
+
+        return {
+            "changeDaily": changeDaily.value,
+            "changeDailyPercent": parseFloat(responseJson["priceChangePercent"]),
+            "last": last.value,
+            "volume": parseFloat(responseJson["volume"]),
+            "high": high.value,
+            "low": low.value,
+            "pair": last.pair,
+        };
     },
     getTickerValueBitfinex: async function(pair, toCurrency) {
         const response = await fetch("https://api-pub.bitfinex.com/v2/ticker/t"+pair);
@@ -364,7 +390,13 @@ const tickerAction = {
         };
     },
     getCandles: async function(settings) {
-        return await this.getCandlesBitfinex(settings);
+        switch(settings.exchange) {
+            case "BINANCE":
+                return await this.getCandlesBitfinex(settings);
+            case "BITFINEX":
+            default:
+                return await this.getCandlesBitfinex(settings);
+        }
     },
     getCandlesBitfinex: async function(settings) {
         const pair = settings["pair"] || "BTCUSD";

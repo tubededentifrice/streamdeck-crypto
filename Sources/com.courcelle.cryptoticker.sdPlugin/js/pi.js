@@ -223,6 +223,7 @@ let pi = {
     },
     refreshValues: function() {
         this.log("refreshValues");
+
         pairsDropDown.value = this.joinPairValue(currentPair, currentExchange);
         currenciesDropDown.value = currentCurrency;
         candlesIntervalDropDown.value = currentCandlesInterval;
@@ -254,7 +255,7 @@ let pi = {
          }
     },
     joinPairValue: function(pair, exchange) {
-        return exchange + "|" + pair;
+        return exchange.toUpperCase() + "|" + pair;
     },
     splitPairValue: function(value) {
         if (value.indexOf("|")>=0) {
