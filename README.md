@@ -1,12 +1,12 @@
 
 # Crypto ticker PRO StreamDeck plugin
-`Crypto ticker PRO` is a plugin to watch crypto rates. Rates are provided by Bitfinex in real time.
+`Crypto ticker PRO` is a plugin to watch crypto rates. Rates are provided by Bitfinex and Binance in real time.
 
 ## Features
 - Code written in pure JavaScript
 - Cross-platform (macOS, Windows)
-- All Bitfinex pairs are supported (~420 pairs)
-- Real time updates of the ticker (WS connection to Bitfinex)
+- All Bitfinex and Binance pairs are supported (~1500 pairs)
+- Real time updates of the ticker (WS connection to the Bitfinex/Binance)
 - A bar shows where the current value sits within daily low/high (ie is it up or down)
 - Allows setting a multiplier and number of digits (eg. for very small or big values)
 - Clicking the button shows the candlebar view (customizable interval)

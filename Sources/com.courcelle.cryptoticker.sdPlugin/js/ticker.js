@@ -106,7 +106,7 @@ const tickerAction = {
                         currentWs.settings,
                         {
                             "changeDaily": changeDaily.value,
-                            "changeDailyPercent": parseFloat(dataObj["P"]),
+                            "changeDailyPercent": parseFloat(dataObj["P"]) / 100,
                             "last": last.value,
                             "volume": parseFloat(dataObj["v"]),
                             "high": high.value,
@@ -273,6 +273,49 @@ const tickerAction = {
             );
         }
 
+        if (settings["displayDailyChange"]!="off") {
+            const originalFillColor = canvasContext.fillStyle;
+
+            const changePercent = values.changeDailyPercent * 100;
+            let digitsPercent = 2;
+            if (Math.abs(changePercent)>=10) {
+                digitsPercent = 1;
+            } else if (Math.abs(changePercent)>=10) {
+                digitsPercent = 0;
+            }
+            let changePercentDisplay = this.getRoundedValue(changePercent, digitsPercent, 1);
+            if (changePercent>0) {
+                changePercentDisplay = "+" + changePercentDisplay;
+                canvasContext.fillStyle = "green";
+                /*canvasContext.font = "bold 40px "+font;
+                canvasContext.fillText(
+                    "^",
+                    canvasWidth-textPadding,
+                    37
+                );*/
+            } else {
+                canvasContext.fillStyle = "red";
+                /*canvasContext.font = "bold 30px "+font;
+                canvasContext.fillText(
+                    "v",
+                    canvasWidth-textPadding,
+                    25
+                );*/
+            }
+
+            canvasContext.font = "19px "+font;
+            canvasContext.textAlign = "right";
+            // canvasContext.rotate(Math.PI);
+            canvasContext.fillText(
+                changePercentDisplay,
+                canvasWidth-textPadding,
+                90
+            );
+
+            // Restore orignal value, though it shouldn't be used
+            canvasContext.fillStyle = originalFillColor;
+        }
+
         if (settings["displayHighLowBar"]!="off") {
             const lineY = 104;
             const padding = 5;
@@ -406,10 +449,11 @@ const tickerAction = {
         const last = await this.convertValue(parseFloat(responseJson["lastPrice"]), pair, toCurrency);
         const high = await this.convertValue(parseFloat(responseJson["highPrice"]), pair, toCurrency);
         const low = await this.convertValue(parseFloat(responseJson["lowPrice"]), pair, toCurrency);
+        const open = await this.convertValue(parseFloat(responseJson["openPrice"]), pair, toCurrency);
 
         return {
             "changeDaily": changeDaily.value,
-            "changeDailyPercent": parseFloat(responseJson["priceChangePercent"]),
+            "changeDailyPercent": parseFloat(responseJson["priceChangePercent"])/100,
             "last": last.value,
             "volume": parseFloat(responseJson["volume"]),
             "high": high.value,

@@ -17,6 +17,7 @@ let currentBackgroundColor = "#000000";
 let currentTextColor = "#ffffff";
 let currentDisplayHighLow = "on";
 let currentDisplayHighLowBar = "on";
+let currentDisplayDailyChange = "on";
 let currentAlertRule = "";
 let currentBackgroundColorRule = "";
 let currentTextColorRule = "";
@@ -34,6 +35,7 @@ const backgroundColorInput = document.getElementById("backgroundColor");
 const textColorInput = document.getElementById("textColor");
 const highLowCheck = document.getElementById("displayHighLow");
 const highLowBarCheck = document.getElementById("displayHighLowBar");
+const dailyChangeCheck = document.getElementById("displayDailyChange");
 const alertRuleInput = document.getElementById("alertRule");
 const backgroundColorRuleInput = document.getElementById("backgroundColorRule");
 const textColorRuleInput = document.getElementById("textColorRule");
@@ -72,6 +74,7 @@ let pi = {
 
         highLowCheck.onchange = callback;
         highLowBarCheck.onchange = callback;
+        dailyChangeCheck.onchange = callback;
 
         alertRuleInput.onchange = callback;
         alertRuleInput.onkeyup = callback;
@@ -193,6 +196,7 @@ let pi = {
         currentTextColor = settings["textColor"] || currentTextColor;
         currentDisplayHighLow = settings["displayHighLow"] || currentDisplayHighLow;
         currentDisplayHighLowBar = settings["displayHighLowBar"] || currentDisplayHighLowBar;
+        currentDisplayDailyChange = settings["displayDailyChange"] || currentDisplayDailyChange;
         currentAlertRule = settings["alertRule"] || currentAlertRule;
         currentBackgroundColorRule = settings["backgroundColorRule"] || currentBackgroundColorRule;
         currentTextColorRule = settings["textColorRule"] || currentTextColorRule;
@@ -215,6 +219,7 @@ let pi = {
         currentTextColor = textColorInput.value;
         currentDisplayHighLow = highLowCheck.checked?"on":"off";
         currentDisplayHighLowBar = highLowBarCheck.checked?"on":"off";
+        currentDisplayDailyChange = dailyChangeCheck.checked?"on":"off";
         currentAlertRule = alertRuleInput.value;
         currentBackgroundColorRule = backgroundColorRuleInput.value;
         currentTextColorRule = textColorRuleInput.value;
@@ -235,6 +240,7 @@ let pi = {
 
         highLowCheck.checked = currentDisplayHighLow!="off";
         highLowBarCheck.checked = currentDisplayHighLowBar!="off";
+        dailyChangeCheck.checked = currentDisplayDailyChange!="off";
 
         alertRuleInput.value = currentAlertRule;
         backgroundColorRuleInput.value = currentBackgroundColorRule;
@@ -285,6 +291,7 @@ let pi = {
             "textColor": currentTextColor,
             "displayHighLow": currentDisplayHighLow,
             "displayHighLowBar": currentDisplayHighLowBar,
+            "displayDailyChange": currentDisplayDailyChange,
             "alertRule": currentAlertRule,
             "backgroundColorRule": currentBackgroundColorRule,
             "textColorRule": currentTextColorRule,
