@@ -99,6 +99,7 @@ const settingsConfig = {
 };
 
 const currentSettings = {};
+const cache = {};
 
 const currencyRelatedElements = document.getElementsByClassName("currencyRelated");
 
@@ -137,6 +138,7 @@ let pi = {
             option.value = provider;
             exchangeDropdown.add(option);
         });
+        exchangeDropdown.value = currentSettings["exchange"];
 
         const thisTmp = this;
         const updatePairs = async function() {
@@ -169,6 +171,7 @@ let pi = {
                 option.value = pair["symbol"];
                 selectPairDropdown.add(option);
             });
+            selectPairDropdown.value = currentSettings["pair"];
 
             const pairsDropdownGroup = document.getElementById("select-pair-dropdown-group");
             const pairsInputGroup = document.getElementById("select-pair-input-group");
@@ -200,17 +203,29 @@ let pi = {
         this.refreshValues();
     },
     getProviders: async function() {
+        const cacheKey = "getProviders";
+        if (cache[cacheKey]) {
+            return cache[cacheKey];
+        }
+
         const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/providers");
         const responseJson = await response.json();
         this.log("getProviders", responseJson);
 
+        cache[cacheKey] = responseJson;
         return responseJson;
     },
     getPairs: async function (provider) {
+        const cacheKey = "getPairs_"+provider;
+        if (cache[cacheKey]) {
+            return cache[cacheKey];
+        }
+
         const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/symbols?provider="+provider);
         const responseJson = await response.json();
         this.log("getPairs", responseJson);
 
+        cache[cacheKey] = responseJson;
         return responseJson;
     },
     initCurrenciesDropDown: async function () {
@@ -232,10 +247,16 @@ let pi = {
         this.refreshValues();
     },
     getCurrencies: async function() {
+        const cacheKey = "getCurrencies";
+        if (cache[cacheKey]) {
+            return cache[cacheKey];
+        }
+
         const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/currencies");
         const responseJson = await response.json();
         this.log("getCurrencies", responseJson);
 
+        cache[cacheKey] = responseJson;
         return responseJson;
 
     },
