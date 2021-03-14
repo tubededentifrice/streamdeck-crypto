@@ -5,40 +5,102 @@ var websocket = null,
     actionInfo = {},
     inInfo = {};
 
-
-let currentPair = "BTCUSD";
-let currentExchange = "BITFINEX";
-let currentCurrency = "USD";
-let currentCandlesInterval = "1h";
-let currentMultiplier = 1;
-let currentDigits = 2;
-let currentFont = "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif";
-let currentBackgroundColor = "#000000";
-let currentTextColor = "#ffffff";
-let currentDisplayHighLow = "on";
-let currentDisplayHighLowBar = "on";
-let currentDisplayDailyChange = "on";
-let currentAlertRule = "";
-let currentBackgroundColorRule = "";
-let currentTextColorRule = "";
-let currentMode = "ticker";
-
 const loggingEnabled = false;
-const pairsDropDown = document.getElementById("select-pair");
+const selectPairDropdown = document.getElementById("select-pair-dropdown");
+const settingsConfig = {
+    "exchange": {
+        "default": "BITFINEX",
+        "value": document.getElementById("select-provider")
+    },
+    "pair": {
+        "default": "BTCUSD",
+        "value": document.getElementById("select-pair"),
+        "setValue": function(val) {
+            document.getElementById("select-pair").value = val;
+            selectPairDropdown.value = val;
+        }
+    },
+    "fromCurrency": {
+        "default": "USD"
+    },
+    "currency": {
+        "default": "",
+        "value": document.getElementById("select-currency")
+    },
+    "candlesInterval": {
+        "default": "1h",
+        "value": document.getElementById("candlesInterval")
+    },
+    "multiplier": {
+        "default": 1,
+        "value": document.getElementById("multiplier")
+    },
+    "digits": {
+        "default": 2,
+        "value": document.getElementById("digits")
+    },
+    "font": {
+        "default": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
+        "value": document.getElementById("font")
+    },
+    "backgroundColor": {
+        "default": "#000000",
+        "value": document.getElementById("backgroundColor")
+    },
+    "textColor": {
+        "default": "#ffffff",
+        "value": document.getElementById("textColor")
+    },
+    "displayHighLow": {
+        "default": "on",
+        "value": document.getElementById("displayHighLow"),
+        "getValue": function() {
+            return document.getElementById("displayHighLow").checked?"on":"off";
+        },
+        "setValue": function(val) {
+            document.getElementById("displayHighLow").checked = (val!="off");
+        }
+    },
+    "displayHighLowBar": {
+        "default": "on",
+        "value": document.getElementById("displayHighLowBar"),
+        "getValue": function() {
+            return document.getElementById("displayHighLowBar").checked?"on":"off";
+        },
+        "setValue": function(val) {
+            document.getElementById("displayHighLowBar").checked = (val!="off");
+        }
+    },
+    "displayDailyChange": {
+        "default": "on",
+        "value": document.getElementById("displayDailyChange"),
+        "getValue": function() {
+            return document.getElementById("displayDailyChange").checked?"on":"off";
+        },
+        "setValue": function(val) {
+            document.getElementById("displayDailyChange").checked = (val!="off");
+        }
+    },
+    "alertRule": {
+        "default": "",
+        "value": document.getElementById("alertRule")
+    },
+    "backgroundColorRule": {
+        "default": "",
+        "value": document.getElementById("backgroundColorRule")
+    },
+    "textColorRule": {
+        "default": "",
+        "value": document.getElementById("textColorRule")
+    },
+    "mode": {
+        "default": "ticker"
+    },
+};
+
+const currentSettings = {};
+
 const currencyRelatedElements = document.getElementsByClassName("currencyRelated");
-const currenciesDropDown = document.getElementById("select-currency");
-const candlesIntervalDropDown = document.getElementById("candlesInterval");
-const multiplierInput = document.getElementById("multiplier");
-const digitsInput = document.getElementById("digits");
-const fontInput = document.getElementById("font");
-const backgroundColorInput = document.getElementById("backgroundColor");
-const textColorInput = document.getElementById("textColor");
-const highLowCheck = document.getElementById("displayHighLow");
-const highLowBarCheck = document.getElementById("displayHighLowBar");
-const dailyChangeCheck = document.getElementById("displayDailyChange");
-const alertRuleInput = document.getElementById("alertRule");
-const backgroundColorRuleInput = document.getElementById("backgroundColorRule");
-const textColorRuleInput = document.getElementById("textColorRule");
 
 let pi = {
     log: function(...data) {
@@ -56,203 +118,187 @@ let pi = {
             jThis.checkNewSettings();
             jThis.refreshMenus();
         }
-        pairsDropDown.onchange = callback;
-        currenciesDropDown.onchange = callback;
-        candlesIntervalDropDown.onchange = callback;
 
-        multiplierInput.onchange = callback;
-        multiplierInput.onkeyup = callback;
-
-        digitsInput.onchange = callback;
-        digitsInput.onkeyup = callback;
-
-        fontInput.onchange = callback;
-        fontInput.onkeyup = callback;
-
-        backgroundColorInput.onchange = callback;
-        textColorInput.onchange = callback;
-
-        highLowCheck.onchange = callback;
-        highLowBarCheck.onchange = callback;
-        dailyChangeCheck.onchange = callback;
-
-        alertRuleInput.onchange = callback;
-        alertRuleInput.onkeyup = callback;
-
-        backgroundColorRuleInput.onchange = callback;
-        backgroundColorRuleInput.onkeyup = callback;
-
-        textColorRuleInput.onchange = callback;
-        textColorRuleInput.onkeyup = callback;
+        for(const k in settingsConfig) {
+            const setting = settingsConfig[k];
+            if (setting["value"]) {
+                setting["value"].onchange = callback;
+                setting["value"].onkeyup = callback;
+            }
+        }
     },
     initPairsDropDown: async function () {
-        const pairs = await this.getPairs();
-        this.log("initPairsDropDown", pairs);
-
-        pairs.sort(function(a,b) {
-            const aP = a["pair"], bP = b["pair"];
-            if (aP > bP) {
-                return 1;
-            } else if (aP < bP) {
-                return -1;
-            }
-
-            const aE = a["exchange"], bE = b["exchange"];
-            if (aE > bE) {
-                return 1;
-            } else if (aE < bE) {
-                return -1;
-            }
-
-            return 0;
-        });
-
-        const jThis = this;
-        pairs.forEach(function (pair) {
+        const exchangeDropdown = settingsConfig["exchange"]["value"];
+        const providers = await this.getProviders();
+        providers.sort();
+        providers.forEach(function (provider) {
             var option = document.createElement("option");
-            option.text = pair["pair"].padEnd(20," ") + " " + pair["exchange"];
-            option.value = jThis.joinPairValue(pair["pair"], pair["exchange"]);
-            pairsDropDown.add(option);
+            option.text = provider;
+            option.value = provider;
+            exchangeDropdown.add(option);
         });
 
+        const thisTmp = this;
+        const updatePairs = async function() {
+            // Whenever the exchange changes, we need to update supported pairs
+            // Remove existing options
+            thisTmp.removeAllOptions(selectPairDropdown);
+
+            const provider = exchangeDropdown.value;
+            const pairs = await thisTmp.getPairs(provider);
+            pairs.sort(function(a,b) {
+                const aP = a["symbol"], bP = b["symbol"];
+                if (aP > bP) {
+                    return 1;
+                } else if (aP < bP) {
+                    return -1;
+                }
+
+                return 0;
+            });
+
+            // Add an empty option
+            const emptyOption = document.createElement("option");
+            emptyOption.text = "";
+            emptyOption.value = "";
+            selectPairDropdown.add(emptyOption);
+
+            pairs.forEach(function (pair) {
+                const option = document.createElement("option");
+                option.text = pair["symbol"];
+                option.value = pair["symbol"];
+                selectPairDropdown.add(option);
+            });
+
+            const pairsDropdownGroup = document.getElementById("select-pair-dropdown-group");
+            const pairsInputGroup = document.getElementById("select-pair-input-group");
+            if (pairs.length>0) {
+                pairsDropdownGroup.style.display = "";
+                pairsInputGroup.style.display = "none";
+            } else {
+                pairsDropdownGroup.style.display = "none";
+                pairsInputGroup.style.display = "";
+            }
+
+            selectPairDropdown.value = currentSettings["pair"];
+        };
+
+        const originalCallback = exchangeDropdown.onchange;
+        exchangeDropdown.onchange = function() {
+            originalCallback();
+            updatePairs();
+            thisTmp.checkNewSettings();
+        };
+
+        selectPairDropdown.onchange = function() {
+            const pairInput = settingsConfig["pair"]["value"];
+            pairInput.value = selectPairDropdown.value;
+            pairInput.onchange();
+        };
+
+        updatePairs();
         this.refreshValues();
     },
-    getPairs: async function () {
-        const pairsBinance = await this.getPairsBinance();
-        const pairsBitfinex = await this.getPairsBitfinex();
-        pairs = [];
-
-        pairs.push(...pairsBinance);
-        pairs.push(...pairsBitfinex);
-
-        return pairs;
-    },
-    getPairsBinance: async function () {
-        const response = await fetch("https://binance.com/api/v3/exchangeInfo");
+    getProviders: async function() {
+        const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/providers");
         const responseJson = await response.json();
-        const symbols = responseJson["symbols"];
-        this.log("getPairsBinance", responseJson);
+        this.log("getProviders", responseJson);
 
-        pairs = [];
-        for (let symbol in symbols) {
-            pairs.push({
-                "pair": symbols[symbol]["symbol"],
-                "exchange": "Binance"
-            });
-        }
-
-        return pairs;
+        return responseJson;
     },
-    getPairsBitfinex: async function () {
-        const response = await fetch("https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange");
+    getPairs: async function (provider) {
+        const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/symbols?provider="+provider);
         const responseJson = await response.json();
-        this.log("getPairsBitfinex", responseJson);
+        this.log("getPairs", responseJson);
 
-        pairs = [];
-        for (let pair in responseJson[0]) {
-            pairs.push({
-                "pair": responseJson[0][pair],
-                "exchange": "Bitfinex"
-            });
-        }
-
-        return pairs;
+        return responseJson;
     },
     initCurrenciesDropDown: async function () {
         const currencies = await this.getCurrencies();
         this.log("initCurrenciesDropDown", currencies);
+
+        // const fromCurrencyDropDown = settingsConfig["fromCurrency"]["value"];
+        const toCurrencyDropDown = settingsConfig["currency"]["value"];
+
         currencies.sort();
         currencies.forEach(function (currency) {
             var option = document.createElement("option");
             option.text = currency;
             option.value = currency;
-            currenciesDropDown.add(option);
+            // fromCurrencyDropDown.add(option);
+            toCurrencyDropDown.add(option);
         });
 
         this.refreshValues();
     },
     getCurrencies: async function() {
-        const response = await fetch("https://api.exchangeratesapi.io/latest");
+        const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/currencies");
         const responseJson = await response.json();
         this.log("getCurrencies", responseJson);
 
-        currencies =  new Set(Object.keys(responseJson["rates"]));
-        currencies.add(responseJson["base"]);
+        return responseJson;
 
-        return Array.from(currencies);
-
+    },
+    removeAllOptions: function(selectElement) {
+        var i, L = selectElement.options.length - 1;
+        for(i = L; i >= 0; i--) {
+           selectElement.remove(i);
+        }
     },
     extractSettings: function(settings) {
         this.log("extractSettings", settings);
 
-        currentPair = settings["pair"] || currentPair;
-        currentExchange = settings["exchange"] || currentExchange;
-        currentCurrency = settings["currency"] || currentCurrency;
-        currentCandlesInterval = settings["candlesInterval"] || currentCandlesInterval;
-        currentMultiplier = settings["multiplier"] || currentMultiplier;
-        currentDigits = settings["digits"] || currentDigits;
-        currentFont = settings["font"] || currentFont;
-        currentBackgroundColor = settings["backgroundColor"] || currentBackgroundColor;
-        currentTextColor = settings["textColor"] || currentTextColor;
-        currentDisplayHighLow = settings["displayHighLow"] || currentDisplayHighLow;
-        currentDisplayHighLowBar = settings["displayHighLowBar"] || currentDisplayHighLowBar;
-        currentDisplayDailyChange = settings["displayDailyChange"] || currentDisplayDailyChange;
-        currentAlertRule = settings["alertRule"] || currentAlertRule;
-        currentBackgroundColorRule = settings["backgroundColorRule"] || currentBackgroundColorRule;
-        currentTextColorRule = settings["textColorRule"] || currentTextColorRule;
-        currentMode = settings["mode"] || currentMode;
+        // Backward compatibility, to remove at some point
+        const pairElements = this.splitPairValue(settings["pair"]);
+        if (pairElements) {
+            for (k in pairElements) {
+                settings[k] = pairElements[k];
+            }
+        }
+        //
+
+        for (const k in settingsConfig) {
+            currentSettings[k] = settings[k] || settingsConfig[k]["default"];
+        }
 
         this.refreshValues();
     },
     checkNewSettings: function() {
         this.log("checkNewSettings");
-        const pairElements = this.splitPairValue(pairsDropDown.value);
 
-        currentPair = pairElements["pair"];
-        currentExchange = pairElements["exchange"];
-        currentCurrency = currenciesDropDown.value;
-        currentCandlesInterval = candlesIntervalDropDown.value;
-        currentMultiplier = multiplierInput.value;
-        currentDigits = digitsInput.value;
-        currentFont = fontInput.value;
-        currentBackgroundColor = backgroundColorInput.value;
-        currentTextColor = textColorInput.value;
-        currentDisplayHighLow = highLowCheck.checked?"on":"off";
-        currentDisplayHighLowBar = highLowBarCheck.checked?"on":"off";
-        currentDisplayDailyChange = dailyChangeCheck.checked?"on":"off";
-        currentAlertRule = alertRuleInput.value;
-        currentBackgroundColorRule = backgroundColorRuleInput.value;
-        currentTextColorRule = textColorRuleInput.value;
+        // Retrieve values from HTML to put them to the current settings
+        for (const k in settingsConfig) {
+            const settingConfig = settingsConfig[k];
+            if (settingConfig["getValue"]) {
+                currentSettings[k] = settingConfig["getValue"]() || settingConfig["default"];
+            } else if (settingConfig["value"]) {
+                currentSettings[k] = settingConfig["value"].value || settingConfig["default"];
+            }
+        }
 
         this.saveSettings();
     },
     refreshValues: function() {
         this.log("refreshValues");
 
-        pairsDropDown.value = this.joinPairValue(currentPair, currentExchange);
-        currenciesDropDown.value = currentCurrency;
-        candlesIntervalDropDown.value = currentCandlesInterval;
-        multiplierInput.value = currentMultiplier;
-        digitsInput.value = currentDigits;
-        fontInput.value = currentFont;
-        backgroundColorInput.value = currentBackgroundColor;
-        textColorInput.value = currentTextColor;
-
-        highLowCheck.checked = currentDisplayHighLow!="off";
-        highLowBarCheck.checked = currentDisplayHighLowBar!="off";
-        dailyChangeCheck.checked = currentDisplayDailyChange!="off";
-
-        alertRuleInput.value = currentAlertRule;
-        backgroundColorRuleInput.value = currentBackgroundColorRule;
-        textColorRuleInput.value = currentTextColorRule;
+        // Set values to the HTML
+        for (const k in settingsConfig) {
+            const settingConfig = settingsConfig[k];
+            if (settingConfig["setValue"]) {
+                settingConfig["setValue"](currentSettings[k]);
+            } else if (settingConfig["value"]) {
+                settingConfig["value"].value = currentSettings[k];
+            }
+        }
 
         this.refreshMenus();
     },
     refreshMenus: function() {
-        if (currentPair.indexOf("USD")>=0) {
+        if (currentSettings["pair"].indexOf("USD")>=0) {
             this.applyDisplay(currencyRelatedElements, "block");
         } else {
             this.applyDisplay(currencyRelatedElements, "none");
+            settingsConfig["currency"]["value"].value = "USD";
         }
     },
     applyDisplay: function(elements, display) {
@@ -260,11 +306,8 @@ let pi = {
             elements[i].style.display = display;
          }
     },
-    joinPairValue: function(pair, exchange) {
-        return exchange.toUpperCase() + "|" + pair;
-    },
     splitPairValue: function(value) {
-        if (value.indexOf("|")>=0) {
+        if (value && value.indexOf("|")>=0) {
             const elements = value.split("|");
 
             return {
@@ -273,37 +316,16 @@ let pi = {
             }
         }
 
-        return {
-            "pair": value,
-            "exchange": "BITFINEX"
-        }
+        return null;
     },
     saveSettings: function() {
-        const newSettings = {
-            "pair": currentPair,
-            "exchange": currentExchange,
-            "currency": currentCurrency,
-            "candlesInterval": currentCandlesInterval,
-            "multiplier": currentMultiplier,
-            "digits": currentDigits,
-            "font": currentFont,
-            "backgroundColor": currentBackgroundColor,
-            "textColor": currentTextColor,
-            "displayHighLow": currentDisplayHighLow,
-            "displayHighLowBar": currentDisplayHighLowBar,
-            "displayDailyChange": currentDisplayDailyChange,
-            "alertRule": currentAlertRule,
-            "backgroundColorRule": currentBackgroundColorRule,
-            "textColorRule": currentTextColorRule,
-            "mode": currentMode,
-        };
-        this.log("saveSettings", newSettings);
+        this.log("saveSettings", currentSettings);
 
         if (websocket && (websocket.readyState === 1)) {
             const jsonSetSettings = {
                 "event": "setSettings",
                 "context": uuid,
-                "payload": newSettings
+                "payload": currentSettings
             };
             websocket.send(JSON.stringify(jsonSetSettings));
 
@@ -311,7 +333,7 @@ let pi = {
                 "action": actionInfo["action"],
                 "event": "sendToPlugin",
                 "context": uuid,
-                "payload": newSettings
+                "payload": currentSettings
             };
             websocket.send(JSON.stringify(jsonPlugin));
         }

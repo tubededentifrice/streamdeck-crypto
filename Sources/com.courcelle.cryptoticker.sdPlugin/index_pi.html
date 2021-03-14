@@ -12,11 +12,19 @@
 
 <body>
     <div class="sdpi-wrapper">
-        <!-- See https://github.com/elgatosf/streamdeck-pisamples/blob/master/Sources/com.elgato.pisamples.sdPlugin/index_pi.html -->
         <div class="sdpi-item">
-            <div class="sdpi-item-label">Crypto pair</div>
-            <select class="sdpi-item-value select" id="select-pair" name="select-pair"></select>
+            <div class="sdpi-item-label">Provider</div>
+            <select class="sdpi-item-value select" id="select-provider" name="select-provider"></select>
         </div>
+        <div id="select-pair-dropdown-group" class="sdpi-item">
+            <div class="sdpi-item-label">Choose a pair</div>
+            <select class="sdpi-item-value select" id="select-pair-dropdown" name="select-pair-dropdown"></select>
+        </div>
+        <div id="select-pair-input-group" class="sdpi-item">
+            <div class="sdpi-item-label">Enter a pair / symbol</div>
+            <input type="text" class="sdpi-item-value" id="select-pair" name="select-pair" value="">
+        </div>
+
         <div class="currencyRelated">
             <div class="sdpi-item">
                 <div class="sdpi-item-label">Convert to</div>
