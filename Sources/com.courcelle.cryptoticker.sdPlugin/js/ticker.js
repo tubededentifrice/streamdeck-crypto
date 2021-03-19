@@ -9,7 +9,9 @@ let websocket = null;
 let pluginUUID = null;
 let canvas;
 let canvasContext;
-let bitfinexWsByContext = {};
+let wsByContext = {};
+const alertStatuses = {};
+const alertArmed = {};
 let rates = null;
 let ratesUpdate = 0;
 const candlesCache = {};
@@ -50,7 +52,13 @@ const tickerAction = {
                 break;
             case "ticker":
             default:
-                settings.mode = "candles";
+                if (alertArmed[context] != "off" && alertStatuses[context] == "on") {
+                    // Disarm the alert
+                    alertArmed[context] = "off";
+                } else {
+                    // Switch mode by default
+                    settings.mode = "candles";
+                }
                 break;
         }
 
@@ -74,8 +82,8 @@ const tickerAction = {
     },
     refreshTimers: async function() {
         // Make sure everybody is connected
-        for (var ctx in bitfinexWsByContext) {
-            const currentWs = bitfinexWsByContext[ctx];
+        for (var ctx in wsByContext) {
+            const currentWs = wsByContext[ctx];
             this.refreshTimer(
                 currentWs.context,
                 currentWs.settings
@@ -188,13 +196,13 @@ const tickerAction = {
         const canvasHeight = canvas.height;
         const textPadding = 10;
 
-        const pair = settings.pair || "BTCUSD";
-        const exchange = settings.exchange || "BITFINEX";
+        const pair = settings["pair"] || "BTCUSD";
+        const exchange = settings["exchange"] || "BITFINEX";
         const pairDisplay = values.pair || pair;
-        const currency = settings.currency || "USD";
-        const multiplier = settings.multiplier || 1;
+        const currency = settings["currency"] || "USD";
+        const multiplier = settings["multiplier"] || 1;
         const digits = settings.digits || 2;
-        let backgroundColor = settings.backgroundColor || "#000000";
+        let backgroundColor = settings["backgroundColor"] || "#000000";
         let textColor = settings.textColor || "#ffffff";
         //console.log(settings);
         //// console.log(new Date()+" "+pair+" => "+values.last);
@@ -207,29 +215,39 @@ const tickerAction = {
         const volume = values.volume;
         const high = values.high;
         const low = values.low;
-        if (settings.alertRule) {
+        if (settings["alertRule"]) {
             try {
-                if (eval(settings.alertRule)) {
-                    alertMode = true;
-                    const tmp = backgroundColor;
-                    backgroundColor = textColor;
-                    textColor = tmp;
+                if (eval(settings["alertRule"])) {
+                    alertStatuses[context] = "on";
+
+                    // Only display the alert mode if we're armed
+                    if (alertArmed[context] != "off") {
+                        alertMode = true;
+                        const tmp = backgroundColor;
+                        backgroundColor = textColor;
+                        textColor = tmp;
+                    }
+                } else {
+                    alertStatuses[context] = "off";
+
+                    // Re-arm the alert since we're out of the alert
+                    alertArmed[context] = "on";
                 }
             }
             catch(err) { console.error(err); }
         }
 
-        if (settings.backgroundColorRule) {
+        if (settings["backgroundColorRule"]) {
             const alert = alertMode;
             try {
-                backgroundColor = eval(settings.backgroundColorRule) || backgroundColor;
+                backgroundColor = eval(settings["backgroundColorRule"]) || backgroundColor;
             }
             catch(err) { console.error(err); }
         }
-        if (settings.textColorRule) {
+        if (settings["textColorRule"]) {
             const alert = alertMode;
             try {
-                textColor = eval(settings.textColorRule) || textColor;
+                textColor = eval(settings["textColorRule"]) || textColor;
             }
             catch(err) { console.error(err); }
         }
@@ -352,8 +370,8 @@ const tickerAction = {
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
         const padding = 10;
-        let backgroundColor = settings.backgroundColor || "#000000";
-        let textColor = settings.textColor || "#ffffff";
+        let backgroundColor = settings["backgroundColor"] || "#000000";
+        let textColor = settings["textColor"] || "#ffffff";
 
         canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
         canvasContext.fillStyle = backgroundColor;
@@ -448,7 +466,7 @@ const tickerAction = {
     getCandles: async function(settings) {
         this.log("getCandles");
 
-        const exchange = settings.exchange || "BITFINEX";
+        const exchange = settings["exchange"] || "BITFINEX";
         const pair = settings["pair"] || "BTCUSD";
         const interval = this.convertCandlesInterval(settings["candlesInterval"] || "1h");
         const cacheKey = exchange + "_" + pair + "_" + interval;
@@ -536,8 +554,8 @@ const tickerAction = {
     },
 
     getCurrentWs: function(context) {
-        const currentWs = bitfinexWsByContext[context] || {};
-        bitfinexWsByContext[context] = currentWs;
+        const currentWs = wsByContext[context] || {};
+        wsByContext[context] = currentWs;
         return currentWs;
     },
 };
@@ -567,14 +585,14 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
 
         // Received message from Stream Deck
         var jsonObj = JSON.parse(evt.data);
-        var event = jsonObj['event'];
-        var action = jsonObj['action'];
-        var context = jsonObj['context'];
+        var event = jsonObj["event"];
+        var action = jsonObj["action"];
+        var context = jsonObj["context"];
 
-        var jsonPayload = jsonObj['payload'] || {};
-        var settings = jsonPayload['settings'];
-        var coordinates = jsonPayload['coordinates'];
-        var userDesiredState = jsonPayload['userDesiredState'];
+        var jsonPayload = jsonObj["payload"] || {};
+        var settings = jsonPayload["settings"];
+        var coordinates = jsonPayload["coordinates"];
+        var userDesiredState = jsonPayload["userDesiredState"];
 
         if (event == "keyDown") {
             tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
