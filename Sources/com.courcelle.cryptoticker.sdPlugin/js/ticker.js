@@ -6,10 +6,13 @@ const DestinationEnum = Object.freeze({
 
 const loggingEnabled = false;
 let websocket = null;
-let pluginUUID = null;
 let canvas;
 let canvasContext;
-let wsByContext = {};
+let globalWs;
+const subscriptionsContexts = {}; // exchange/symbol => contexts, allowing to know with contexts to update
+const contextDetails = {};  // context => settings, ensure a single subscription per context
+
+const wsByContext = {};
 const alertStatuses = {};
 const alertArmed = {};
 let rates = null;
@@ -81,69 +84,80 @@ const tickerAction = {
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
     refreshTimers: async function() {
+        this.connectOrReconnectIfNeeded();
+
         // Make sure everybody is connected
-        for (var ctx in wsByContext) {
-            const currentWs = wsByContext[ctx];
+        for (let ctx in contextDetails) {
+            const details = contextDetails[ctx];
             this.refreshTimer(
-                currentWs.context,
-                currentWs.settings
+                details["context"],
+                details["settings"]
             );
         }
     },
     refreshTimer: async function(context, settings) {
         this.refreshSettings(context, settings);
 
-        const currentWs = this.getCurrentWs(context);
-
-        const connected = (currentWs.ws || {}).connectionState=="Connecting" || (currentWs.ws || {}).connectionState=="Connected";
-
-        if (currentWs.pair!=settings.pair || !currentWs.ws || !connected) {
-            this.log("Reopening WS because "+currentWs.pair+"!="+settings.pair+" || !"+connected);
-            if (currentWs.ws) {
-                currentWs.ws.stopped = true;
-                currentWs.ws.stop();
-            }
-
-            this.subscribe(settings, currentWs);
-        }
-
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
         this.updateTicker(context, settings);
     },
-    subscribe: function(settings, currentWs) {
-        const jThis = this;
-        currentWs.exchange = settings["exchange"] || "BITFINEX";
-        currentWs.pair = settings["pair"] || "BTCUSD";
+    connectOrReconnectIfNeeded: function() {
+        const connected = (globalWs || {}).connectionState=="Connecting" || (globalWs || {}).connectionState=="Connected";
+        if (!connected) {
+            this.log("Reopening WS because !"+connected);
+            if (globalWs) {
+                globalWs.stopped = true;
+                globalWs.stop();
+            }
 
-        currentWs.ws = new signalR.HubConnectionBuilder()
+            this.connect();
+        }
+    },
+    connect: function() {
+        const jThis = this;
+
+        globalWs = new signalR.HubConnectionBuilder()
             .withUrl("https://tproxy.opendle.com/tickerhub")
             .withAutomaticReconnect()
             .configureLogging(signalR.LogLevel.Warning)
             .build();
 
-        currentWs.ws.on("ticker", async (ticker) => {
+        globalWs.on("ticker", async (ticker) => {
             jThis.log("Ticker received via WSS", ticker);
 
-            await jThis.updateCanvas(
-                currentWs.context,
-                currentWs.settings,
-                await jThis.extractValues(ticker, currentWs.pair, settings["currency"])
-            );
+            //TODO: Send to each context that have subscribe to this
+            const sKey = this.getSubscriptionContextKey(ticker["provider"], ticker["symbol"]);
+            if (subscriptionsContexts[sKey]) {
+                for (let c in subscriptionsContexts[sKey]) {
+                    const settings = contextDetails[c]["settings"];
+                    await jThis.updateCanvas(
+                        contextDetails[c]["context"],
+                        settings,
+                        await jThis.extractValues(ticker, settings["pair"], settings["currency"])
+                    );
+                }
+            } else {
+                console.error("Received a ticker for an unknow context " + sKey, ticker);
+            }
         });
 
         const subscribe = async function() {
-            if (!currentWs.ws.stopped) {
-                await currentWs.ws.invoke("Subscribe", currentWs.exchange, currentWs.pair, settings["fromCurrency"] || null, settings["currency"] || null);
+            if (!globalWs.stopped) {
+                for (c in contextDetails) {
+                    jThis.subscribe(contextDetails[c]["context"], contextDetails[c]["settings"]);
+                }
             }
         };
-        currentWs.ws.onreconnected(async (connectionId) => {
-            subscribe();
+        globalWs.onreconnected(async (connectionId) => {
+            if (!globalWs.stopped) {
+                subscribe();
+            }
         });
 
         const start = async function() {
-            if (!currentWs.ws.stopped && currentWs.ws.connectionState!="Connected") {
+            if (!globalWs.stopped && globalWs.connectionState!="Connected") {
                 try {
-                    await currentWs.ws.start();
+                    await globalWs.start();
                     await subscribe();
                 } catch (err) {
                     console.log(err);
@@ -153,17 +167,39 @@ const tickerAction = {
         };
 
         // Start the connection.
-        currentWs.ws.stopped = false;
+        globalWs.stopped = false;
         start();
     },
+    subscribe: async function(context, settings) {
+        const sKey = this.getSubscriptionContextKey(settings["exchange"], settings["pair"]);
+        subscriptionsContexts[sKey] = (subscriptionsContexts[sKey] || new Set());
+        subscriptionsContexts[sKey][context] = true;
+
+        // Make sure we aren't subscribe to something else
+        for (let k in subscriptionsContexts) {
+            if (k != sKey) {
+                delete subscriptionsContexts[k][context];
+            }
+        }
+
+        if (globalWs && !globalWs.stopped) {
+            await globalWs.invoke("Subscribe", settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
+        }
+    },
     refreshSettings: function(context, settings) {
-        const currentWs = this.getCurrentWs(context);
-        currentWs.context = context;
-        currentWs.settings = settings;
+        contextDetails[context] = {
+            "context": context,
+            "settings": settings
+        };
+
+        this.connectOrReconnectIfNeeded();
+    },
+    getSubscriptionContextKey: function(exchange, pair) {
+        return (exchange || "BITFINEX") + "__" + (pair || "BTCUSD");
     },
 
     updateTicker: async function(context, settings) {
-        const pair = settings.pair || "BTCUSD";
+        const pair = settings["pair"] || "BTCUSD";
         const values = await this.getTickerValue(pair, settings.currency, settings.exchange);
         this.updateCanvas(context, settings, values);
     },
@@ -198,23 +234,23 @@ const tickerAction = {
 
         const pair = settings["pair"] || "BTCUSD";
         const exchange = settings["exchange"] || "BITFINEX";
-        const pairDisplay = values.pair || pair;
+        const pairDisplay = values["pairDisplay"] || pair;
         const currency = settings["currency"] || "USD";
         const multiplier = settings["multiplier"] || 1;
-        const digits = settings.digits || 2;
+        const digits = settings["digits"] || 2;
         let backgroundColor = settings["backgroundColor"] || "#000000";
-        let textColor = settings.textColor || "#ffffff";
+        let textColor = settings["textColor"] || "#ffffff";
         //console.log(settings);
         //// console.log(new Date()+" "+pair+" => "+values.last);
 
         let alertMode = false;
-        const changeDaily = values.changeDaily;
-        const changeDailyPercent = values.changeDailyPercent;
-        const value = values.last;
+        const changeDaily = values["changeDaily"];
+        const changeDailyPercent = values["changeDailyPercent"];
+        const value = values["last"];
         const valueDisplay = value*multiplier;
-        const volume = values.volume;
-        const high = values.high;
-        const low = values.low;
+        const volume = values["volume"];
+        const high = values["high"];
+        const low = values["low"];
         if (settings["alertRule"]) {
             try {
                 if (eval(settings["alertRule"])) {
@@ -265,7 +301,7 @@ const tickerAction = {
 
         canvasContext.font = "bold 35px "+font;
         canvasContext.fillText(
-            this.getRoundedValue(values.last, digits, multiplier),
+            this.getRoundedValue(values["last"], digits, multiplier),
             textPadding,
             60
         );
@@ -273,14 +309,14 @@ const tickerAction = {
         if (settings["displayHighLow"]!="off") {
             canvasContext.font = "25px "+font;
             canvasContext.fillText(
-                this.getRoundedValue(values.low, digits, multiplier),
+                this.getRoundedValue(values["low"], digits, multiplier),
                 textPadding,
                 90
             );
 
             canvasContext.textAlign = "right";
             canvasContext.fillText(
-                this.getRoundedValue(values.high, digits, multiplier),
+                this.getRoundedValue(values["high"], digits, multiplier),
                 canvasWidth-textPadding,
                 135
             );
@@ -461,6 +497,7 @@ const tickerAction = {
             "high": responseJson["high24h"],
             "low": responseJson["low24h"],
             "pair": responseJson["symbol"],
+            "pairDisplay": responseJson["symbolDisplay"],
         };
     },
     getCandles: async function(settings) {
@@ -560,9 +597,7 @@ const tickerAction = {
     },
 };
 
-function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inApplicationInfo, inActionInfo) {
-    pluginUUID = inPluginUUID;
-
+function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inApplicationInfo, inActionInfo) {
     // Open the web socket
     websocket = new WebSocket("ws://127.0.0.1:" + inPort);
 
@@ -595,11 +630,11 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
         var userDesiredState = jsonPayload["userDesiredState"];
 
         if (event == "keyDown") {
-            tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
+            await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
         } else if (event == "keyUp") {
-            tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
+            await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
         } else if (event == "willAppear") {
-            tickerAction.onWillAppear(context, settings, coordinates);
+            await tickerAction.onWillAppear(context, settings, coordinates);
         } else if (settings!=null) {
             //this.log("Received settings", settings);
             for (k in defaultSettings) {
@@ -619,6 +654,6 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
     };
 
     setInterval(async function() {
-        tickerAction.refreshTimers();
+        await tickerAction.refreshTimers();
     }, 300000);
 };
