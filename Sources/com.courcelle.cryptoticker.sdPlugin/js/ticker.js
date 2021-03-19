@@ -620,5 +620,5 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
 
     setInterval(async function() {
         tickerAction.refreshTimers();
-    }, 60000);
+    }, 300000);
 };
