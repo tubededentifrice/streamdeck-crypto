@@ -8,6 +8,10 @@ var websocket = null,
 const loggingEnabled = false;
 const selectPairDropdown = document.getElementById("select-pair-dropdown");
 const settingsConfig = {
+    "title": {
+        "default": "",
+        "value": document.getElementById("input-title")
+    },
     "exchange": {
         "default": "BITFINEX",
         "value": document.getElementById("select-provider")

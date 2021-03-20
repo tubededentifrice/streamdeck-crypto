@@ -12,7 +12,6 @@ let globalWs;
 const subscriptionsContexts = {}; // exchange/symbol => contexts, allowing to know with contexts to update
 const contextDetails = {};  // context => settings, ensure a single subscription per context
 
-const wsByContext = {};
 const alertStatuses = {};
 const alertArmed = {};
 let rates = null;
@@ -172,17 +171,57 @@ const tickerAction = {
     },
     subscribe: async function(context, settings) {
         const sKey = this.getSubscriptionContextKey(settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
-        subscriptionsContexts[sKey] = (subscriptionsContexts[sKey] || new Set());
-        subscriptionsContexts[sKey][context] = true;
+        subscriptionsContexts[sKey] = (subscriptionsContexts[sKey] || {});
+        subscriptionsContexts[sKey][context] = settings;
 
         // Make sure we aren't subscribe to something else
         for (let k in subscriptionsContexts) {
             if (k != sKey) {
-                delete subscriptionsContexts[k][context];
+                const sKeyObj = subscriptionsContexts[k];
+
+                // If a single context on this subscription and it's us
+                // Then unsubscribe and then delete the whole key
+                if (Object.keys(sKeyObj).length == 1) {
+                    if (sKeyObj[context]) {
+                        const sKeyObjContextSettings = sKeyObj[context];
+                        try  {
+                            if (globalWs && !globalWs.stopped && globalWs.connectionState=="Connected") {
+                                this.log(
+                                    "Unsubscribe",
+                                    sKeyObjContextSettings["exchange"],
+                                    sKeyObjContextSettings["pair"],
+                                    sKeyObjContextSettings["fromCurrency"] || null,
+                                    sKeyObjContextSettings["currency"] || null
+                                );
+                                await globalWs.invoke(
+                                    "Unsubscribe",
+                                    sKeyObjContextSettings["exchange"],
+                                    sKeyObjContextSettings["pair"],
+                                    sKeyObjContextSettings["fromCurrency"] || null,
+                                    sKeyObjContextSettings["currency"] || null
+                                );
+                            }
+                        } catch(e) {
+                            console.error(e);
+                        }
+
+                        delete subscriptionsContexts[k]
+                    }
+                }
+
+                // Otherwise just delete the context key
+                delete sKeyObj[context];
             }
         }
 
         if (globalWs && !globalWs.stopped && globalWs.connectionState=="Connected") {
+            console.log(
+                "Subscribe",
+                settings["exchange"],
+                settings["pair"],
+                settings["fromCurrency"] || null,
+                settings["currency"] || null
+            );
             await globalWs.invoke("Subscribe", settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
         }
     },
@@ -218,13 +257,9 @@ const tickerAction = {
     updateCanvas: async function(context, settings, tickerValues) {
         this.log("updateCanvas", context, settings, tickerValues);
 
-        const currentWs = this.getCurrentWs(context);
-        currentWs.latestTickerValues = tickerValues;
-
         switch(settings.mode) {
             case "candles":
                 const candleValues = await this.getCandles(settings);
-                currentWs.latestCandleValues = candleValues;
                 this.updateCanvasCandles(context, settings, candleValues);
                 break;
             case "ticker":
@@ -242,14 +277,13 @@ const tickerAction = {
 
         const pair = settings["pair"] || "BTCUSD";
         const exchange = settings["exchange"] || "BITFINEX";
-        const pairDisplay = values["pairDisplay"] || pair;
+        const pairDisplay = settings["title"] || (values["pairDisplay"] || pair);
         const currency = settings["currency"] || "USD";
         const multiplier = settings["multiplier"] || 1;
         const digits = settings["digits"] || 2;
         let backgroundColor = settings["backgroundColor"] || "#000000";
         let textColor = settings["textColor"] || "#ffffff";
         //console.log(settings);
-        //// console.log(new Date()+" "+pair+" => "+values.last);
 
         let alertMode = false;
         const changeDaily = values["changeDaily"];
@@ -597,12 +631,6 @@ const tickerAction = {
     normalizeValue: function(value, min, max) {
         return (value-min)/(max-min);
     },
-
-    getCurrentWs: function(context) {
-        const currentWs = wsByContext[context] || {};
-        wsByContext[context] = currentWs;
-        return currentWs;
-    },
 };
 
 function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inApplicationInfo, inActionInfo) {
@@ -628,14 +656,15 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
 
         // Received message from Stream Deck
         var jsonObj = JSON.parse(evt.data);
-        var event = jsonObj["event"];
-        var action = jsonObj["action"];
-        var context = jsonObj["context"];
+        const event = jsonObj["event"];
+        const action = jsonObj["action"];
+        const context = jsonObj["context"];
 
-        var jsonPayload = jsonObj["payload"] || {};
-        var settings = jsonPayload["settings"];
-        var coordinates = jsonPayload["coordinates"];
-        var userDesiredState = jsonPayload["userDesiredState"];
+        const jsonPayload = jsonObj["payload"] || {};
+        const settings = jsonPayload["settings"];
+        const coordinates = jsonPayload["coordinates"];
+        const userDesiredState = jsonPayload["userDesiredState"];
+        // const title = jsonPayload["title"];
 
         if (event == "keyDown") {
             await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
