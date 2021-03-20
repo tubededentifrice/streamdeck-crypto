@@ -126,7 +126,7 @@ const tickerAction = {
             jThis.log("Ticker received via WSS", ticker);
 
             //TODO: Send to each context that have subscribe to this
-            const sKey = this.getSubscriptionContextKey(ticker["provider"], ticker["symbol"]);
+            const sKey = this.getSubscriptionContextKey(ticker["provider"], ticker["symbol"], ticker["conversionFromCurrency"], ticker["conversionToCurrency"]);
             if (subscriptionsContexts[sKey]) {
                 for (let c in subscriptionsContexts[sKey]) {
                     const settings = contextDetails[c]["settings"];
@@ -171,7 +171,7 @@ const tickerAction = {
         start();
     },
     subscribe: async function(context, settings) {
-        const sKey = this.getSubscriptionContextKey(settings["exchange"], settings["pair"]);
+        const sKey = this.getSubscriptionContextKey(settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
         subscriptionsContexts[sKey] = (subscriptionsContexts[sKey] || new Set());
         subscriptionsContexts[sKey][context] = true;
 
@@ -182,7 +182,7 @@ const tickerAction = {
             }
         }
 
-        if (globalWs && !globalWs.stopped) {
+        if (globalWs && !globalWs.stopped && globalWs.connectionState=="Connected") {
             await globalWs.invoke("Subscribe", settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
         }
     },
@@ -193,9 +193,17 @@ const tickerAction = {
         };
 
         this.connectOrReconnectIfNeeded();
+
+        // Update the subscription in all cases
+        this.subscribe(context, settings);
     },
-    getSubscriptionContextKey: function(exchange, pair) {
-        return (exchange || "BITFINEX") + "__" + (pair || "BTCUSD");
+    getSubscriptionContextKey: function(exchange, pair, fromCurrency, toCurrency) {
+        let convertPart = "";
+        if (fromCurrency!=null && toCurrency!=null && fromCurrency!=toCurrency) {
+            convertPart = "__" + fromCurrency + "_" + toCurrency;
+        }
+
+        return (exchange || "BITFINEX") + "__" + (pair || "BTCUSD") + convertPart;
     },
 
     updateTicker: async function(context, settings) {
