@@ -20,7 +20,7 @@ const settingsConfig = {
         "default": "BTCUSD",
         "value": document.getElementById("select-pair"),
         "setValue": function(val) {
-            document.getElementById("select-pair").value = val;
+            this.value.value = val;
             selectPairDropdown.value = val;
         }
     },
@@ -59,30 +59,30 @@ const settingsConfig = {
         "default": "on",
         "value": document.getElementById("displayHighLow"),
         "getValue": function() {
-            return document.getElementById("displayHighLow").checked?"on":"off";
+            return this.value.checked?"on":"off";
         },
         "setValue": function(val) {
-            document.getElementById("displayHighLow").checked = (val!="off");
+            this.value.checked = (val!="off");
         }
     },
     "displayHighLowBar": {
         "default": "on",
         "value": document.getElementById("displayHighLowBar"),
         "getValue": function() {
-            return document.getElementById("displayHighLowBar").checked?"on":"off";
+            return this.value.checked?"on":"off";
         },
         "setValue": function(val) {
-            document.getElementById("displayHighLowBar").checked = (val!="off");
+            this.value.checked = (val!="off");
         }
     },
     "displayDailyChange": {
         "default": "on",
         "value": document.getElementById("displayDailyChange"),
         "getValue": function() {
-            return document.getElementById("displayDailyChange").checked?"on":"off";
+            return this.value.checked?"on":"off";
         },
         "setValue": function(val) {
-            document.getElementById("displayDailyChange").checked = (val!="off");
+            this.value.checked = (val!="off");
         }
     },
     "alertRule": {
