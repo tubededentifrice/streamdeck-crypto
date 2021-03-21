@@ -4,6 +4,9 @@ const DestinationEnum = Object.freeze({
     "SOFTWARE_ONLY": 2
 });
 
+const tProxyBase = "https://tproxy.opendle.com";
+// const tProxyBase = "https://localhost:44330";
+
 const loggingEnabled = false;
 let websocket = null;
 let canvas;
@@ -116,7 +119,7 @@ const tickerAction = {
         const jThis = this;
 
         globalWs = new signalR.HubConnectionBuilder()
-            .withUrl("https://tproxy.opendle.com/tickerhub")
+            .withUrl(tProxyBase + "/tickerhub")
             .withAutomaticReconnect()
             .configureLogging(signalR.LogLevel.Warning)
             .build();
@@ -215,7 +218,7 @@ const tickerAction = {
         }
 
         if (globalWs && !globalWs.stopped && globalWs.connectionState=="Connected") {
-            console.log(
+            this.log(
                 "Subscribe",
                 settings["exchange"],
                 settings["pair"],
@@ -242,11 +245,11 @@ const tickerAction = {
             convertPart = "__" + fromCurrency + "_" + toCurrency;
         }
 
-        return (exchange || "BITFINEX") + "__" + (pair || "BTCUSD") + convertPart;
+        return exchange + "__" + pair + convertPart;
     },
 
     updateTicker: async function(context, settings) {
-        const pair = settings["pair"] || "BTCUSD";
+        const pair = settings["pair"];
         const values = await this.getTickerValue(pair, settings.currency, settings.exchange);
         this.updateCanvas(context, settings, values);
     },
@@ -275,10 +278,10 @@ const tickerAction = {
         const canvasHeight = canvas.height;
         const textPadding = 10;
 
-        const pair = settings["pair"] || "BTCUSD";
-        const exchange = settings["exchange"] || "BITFINEX";
+        const pair = settings["pair"];
+        const exchange = settings["exchange"];
         const pairDisplay = settings["title"] || (values["pairDisplay"] || pair);
-        const currency = settings["currency"] || "USD";
+        const currency = settings["currency"];
         const multiplier = settings["multiplier"] || 1;
         const digits = settings["digits"] || 2;
         let backgroundColor = settings["backgroundColor"] || "#000000";
@@ -448,12 +451,23 @@ const tickerAction = {
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
         const padding = 10;
-        let backgroundColor = settings["backgroundColor"] || "#000000";
-        let textColor = settings["textColor"] || "#ffffff";
+        let backgroundColor = settings["backgroundColor"];
+        let textColor = settings["textColor"];
+
+        const pairDisplay = settings["title"] || settings["pair"];
+        const interval = settings["candlesInterval"] || "1h";
+
 
         canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
         canvasContext.fillStyle = backgroundColor;
         canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        var font = settings["font"] || "Lato";
+        canvasContext.font = "15px "+font;
+        canvasContext.fillStyle = textColor;
+
+        canvasContext.textAlign = "left";
+        canvasContext.fillText(interval, 10, canvasHeight - 5);
 
         //this.log("updateCanvasCandles", candlesNormalized);
         candlesNormalized.forEach(function(candleNormalized) {
@@ -523,7 +537,7 @@ const tickerAction = {
     },
 
     getTickerValue: async function(pair, toCurrency, exchange) {
-        const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/"+(exchange||"BITFINEX")+"/"+pair+"?fromCurrency=USD&toCurrency="+(toCurrency||"USD"));
+        const response = await fetch(tProxyBase + "/api/Ticker/json/"+(exchange)+"/"+pair+"?fromCurrency=USD&toCurrency="+(toCurrency));
         const responseJson = await response.json();
 
         return this.extractValues(responseJson);
@@ -545,8 +559,8 @@ const tickerAction = {
     getCandles: async function(settings) {
         this.log("getCandles");
 
-        const exchange = settings["exchange"] || "BITFINEX";
-        const pair = settings["pair"] || "BTCUSD";
+        const exchange = settings["exchange"];
+        const pair = settings["pair"];
         const interval = this.convertCandlesInterval(settings["candlesInterval"] || "1h");
         const cacheKey = exchange + "_" + pair + "_" + interval;
         const cache = candlesCache[cacheKey] || {};
@@ -559,7 +573,7 @@ const tickerAction = {
             return cache[c];
         }
 
-        const response = await fetch("https://tproxy.opendle.com/api/Candles/json/"+exchange+"/"+pair+"/"+interval+"?limit=20");
+        const response = await fetch(tProxyBase + "/api/Candles/json/"+exchange+"/"+pair+"/"+interval+"?limit=20");
         const val = this.getCandlesNormalized((await response.json()).candles);
 
         cache[t] = now;
@@ -665,6 +679,26 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         const coordinates = jsonPayload["coordinates"];
         const userDesiredState = jsonPayload["userDesiredState"];
         // const title = jsonPayload["title"];
+        // console.log("event", event);
+
+        const ignoredEvents = [
+            "deviceDidConnect",
+            "titleParametersDidChange"
+        ];
+
+        if (ignoredEvents.indexOf(event) >= 0) {
+            // Ignore
+            return;
+        }
+
+        if (settings!=null) {
+            //this.log("Received settings", settings);
+            for (k in defaultSettings) {
+                if (!settings[k]) {
+                    settings[k] = defaultSettings[k];
+                }
+            }
+        }
 
         if (event == "keyDown") {
             await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
@@ -674,12 +708,6 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
             await tickerAction.onWillAppear(context, settings, coordinates);
         } else if (settings!=null) {
             //this.log("Received settings", settings);
-            for (k in defaultSettings) {
-                if (!settings[k]) {
-                    settings[k] = defaultSettings[k];
-                }
-            }
-
             tickerAction.refreshSettings(context, settings);
             tickerAction.refreshTimer(context, settings);
             // tickerAction.updateTicker(context, settings);    // Already done by refreshTimer
