@@ -139,7 +139,7 @@ const tickerAction = {
                     );
                 }
             } else {
-                console.error("Received a ticker for an unknow context " + sKey, ticker);
+                console.error("Received a ticker for an unknow context " + sKey, ticker, subscriptionsContexts);
             }
         });
 
@@ -205,7 +205,7 @@ const tickerAction = {
                                 );
                             }
                         } catch(e) {
-                            console.error(e);
+                            console.error("Error invoking Unsubscribe", context, settings, e);
                         }
 
                         delete subscriptionsContexts[k]
@@ -315,7 +315,9 @@ const tickerAction = {
                     alertArmed[context] = "on";
                 }
             }
-            catch(err) { console.error(err); }
+            catch(err) {
+                console.error("Error evaluating alertRule", context, settings, values, err);
+            }
         }
 
         if (settings["backgroundColorRule"]) {
@@ -323,14 +325,18 @@ const tickerAction = {
             try {
                 backgroundColor = eval(settings["backgroundColorRule"]) || backgroundColor;
             }
-            catch(err) { console.error(err); }
+            catch(err) {
+                console.error("Error evaluating backgroundColorRule", context, settings, values, err);
+            }
         }
         if (settings["textColorRule"]) {
             const alert = alertMode;
             try {
                 textColor = eval(settings["textColorRule"]) || textColor;
             }
-            catch(err) { console.error(err); }
+            catch(err) {
+                console.error("Error evaluating textColorRule", context, settings, values, err);
+            }
         }
 
         canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
