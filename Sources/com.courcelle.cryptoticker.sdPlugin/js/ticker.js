@@ -479,21 +479,21 @@ const tickerAction = {
         candlesNormalized.forEach(function(candleNormalized) {
             const xPosition = Math.round(padding+Math.round(candleNormalized.timePercent*(canvasWidth-2*padding)));
 
-            // Draw the high/low bar
-            canvasContext.beginPath();
-            canvasContext.moveTo(xPosition, Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding)));
-            canvasContext.lineTo(xPosition, Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)));
-            canvasContext.lineWidth = 2;
-            canvasContext.strokeStyle = textColor;
-            canvasContext.stroke();
-
-            //this.log(xPosition+", "+Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding))+" to "+xPosition+", "+Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)))
-
             // Choose open/close color
             let candleColor = "green";
             if (candleNormalized.closePercent<candleNormalized.openPercent) {
                 candleColor = "red";
             }
+
+            // Draw the high/low bar
+            canvasContext.beginPath();
+            canvasContext.moveTo(xPosition, Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding)));
+            canvasContext.lineTo(xPosition, Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)));
+            canvasContext.lineWidth = 2;
+            canvasContext.strokeStyle = candleColor;
+            canvasContext.stroke();
+
+            //this.log(xPosition+", "+Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding))+" to "+xPosition+", "+Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)))
 
             // Draw the open/close bar
             canvasContext.beginPath();
