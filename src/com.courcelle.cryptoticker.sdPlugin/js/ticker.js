@@ -510,6 +510,12 @@ const tickerAction = {
             const paddingHeight = canvasHeight - (2 * padding); // padding is already multiplied by sizeMultiplier above
             const xPosition = Math.round(padding + Math.round(candleNormalized.timePercent * paddingWidth));
 
+            // Choose open/close color
+            let candleColor = "green";
+            if (candleNormalized.closePercent < candleNormalized.openPercent) {
+                candleColor = "red";
+            }
+
             // Draw the high/low bar
             canvasContext.beginPath();
             canvasContext.moveTo(xPosition, Math.round(padding + (1 - candleNormalized.highPercent) * paddingHeight));
@@ -517,14 +523,6 @@ const tickerAction = {
             canvasContext.lineWidth = 2 * sizeMultiplier;
             canvasContext.strokeStyle = textColor;
             canvasContext.stroke();
-
-            //this.log(xPosition+", "+Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding))+" to "+xPosition+", "+Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)))
-
-            // Choose open/close color
-            let candleColor = "green";
-            if (candleNormalized.closePercent < candleNormalized.openPercent) {
-                candleColor = "red";
-            }
 
             // Draw the open/close bar
             canvasContext.beginPath();
