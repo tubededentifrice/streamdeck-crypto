@@ -5,6 +5,10 @@ var websocket = null,
     actionInfo = {},
     inInfo = {};
 
+
+const tProxyBase = "https://tproxyv8.opendle.com";
+// const tProxyBase = "https://localhost:44330";
+
 const loggingEnabled = false;
 const selectPairDropdown = document.getElementById("select-pair-dropdown");
 const settingsConfig = {
@@ -104,10 +108,11 @@ const settingsConfig = {
 
 const currentSettings = {};
 const cache = {};
+let lastDisplayedExchange = null;
 
 const currencyRelatedElements = document.getElementsByClassName("currencyRelated");
 
-let pi = {
+const pi = {
     log: function(...data) {
         if (loggingEnabled) {
             console.log(...data);
@@ -203,6 +208,7 @@ let pi = {
             pairInput.onchange();
         };
 
+        lastDisplayedExchange = currentSettings["exchange"];
         updatePairs();
         this.refreshValues();
     },
@@ -212,7 +218,7 @@ let pi = {
             return cache[cacheKey];
         }
 
-        const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/providers");
+        const response = await fetch(tProxyBase + "/api/Ticker/json/providers");
         const responseJson = await response.json();
         this.log("getProviders", responseJson);
 
@@ -225,7 +231,7 @@ let pi = {
             return cache[cacheKey];
         }
 
-        const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/symbols?provider="+provider);
+        const response = await fetch(tProxyBase + "/api/Ticker/json/symbols?provider="+provider);
         const responseJson = await response.json();
         this.log("getPairs", responseJson);
 
@@ -256,7 +262,7 @@ let pi = {
             return cache[cacheKey];
         }
 
-        const response = await fetch("https://tproxy.opendle.com/api/Ticker/json/currencies");
+        const response = await fetch(tProxyBase + "/api/Ticker/json/currencies");
         const responseJson = await response.json();
         this.log("getCurrencies", responseJson);
 
@@ -306,6 +312,11 @@ let pi = {
     refreshValues: function() {
         this.log("refreshValues");
 
+        if (lastDisplayedExchange !== currentSettings["exchange"]) {
+            this.initPairsDropDown();
+            return;
+        }
+
         // Set values to the HTML
         for (const k in settingsConfig) {
             const settingConfig = settingsConfig[k];
@@ -319,7 +330,7 @@ let pi = {
         this.refreshMenus();
     },
     refreshMenus: function() {
-        if (currentSettings["pair"].indexOf("USD")>=0) {
+        if (currentSettings && currentSettings["pair"] && currentSettings["pair"].indexOf("USD")>=0) {
             this.applyDisplay(currencyRelatedElements, "block");
         } else {
             this.applyDisplay(currencyRelatedElements, "none");

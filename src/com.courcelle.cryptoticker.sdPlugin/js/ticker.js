@@ -313,7 +313,6 @@ const tickerAction = {
         const digits = settings["digits"] || 2;
         let backgroundColor = settings["backgroundColor"] || "#000000";
         let textColor = settings["textColor"] || "#ffffff";
-        //console.log(settings);
 
         let alertMode = false;
         const changeDaily = values["changeDaily"];
@@ -713,7 +712,6 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         const coordinates = jsonPayload["coordinates"];
         const userDesiredState = jsonPayload["userDesiredState"];
         // const title = jsonPayload["title"];
-        // console.log("event", event);
 
         const ignoredEvents = [
             "deviceDidConnect",
