@@ -4,13 +4,14 @@
 const tProxyBase = "https://tproxyv8.opendle.com";
 // const tProxyBase = "https://localhost:44330";
 
-const loggingEnabled = false;
+let loggingEnabled = false;
 let websocket = null;
 let canvas;
 let canvasContext;
 let globalWs = null;
 const subscriptionsContexts = {}; // exchange/symbol => contexts, allowing to know with contexts to update
 const contextDetails = {};  // context => settings, ensure a single subscription per context
+const screenshotMode = false;   // Allows to have the canvas rendered on https://streamdeck.opendle.com/src/com.courcelle.cryptoticker.sdPlugin/
 
 const alertStatuses = {};
 const alertArmed = {};
@@ -53,6 +54,12 @@ const tickerAction = {
         return (this.isConnected() || (globalWs && globalWs.state == "Connecting")) && !globalWs.stopped;
     },
 
+    websocketSend: function (object) {
+        if (websocket) {
+            websocket.send(object);
+        }
+    },
+
     onKeyDown: async function (context, settings, coordinates, userDesiredState) {
         // State machine between modes
         switch (settings.mode) {
@@ -72,7 +79,7 @@ const tickerAction = {
         }
 
         // Update settings with current mode
-        websocket.send(JSON.stringify({
+        this.websocketSend(JSON.stringify({
             "event": "setSettings",
             "context": context,
             "payload": settings
@@ -126,10 +133,7 @@ const tickerAction = {
             jThis.log("Connect");
 
             globalWs = new signalR.HubConnectionBuilder()
-                .withUrl(tProxyBase + "/tickerhub", {
-                    // skipNegotiation: true,
-                    // transport: signalR.HttpTransportType.WebSockets
-                })
+                .withUrl(tProxyBase + "/tickerhub")
                 .withAutomaticReconnect()
                 .configureLogging(signalR.LogLevel.Warning)
                 // .configureLogging(signalR.LogLevel.Debug)
@@ -543,7 +547,7 @@ const tickerAction = {
             }
         }
 
-        websocket.send(JSON.stringify(json));
+        this.websocketSend(JSON.stringify(json));
     },
     getRoundedValue: function (value, digits, multiplier) {
         const digitPow = Math.pow(10, digits);
@@ -689,7 +693,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
             "uuid": inPluginUUID
         };
 
-        websocket.send(JSON.stringify(json));
+        this.websocketSend(JSON.stringify(json));
     };
 
     websocket.onopen = function () {
@@ -754,3 +758,29 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         await tickerAction.refreshTimers();
     }, 300000);
 };
+
+if (screenshotMode) {
+    loggingEnabled = true;
+    tickerAction.connect();
+
+    const settings = defaultSettings;
+    settings["digits"] = 0;
+    settings["pair"] = "LTCUSD";
+    settings["mode"] = "ticker";    // or candles
+
+    const context = "test";
+    const coordinates = {
+        "column": 1,
+        "row": 1
+    };
+    const userDesiredState = null;
+
+    setTimeout(function() {
+        tickerAction.onWillAppear(context, settings, coordinates);
+
+        setInterval(async function() {
+            await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
+            await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
+        }, 5000);
+    }, 1000);
+}
