@@ -693,7 +693,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
             "uuid": inPluginUUID
         };
 
-        this.websocketSend(JSON.stringify(json));
+        tickerAction.websocketSend(JSON.stringify(json));
     };
 
     websocket.onopen = function () {
