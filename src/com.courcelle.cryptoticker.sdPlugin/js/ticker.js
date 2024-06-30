@@ -1,17 +1,14 @@
-const DestinationEnum = Object.freeze({
-    "HARDWARE_AND_SOFTWARE": 0,
-    "HARDWARE_ONLY": 1,
-    "SOFTWARE_ONLY": 2
-});
+/// <reference path="../libs/js/action.js" />
+/// <reference path="../libs/js/stream-deck.js" />
 
-const tProxyBase = "https://tproxy.opendle.com";
+const tProxyBase = "https://tproxyv8.opendle.com";
 // const tProxyBase = "https://localhost:44330";
 
 const loggingEnabled = false;
 let websocket = null;
 let canvas;
 let canvasContext;
-let globalWs;
+let globalWs = null;
 const subscriptionsContexts = {}; // exchange/symbol => contexts, allowing to know with contexts to update
 const contextDetails = {};  // context => settings, ensure a single subscription per context
 
@@ -43,15 +40,22 @@ const defaultSettings = {
 
 const tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
-    log: function(...data) {
+    log: function (...data) {
         if (loggingEnabled) {
             console.log(...data);
         }
     },
 
+    isConnected: function() {
+        return globalWs && !globalWs.stopped && globalWs.state == "Connected";
+    },
+    isConnectedOrConnecting: function() {
+        return (this.isConnected() || (globalWs && globalWs.state == "Connecting")) && !globalWs.stopped;
+    },
+
     onKeyDown: async function (context, settings, coordinates, userDesiredState) {
         // State machine between modes
-        switch(settings.mode) {
+        switch (settings.mode) {
             case "candles":
                 settings.mode = "ticker";
                 break;
@@ -85,7 +89,7 @@ const tickerAction = {
         this.refreshTimer(context, settings);
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
-    refreshTimers: async function() {
+    refreshTimers: async function () {
         this.connectOrReconnectIfNeeded();
 
         // Make sure everybody is connected
@@ -97,82 +101,94 @@ const tickerAction = {
             );
         }
     },
-    refreshTimer: async function(context, settings) {
+    refreshTimer: async function (context, settings) {
         this.refreshSettings(context, settings);
 
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
         this.updateTicker(context, settings);
     },
-    connectOrReconnectIfNeeded: function() {
-        const connected = (globalWs || {}).connectionState=="Connecting" || (globalWs || {}).connectionState=="Connected";
-        if (!connected) {
-            this.log("Reopening WS because !"+connected);
+    connectOrReconnectIfNeeded: function () {
+        if (!this.isConnectedOrConnecting()) {
+            this.log("Reopening WS because not connected or connecting", globalWs);
             if (globalWs) {
                 globalWs.stopped = true;
                 globalWs.stop();
+                globalWs = null;
             }
 
             this.connect();
         }
     },
-    connect: function() {
+    connect: function () {
         const jThis = this;
 
-        globalWs = new signalR.HubConnectionBuilder()
-            .withUrl(tProxyBase + "/tickerhub")
-            .withAutomaticReconnect()
-            .configureLogging(signalR.LogLevel.Warning)
-            .build();
+        if (globalWs === null) {
+            jThis.log("Connect");
 
-        globalWs.on("ticker", async (ticker) => {
-            jThis.log("Ticker received via WSS", ticker);
+            globalWs = new signalR.HubConnectionBuilder()
+                .withUrl(tProxyBase + "/tickerhub", {
+                    // skipNegotiation: true,
+                    // transport: signalR.HttpTransportType.WebSockets
+                })
+                .withAutomaticReconnect()
+                .configureLogging(signalR.LogLevel.Warning)
+                // .configureLogging(signalR.LogLevel.Debug)
+                .build();
 
-            //TODO: Send to each context that have subscribe to this
-            const sKey = this.getSubscriptionContextKey(ticker["provider"], ticker["symbol"], ticker["conversionFromCurrency"], ticker["conversionToCurrency"]);
-            if (subscriptionsContexts[sKey]) {
-                for (let c in subscriptionsContexts[sKey]) {
-                    const settings = contextDetails[c]["settings"];
-                    await jThis.updateCanvas(
-                        contextDetails[c]["context"],
-                        settings,
-                        await jThis.extractValues(ticker, settings["pair"], settings["currency"])
-                    );
+            globalWs.on("ticker", async (ticker) => {
+                jThis.log("Ticker received via WSS", ticker);
+
+                //TODO: Send to each context that have subscribe to this
+                const sKey = this.getSubscriptionContextKey(ticker["provider"], ticker["symbol"], ticker["conversionFromCurrency"], ticker["conversionToCurrency"]);
+                if (subscriptionsContexts[sKey]) {
+                    for (let c in subscriptionsContexts[sKey]) {
+                        const settings = contextDetails[c]["settings"];
+                        await jThis.updateCanvas(
+                            contextDetails[c]["context"],
+                            settings,
+                            await jThis.extractValues(ticker, settings["pair"], settings["currency"])
+                        );
+                    }
+                } else {
+                    console.error("Received a ticker for an unknow context " + sKey, ticker, subscriptionsContexts);
                 }
-            } else {
-                console.error("Received a ticker for an unknow context " + sKey, ticker, subscriptionsContexts);
-            }
-        });
+            });
 
-        const subscribe = async function() {
-            if (!globalWs.stopped) {
-                for (c in contextDetails) {
-                    jThis.subscribe(contextDetails[c]["context"], contextDetails[c]["settings"]);
+            const subscribe = async function () {
+                if (!globalWs.stopped) {
+                    for (c in contextDetails) {
+                        jThis.subscribe(contextDetails[c]["context"], contextDetails[c]["settings"]);
+                    }
                 }
-            }
-        };
-        globalWs.onreconnected(async (connectionId) => {
-            if (!globalWs.stopped) {
-                subscribe();
-            }
-        });
-
-        const start = async function() {
-            if (!globalWs.stopped && globalWs.connectionState!="Connected") {
-                try {
-                    await globalWs.start();
-                    await subscribe();
-                } catch (err) {
-                    console.log(err);
-                    setTimeout(start, 5000);
+            };
+            globalWs.onreconnected(async (connectionId) => {
+                if (!globalWs.stopped) {
+                    subscribe();
                 }
-            }
-        };
+            });
 
-        // Start the connection.
-        globalWs.stopped = false;
-        start();
+            const start = async function () {
+                if (!globalWs.stopped && !jThis.isConnectedOrConnecting()) {
+                    try {
+                        globalWs.start().then(async function () {
+                            await subscribe();
+                        }).catch(function (err) {
+                            return console.error(err.toString());
+                        });
+                    } catch (err) {
+                        // Retry after 5 seconds
+                        console.log(err);
+                        setTimeout(start, 5000);
+                    }
+                }
+            };
+    
+            // Start the connection.
+            globalWs.stopped = false;
+            start();
+        }
     },
-    subscribe: async function(context, settings) {
+    subscribe: async function (context, settings) {
         const sKey = this.getSubscriptionContextKey(settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
         subscriptionsContexts[sKey] = (subscriptionsContexts[sKey] || {});
         subscriptionsContexts[sKey][context] = settings;
@@ -187,8 +203,8 @@ const tickerAction = {
                 if (Object.keys(sKeyObj).length == 1) {
                     if (sKeyObj[context]) {
                         const sKeyObjContextSettings = sKeyObj[context];
-                        try  {
-                            if (globalWs && !globalWs.stopped && globalWs.connectionState=="Connected") {
+                        try {
+                            if (this.isConnected()) {
                                 this.log(
                                     "Unsubscribe",
                                     sKeyObjContextSettings["exchange"],
@@ -204,7 +220,7 @@ const tickerAction = {
                                     sKeyObjContextSettings["currency"] || null
                                 );
                             }
-                        } catch(e) {
+                        } catch (e) {
                             console.error("Error invoking Unsubscribe", context, settings, e);
                         }
 
@@ -217,7 +233,7 @@ const tickerAction = {
             }
         }
 
-        if (globalWs && !globalWs.stopped && globalWs.connectionState=="Connected") {
+        if (this.isConnected()) {
             this.log(
                 "Subscribe",
                 settings["exchange"],
@@ -228,7 +244,7 @@ const tickerAction = {
             await globalWs.invoke("Subscribe", settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
         }
     },
-    refreshSettings: function(context, settings) {
+    refreshSettings: function (context, settings) {
         contextDetails[context] = {
             "context": context,
             "settings": settings
@@ -239,28 +255,28 @@ const tickerAction = {
         // Update the subscription in all cases
         this.subscribe(context, settings);
     },
-    getSubscriptionContextKey: function(exchange, pair, fromCurrency, toCurrency) {
+    getSubscriptionContextKey: function (exchange, pair, fromCurrency, toCurrency) {
         let convertPart = "";
-        if (fromCurrency!=null && toCurrency!=null && fromCurrency!=toCurrency) {
+        if (fromCurrency != null && toCurrency != null && fromCurrency != toCurrency) {
             convertPart = "__" + fromCurrency + "_" + toCurrency;
         }
 
         return exchange + "__" + pair + convertPart;
     },
 
-    updateTicker: async function(context, settings) {
+    updateTicker: async function (context, settings) {
         const pair = settings["pair"];
         const values = await this.getTickerValue(pair, settings.currency, settings.exchange);
         this.updateCanvas(context, settings, values);
     },
-    initCanvas: function() {
+    initCanvas: function () {
         canvas = document.getElementById("ticker");
         canvasContext = canvas.getContext("2d");
     },
-    updateCanvas: async function(context, settings, tickerValues) {
+    updateCanvas: async function (context, settings, tickerValues) {
         this.log("updateCanvas", context, settings, tickerValues);
 
-        switch(settings.mode) {
+        switch (settings.mode) {
             case "candles":
                 const candleValues = await this.getCandles(settings);
                 this.updateCanvasCandles(context, settings, candleValues);
@@ -271,12 +287,19 @@ const tickerAction = {
                 break;
         }
     },
-    updateCanvasTicker: function(context, settings, values) {
+    getCanvasSizeMultiplier: function(canvasWidth, canvasHeight) {
+        // New High resolution devices: the canvas was originally 144x144, but we want it 288x288 now
+        // Using a multiplier allows to simply change the canvas size and everything will adjust automatically
+        return Math.max(canvasWidth / 144, canvasHeight / 144);
+    },
+    updateCanvasTicker: function (context, settings, values) {
         this.log("updateCanvasTicker", context, settings, values);
 
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
-        const textPadding = 10;
+        const sizeMultiplier = this.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
+
+        const textPadding = 10 * sizeMultiplier;
 
         const pair = settings["pair"];
         const exchange = settings["exchange"];
@@ -292,7 +315,7 @@ const tickerAction = {
         const changeDaily = values["changeDaily"];
         const changeDailyPercent = values["changeDailyPercent"];
         const value = values["last"];
-        const valueDisplay = value*multiplier;
+        const valueDisplay = value * multiplier;
         const volume = values["volume"];
         const high = values["high"];
         const low = values["low"];
@@ -315,7 +338,7 @@ const tickerAction = {
                     alertArmed[context] = "on";
                 }
             }
-            catch(err) {
+            catch (err) {
                 console.error("Error evaluating alertRule", context, settings, values, err);
             }
         }
@@ -325,7 +348,7 @@ const tickerAction = {
             try {
                 backgroundColor = eval(settings["backgroundColorRule"]) || backgroundColor;
             }
-            catch(err) {
+            catch (err) {
                 console.error("Error evaluating backgroundColorRule", context, settings, values, err);
             }
         }
@@ -334,7 +357,7 @@ const tickerAction = {
             try {
                 textColor = eval(settings["textColorRule"]) || textColor;
             }
-            catch(err) {
+            catch (err) {
                 console.error("Error evaluating textColorRule", context, settings, values, err);
             }
         }
@@ -344,50 +367,50 @@ const tickerAction = {
         canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
 
         var font = settings["font"] || "Lato";
-        canvasContext.font = "25px "+font;
+        canvasContext.font = (25 * sizeMultiplier) + "px " + font;
         canvasContext.fillStyle = textColor;
 
         canvasContext.textAlign = "left";
-        canvasContext.fillText(pairDisplay, 10, 25);
+        canvasContext.fillText(pairDisplay, 10 * sizeMultiplier, 25 * sizeMultiplier);
 
-        canvasContext.font = "bold 35px "+font;
+        canvasContext.font = "bold "+(35 * sizeMultiplier)+"px " + font;
         canvasContext.fillText(
             this.getRoundedValue(values["last"], digits, multiplier),
             textPadding,
-            60
+            60 * sizeMultiplier
         );
 
-        if (settings["displayHighLow"]!="off") {
-            canvasContext.font = "25px "+font;
+        if (settings["displayHighLow"] != "off") {
+            canvasContext.font = (25 * sizeMultiplier) + "px " + font;
             canvasContext.fillText(
                 this.getRoundedValue(values["low"], digits, multiplier),
                 textPadding,
-                90
+                90 * sizeMultiplier
             );
 
             canvasContext.textAlign = "right";
             canvasContext.fillText(
                 this.getRoundedValue(values["high"], digits, multiplier),
-                canvasWidth-textPadding,
-                135
+                canvasWidth - textPadding,
+                135 * sizeMultiplier
             );
         }
 
-        if (settings["displayDailyChange"]!="off") {
+        if (settings["displayDailyChange"] != "off") {
             const originalFillColor = canvasContext.fillStyle;
 
             const changePercent = values.changeDailyPercent * 100;
             let digitsPercent = 2;
-            if (Math.abs(changePercent)>=10) {
+            if (Math.abs(changePercent) >= 10) {
                 digitsPercent = 1;
-            } else if (Math.abs(changePercent)>=10) {
+            } else if (Math.abs(changePercent) >= 10) {
                 digitsPercent = 0;
             }
             let changePercentDisplay = this.getRoundedValue(changePercent, digitsPercent, 1);
-            if (changePercent>0) {
+            if (changePercent > 0) {
                 changePercentDisplay = "+" + changePercentDisplay;
                 canvasContext.fillStyle = "green";
-                /*canvasContext.font = "bold 40px "+font;
+                /*canvasContext.font = "bold " + (40 * sizeMultiplier) + "px "+font;
                 canvasContext.fillText(
                     "^",
                     canvasWidth-textPadding,
@@ -395,7 +418,7 @@ const tickerAction = {
                 );*/
             } else {
                 canvasContext.fillStyle = "red";
-                /*canvasContext.font = "bold 30px "+font;
+                /*canvasContext.font = "bold " + (30 * sizeMultiplier) + "px "+font;
                 canvasContext.fillText(
                     "v",
                     canvasWidth-textPadding,
@@ -403,30 +426,30 @@ const tickerAction = {
                 );*/
             }
 
-            canvasContext.font = "19px "+font;
+            canvasContext.font = (19 * sizeMultiplier) + "px " + font;
             canvasContext.textAlign = "right";
             // canvasContext.rotate(Math.PI);
             canvasContext.fillText(
                 changePercentDisplay,
-                canvasWidth-textPadding,
-                90
+                canvasWidth - textPadding,
+                90 * sizeMultiplier
             );
 
             // Restore orignal value, though it shouldn't be used
             canvasContext.fillStyle = originalFillColor;
         }
 
-        if (settings["displayHighLowBar"]!="off") {
-            const lineY = 104;
-            const padding = 5;
-            const lineWidth = 6;
+        if (settings["displayHighLowBar"] != "off") {
+            const lineY = 104 * sizeMultiplier;
+            const padding = 5 * sizeMultiplier;
+            const lineWidth = 6 * sizeMultiplier;
 
-            const percent = (values.last - values.low)/(values.high - values.low);
-            const lineLength = canvasWidth-padding*2;
-            const cursorPositionX = padding+Math.round(lineLength*percent);
+            const percent = (values.last - values.low) / (values.high - values.low);
+            const lineLength = canvasWidth - padding * 2;
+            const cursorPositionX = padding + Math.round(lineLength * percent);
 
-            const triangleSide = 12;
-            const triangleHeight = Math.sqrt(3/4*Math.pow(triangleSide,2));
+            const triangleSide = 12 * sizeMultiplier;
+            const triangleHeight = Math.sqrt(3 / 4 * Math.pow(triangleSide, 2));
 
             canvasContext.beginPath();
             canvasContext.moveTo(padding, lineY);
@@ -437,15 +460,15 @@ const tickerAction = {
 
             canvasContext.beginPath();
             canvasContext.moveTo(cursorPositionX, lineY);
-            canvasContext.lineTo(canvasWidth-padding, lineY);
+            canvasContext.lineTo(canvasWidth - padding, lineY);
             canvasContext.lineWidth = lineWidth;
             canvasContext.strokeStyle = "red";
             canvasContext.stroke();
 
             canvasContext.beginPath();
-            canvasContext.moveTo(cursorPositionX - triangleSide/2, lineY - triangleHeight/3);
-            canvasContext.lineTo(cursorPositionX + triangleSide/2, lineY - triangleHeight/3);
-            canvasContext.lineTo(cursorPositionX, lineY + triangleHeight*2/3);
+            canvasContext.moveTo(cursorPositionX - triangleSide / 2, lineY - triangleHeight / 3);
+            canvasContext.lineTo(cursorPositionX + triangleSide / 2, lineY - triangleHeight / 3);
+            canvasContext.lineTo(cursorPositionX, lineY + triangleHeight * 2 / 3);
             canvasContext.fillStyle = textColor;
             canvasContext.fill();
         }
@@ -453,10 +476,12 @@ const tickerAction = {
         this.sendCanvas(context);
     },
 
-    updateCanvasCandles: function(context, settings, candlesNormalized) {
+    updateCanvasCandles: function (context, settings, candlesNormalized) {
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
-        const padding = 10;
+        const sizeMultiplier = this.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
+
+        const padding = 10 * sizeMultiplier;
         let backgroundColor = settings["backgroundColor"];
         let textColor = settings["textColor"];
 
@@ -469,21 +494,23 @@ const tickerAction = {
         canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
 
         var font = settings["font"] || "Lato";
-        canvasContext.font = "15px "+font;
+        canvasContext.font = (15 * sizeMultiplier) + "px " + font;
         canvasContext.fillStyle = textColor;
 
         canvasContext.textAlign = "left";
-        canvasContext.fillText(interval, 10, canvasHeight - 5);
+        canvasContext.fillText(interval, 10 * sizeMultiplier, canvasHeight - (5 * sizeMultiplier));
 
         //this.log("updateCanvasCandles", candlesNormalized);
-        candlesNormalized.forEach(function(candleNormalized) {
-            const xPosition = Math.round(padding+Math.round(candleNormalized.timePercent*(canvasWidth-2*padding)));
+        candlesNormalized.forEach(function (candleNormalized) {
+            const paddingWidth = canvasWidth - (2 * padding);   // padding is already multiplied by sizeMultiplier above
+            const paddingHeight = canvasHeight - (2 * padding); // padding is already multiplied by sizeMultiplier above
+            const xPosition = Math.round(padding + Math.round(candleNormalized.timePercent * paddingWidth));
 
             // Draw the high/low bar
             canvasContext.beginPath();
-            canvasContext.moveTo(xPosition, Math.round(padding+(1-candleNormalized.highPercent)*(canvasHeight-2*padding)));
-            canvasContext.lineTo(xPosition, Math.round(padding+(1-candleNormalized.lowPercent)*(canvasHeight-2*padding)));
-            canvasContext.lineWidth = 2;
+            canvasContext.moveTo(xPosition, Math.round(padding + (1 - candleNormalized.highPercent) * paddingHeight));
+            canvasContext.lineTo(xPosition, Math.round(padding + (1 - candleNormalized.lowPercent) * paddingHeight));
+            canvasContext.lineWidth = 2 * sizeMultiplier;
             canvasContext.strokeStyle = textColor;
             canvasContext.stroke();
 
@@ -491,22 +518,22 @@ const tickerAction = {
 
             // Choose open/close color
             let candleColor = "green";
-            if (candleNormalized.closePercent<candleNormalized.openPercent) {
+            if (candleNormalized.closePercent < candleNormalized.openPercent) {
                 candleColor = "red";
             }
 
             // Draw the open/close bar
             canvasContext.beginPath();
-            canvasContext.moveTo(xPosition, Math.round(padding+(1-candleNormalized.closePercent)*(canvasHeight-2*padding)));
-            canvasContext.lineTo(xPosition, Math.round(padding+(1-candleNormalized.openPercent)*(canvasHeight-2*padding)));
-            canvasContext.lineWidth = 5;
+            canvasContext.moveTo(xPosition, Math.round(padding + (1 - candleNormalized.closePercent) * paddingHeight));
+            canvasContext.lineTo(xPosition, Math.round(padding + (1 - candleNormalized.openPercent) * paddingHeight));
+            canvasContext.lineWidth = 5 * sizeMultiplier;
             canvasContext.strokeStyle = candleColor;
             canvasContext.stroke();
         });
 
         this.sendCanvas(context);
     },
-    sendCanvas: function(context) {
+    sendCanvas: function (context) {
         var json = {
             "event": "setImage",
             "context": context,
@@ -518,37 +545,36 @@ const tickerAction = {
 
         websocket.send(JSON.stringify(json));
     },
-    getRoundedValue: function(value, digits, multiplier) {
+    getRoundedValue: function (value, digits, multiplier) {
         const digitPow = Math.pow(10, digits);
 
-        let valueString = ""+Math.round(value*multiplier*digitPow)/digitPow;
+        let valueString = "" + Math.round(value * multiplier * digitPow) / digitPow;
 
-        if (digits>0) {
+        if (digits > 0) {
             // Make sure we always have the correct number of digits, even when rounded
             let digitPosition = valueString.indexOf(".");
-            if (digitPosition<0) {
-                valueString+=".";
+            if (digitPosition < 0) {
+                valueString += ".";
                 digitPosition = valueString.length - 1;
             }
 
             let actualDigits = valueString.length - digitPosition - 1;
-            while (actualDigits<digits) {
-                valueString+="0";
+            while (actualDigits < digits) {
+                valueString += "0";
                 actualDigits++;
             }
         }
 
-
         return valueString;
     },
 
-    getTickerValue: async function(pair, toCurrency, exchange) {
-        const response = await fetch(tProxyBase + "/api/Ticker/json/"+(exchange)+"/"+pair+"?fromCurrency=USD&toCurrency="+(toCurrency));
+    getTickerValue: async function (pair, toCurrency, exchange) {
+        const response = await fetch(tProxyBase + "/api/Ticker/json/" + (exchange) + "/" + pair + "?fromCurrency=USD&toCurrency=" + (toCurrency));
         const responseJson = await response.json();
 
         return this.extractValues(responseJson);
     },
-    extractValues: async function(responseJson, pair, toCurrency) {
+    extractValues: async function (responseJson, pair, toCurrency) {
         this.log("extractValues", responseJson, pair, toCurrency);
 
         return {
@@ -562,7 +588,7 @@ const tickerAction = {
             "pairDisplay": responseJson["symbolDisplay"],
         };
     },
-    getCandles: async function(settings) {
+    getCandles: async function (settings) {
         this.log("getCandles");
 
         const exchange = settings["exchange"];
@@ -575,11 +601,11 @@ const tickerAction = {
         const c = "candles";
 
         // Refresh at most every minute
-        if (cache[t] && cache[t]>now-60*1000) {
+        if (cache[t] && cache[t] > now - 60 * 1000) {
             return cache[c];
         }
 
-        const response = await fetch(tProxyBase + "/api/Candles/json/"+exchange+"/"+pair+"/"+interval+"?limit=20");
+        const response = await fetch(tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=20");
         const val = this.getCandlesNormalized((await response.json()).candles);
 
         cache[t] = now;
@@ -587,8 +613,8 @@ const tickerAction = {
         candlesCache[cacheKey] = cache;
         return cache[c];
     },
-    convertCandlesInterval: function(interval) {
-        switch(interval) {
+    convertCandlesInterval: function (interval) {
+        switch (interval) {
             case "1m":
                 return "MINUTES_1";
             case "5m":
@@ -611,9 +637,9 @@ const tickerAction = {
 
         return interval;
     },
-    getCandlesNormalized: function(candles) {
+    getCandlesNormalized: function (candles) {
         let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
-        candles.forEach(function(candle) {
+        candles.forEach(function (candle) {
             timeMin = Math.min(timeMin, candle["ts"]);
             timeMax = Math.max(timeMax, candle["ts"]);
 
@@ -634,7 +660,7 @@ const tickerAction = {
 
         const jThis = this;
         const candlesNormalized = [];
-        candles.forEach(function(candle) {
+        candles.forEach(function (candle) {
             candlesNormalized.push({
                 timePercent: jThis.normalizeValue(candle["ts"], timeMin, timeMax),
                 openPercent: jThis.normalizeValue(candle["open"], min, max),
@@ -648,8 +674,8 @@ const tickerAction = {
         this.log("getCandlesNormalized", candlesNormalized);
         return candlesNormalized;
     },
-    normalizeValue: function(value, min, max) {
-        return (value-min)/(max-min);
+    normalizeValue: function (value, min, max) {
+        return (value - min) / (max - min);
     },
 };
 
@@ -697,7 +723,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
             return;
         }
 
-        if (settings!=null) {
+        if (settings != null) {
             //this.log("Received settings", settings);
             for (k in defaultSettings) {
                 if (!settings[k]) {
@@ -712,7 +738,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
             await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
         } else if (event == "willAppear") {
             await tickerAction.onWillAppear(context, settings, coordinates);
-        } else if (settings!=null) {
+        } else if (settings != null) {
             //this.log("Received settings", settings);
             tickerAction.refreshSettings(context, settings);
             tickerAction.refreshTimer(context, settings);
@@ -724,7 +750,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         // Websocket is closed
     };
 
-    setInterval(async function() {
+    setInterval(async function () {
         await tickerAction.refreshTimers();
     }, 300000);
 };

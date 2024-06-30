@@ -23,4 +23,4 @@ In the Release folder, you can find the file `com.courcelle.cryptoticker.streamD
 ## Source code
 The Sources folder contains the source code of the plugin.
 - Change the version of the plugin in `Sources\com.courcelle.cryptoticker.sdPlugin\manifest.json`;
-- Build the package for distribution by running `DistributionToolWindows/DistributionTool.exe -b -i Sources/com.courcelle.cryptoticker.sdPlugin -o Release` at the root of the project.
+- Build the package for distribution by running `DistributionToolWindows/DistributionTool.exe -b -i src/com.courcelle.cryptoticker.sdPlugin -o Release` at the root of the project.
