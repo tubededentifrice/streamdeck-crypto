@@ -1,5 +1,3 @@
-// this is our global websocket, used to communicate from/to Stream Deck software
-// and some info about our plugin, as sent by Stream Deck software
 var websocket = null,
     uuid = null,
     actionInfo = {},
@@ -156,7 +154,9 @@ const pi = {
             thisTmp.removeAllOptions(selectPairDropdown);
 
             const provider = exchangeDropdown.value;
+            thisTmp.log("Fetching pairs for provider:", provider);
             const pairs = await thisTmp.getPairs(provider);
+            thisTmp.log("Pairs fetched:", pairs);
             pairs.sort(function(a,b) {
                 const aP = a["symbol"], bP = b["symbol"];
                 if (aP > bP) {
@@ -174,6 +174,7 @@ const pi = {
             emptyOption.value = "";
             selectPairDropdown.add(emptyOption);
 
+            thisTmp.log("Adding pairs to dropdown:", pairs);
             pairs.forEach(function (pair) {
                 const option = document.createElement("option");
                 option.text = pair["symbol"];
@@ -181,6 +182,7 @@ const pi = {
                 selectPairDropdown.add(option);
             });
             selectPairDropdown.value = currentSettings["pair"];
+            thisTmp.log("Selected pair after setting value:", selectPairDropdown.value);
 
             const pairsDropdownGroup = document.getElementById("select-pair-dropdown-group");
             const pairsInputGroup = document.getElementById("select-pair-input-group");
