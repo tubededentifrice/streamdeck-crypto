@@ -1,7 +1,7 @@
 {
     "scripts": {
         "build": "rollup -c",
-        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.courcelle.cryptoticker.ticker\""
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.courcelle.cryptoticker.ticker-dev\""
     },
     "type": "module",
     "devDependencies": {

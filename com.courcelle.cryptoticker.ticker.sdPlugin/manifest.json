@@ -1,24 +1,25 @@
 {
-	"Name": "Crypto ticker PRO",
-	"Version": "0.1.0.0",
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "Crypto ticker PRO DEV",
+	"Version": "1.6.2.0",
 	"Author": "tubededentifrice",
 	"Actions": [
 		{
 			"Icon": "imgs/actions/actionIcon",
-			"Name": "Crypto ticker PRO",
+			"Name": "Crypto ticker PRO DEV",
 			"States": [
 			  {
 				"Image": "imgs/actions/actionDefaultImage",
 				"TitleAlignment": "middle",
-				"FontSize": "12"
+				"FontSize": 12
 			  }
 			],
 			"SupportedInMultiActions": false,
 			"Tooltip": "Keep track of stock & crytocurrencies prices (uses Binance, Bitfinex, Yahoo Finance API)",
-			"UUID": "com.courcelle.cryptoticker.ticker"
+			"UUID": "com.courcelle.cryptoticker.ticker-dev"
 		  }
 	],
-	"Category": "Crypto ticker PRO",
+	"Category": "Crypto ticker PRO DEV",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "index.html",
 	"PropertyInspectorPath": "index_pi.html",
@@ -43,5 +44,5 @@
 		"Version": "20",
 		"Debug": "enabled"
 	},
-	"UUID": "com.courcelle.cryptoticker.ticker"
+	"UUID": "com.courcelle.cryptoticker.ticker-dev"
 }
