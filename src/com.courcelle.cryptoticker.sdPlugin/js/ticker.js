@@ -576,7 +576,7 @@ const tickerAction = {
                 tProxyBase + "/api/Ticker/json/" + exchange + "/" + pair + "?fromCurrency=USD&toCurrency=" + toCurrency
             );
             const responseJson = await response.json();
-            const values = await this.extractValues(responseJson, pair, toCurrency);
+            const values = await this.extractValues(responseJson);
             tickerCache[pair] = values;
             return values;
         } catch (e) {
