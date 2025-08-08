@@ -18,7 +18,8 @@ fetch("options.json")
             container.appendChild(wrapper);
 
             canvas = canv;
-            canvasContext = canv.getContext("2d");
+            let canvas = canv;
+            let canvasContext = canv.getContext("2d");
             const settings = Object.assign({}, defaultSettings, opt.settings);
             if (settings.mode === "candles" && opt.candles) {
                 const candles = tickerAction.getCandlesNormalized(opt.candles);
