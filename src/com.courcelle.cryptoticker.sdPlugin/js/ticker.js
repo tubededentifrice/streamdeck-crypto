@@ -17,6 +17,7 @@ const alertStatuses = {};
 const alertArmed = {};
 let rates = null;
 let ratesUpdate = 0;
+const tickerCache = {};
 const candlesCache = {};
 
 const defaultSettings = {
@@ -160,7 +161,7 @@ const tickerAction = {
 
             const subscribe = async function () {
                 if (!globalWs.stopped) {
-                    for (c in contextDetails) {
+                    for (const c in contextDetails) {
                         jThis.subscribe(contextDetails[c]["context"], contextDetails[c]["settings"]);
                     }
                 }
@@ -570,10 +571,27 @@ const tickerAction = {
     },
 
     getTickerValue: async function (pair, toCurrency, exchange) {
-        const response = await fetch(tProxyBase + "/api/Ticker/json/" + (exchange) + "/" + pair + "?fromCurrency=USD&toCurrency=" + (toCurrency));
-        const responseJson = await response.json();
-
-        return this.extractValues(responseJson);
+        try {
+            const response = await fetch(
+                tProxyBase + "/api/Ticker/json/" + exchange + "/" + pair + "?fromCurrency=USD&toCurrency=" + toCurrency
+            );
+            const responseJson = await response.json();
+            const values = await this.extractValues(responseJson, pair, toCurrency);
+            tickerCache[pair] = values;
+            return values;
+        } catch (e) {
+            this.log("Error fetching ticker", e);
+            return tickerCache[pair] || {
+                "changeDaily": 0,
+                "changeDailyPercent": 0,
+                "last": 0,
+                "volume": 0,
+                "high": 0,
+                "low": 0,
+                "pair": pair,
+                "pairDisplay": pair,
+            };
+        }
     },
     extractValues: async function (responseJson, pair, toCurrency) {
         this.log("extractValues", responseJson, pair, toCurrency);
@@ -606,13 +624,19 @@ const tickerAction = {
             return cache[c];
         }
 
-        const response = await fetch(tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=20");
-        const val = this.getCandlesNormalized((await response.json()).candles);
-
-        cache[t] = now;
-        cache[c] = val;
-        candlesCache[cacheKey] = cache;
-        return cache[c];
+        try {
+            const response = await fetch(
+                tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=20"
+            );
+            const val = this.getCandlesNormalized((await response.json()).candles);
+            cache[t] = now;
+            cache[c] = val;
+            candlesCache[cacheKey] = cache;
+            return cache[c];
+        } catch (e) {
+            this.log("Error fetching candles", e);
+            return cache[c] || [];
+        }
     },
     convertCandlesInterval: function (interval) {
         switch (interval) {
@@ -725,7 +749,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
 
         if (settings != null) {
             //this.log("Received settings", settings);
-            for (k in defaultSettings) {
+            for (const k in defaultSettings) {
                 if (!settings[k]) {
                     settings[k] = defaultSettings[k];
                 }
@@ -779,4 +803,8 @@ if (screenshotMode) {
             await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
         }, 5000);
     }, 1000);
+}
+
+if (typeof module !== "undefined") {
+    module.exports = tickerAction;
 }
