@@ -1,1 +1,4 @@
 
+[submodule "com.courcelle.cryptoticker.sdPlugin/libs"]
+	path = com.courcelle.cryptoticker.sdPlugin/libs
+	url = https://github.com/elgatosf/streamdeck-javascript-sdk
