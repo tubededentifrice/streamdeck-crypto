@@ -1,3 +1,6 @@
+const DEFAULT_RANGE = 1;
+const SAMPLE_CANDLE_COUNT = 20;
+
 tickerAction.sendCanvas = function () {};
 
 function generateSampleCandles(values) {
