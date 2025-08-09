@@ -6,13 +6,19 @@
     <link href="https://fonts.googleapis.com/css?family=Roboto+Condensed&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Lato&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #222222; color: #ffffff; }
-        .preview { display: inline-block; margin: 4px; }
+        body { background-color: #222222; color: #ffffff; font-family: Lato, 'Roboto Condensed', Helvetica, Calibri, sans-serif; }
+        #controls { margin: 10px; }
+        .preview-group { display: inline-block; margin: 10px; }
+        .canvas-row { display: flex; gap: 4px; }
         canvas { border: 1px solid #555555; }
-        .label { text-align: center; font-size: 12px; }
+        .label { text-align: center; font-size: 14px; margin-top: 4px; }
+        .settings { background-color: #333333; color: #dddddd; font-size: 11px; padding: 6px; margin-top: 4px; border-radius: 4px; white-space: pre; }
     </style>
 </head>
 <body>
+    <div id="controls">
+        <label><input type="checkbox" id="precomputedToggle"> Use pre-computed values</label>
+    </div>
     <div id="previews"></div>
     <script src="/js/ticker.js"></script>
     <script src="/dev/preview.js"></script>
