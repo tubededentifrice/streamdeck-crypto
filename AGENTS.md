@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Source: `src/com.courcelle.cryptoticker.sdPlugin/` (plugin bundle).
+- Source: `src/com.courcelle.cryptoticker-dev.sdPlugin/` (plugin bundle).
 - Core files: `manifest.json`, `index.html`, `js/ticker.js` (plugin logic), `js/pi.js` (property inspector), `css/`, `images/`.
 - Dev preview: `dev/preview.html` and `dev/preview.js` served by the local preview server.
 - Tests: `__tests__/` (e.g., `__tests__/ticker.test.js`).

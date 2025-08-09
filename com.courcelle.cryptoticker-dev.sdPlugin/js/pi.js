@@ -1,10 +1,4 @@
-// this is our global websocket, used to communicate from/to Stream Deck software
-// and some info about our plugin, as sent by Stream Deck software
-var websocket = null,
-    uuid = null,
-    actionInfo = {},
-    inInfo = {};
-
+let actionInfo = {};
 
 const tProxyBase = "https://tproxyv8.opendle.com";
 // const tProxyBase = "https://localhost:44330";
@@ -357,54 +351,22 @@ const pi = {
     saveSettings: function() {
         this.log("saveSettings", currentSettings);
 
-        if (websocket && (websocket.readyState === 1)) {
-            const jsonSetSettings = {
-                "event": "setSettings",
-                "context": uuid,
-                "payload": currentSettings
-            };
-            websocket.send(JSON.stringify(jsonSetSettings));
-
-            const jsonPlugin = {
-                "action": actionInfo["action"],
-                "event": "sendToPlugin",
-                "context": uuid,
-                "payload": currentSettings
-            };
-            websocket.send(JSON.stringify(jsonPlugin));
+        if (typeof streamDeck !== "undefined") {
+            streamDeck.settings.setSettings(currentSettings);
+            streamDeck.plugin.sendToPlugin(currentSettings);
         }
     }
 }
 
 pi.initDom();
 
-function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
-    uuid = inUUID;
-    // please note: the incoming arguments are of type STRING, so
-    // in case of the inActionInfo, we must parse it into JSON first
-    actionInfo = JSON.parse(inActionInfo); // cache the info
-    inInfo = JSON.parse(inInfo);
-    websocket = new WebSocket('ws://127.0.0.1:' + inPort);
+if (typeof streamDeck !== "undefined") {
+    streamDeck.onConnected((info, actionInfoIn) => {
+        actionInfo = actionInfoIn;
+        pi.extractSettings(actionInfo.payload.settings);
+    });
 
-    /** let's see, if we have some settings */
-    pi.extractSettings(actionInfo.payload.settings);
-    // console.log(actionInfo.payload.settings);
-
-    // if connection was established, the websocket sends
-    // an 'onopen' event, where we need to register our PI
-    websocket.onopen = function () {
-        var json = {
-            event: inRegisterEvent,
-            uuid: inUUID
-        };
-        // register property inspector to Stream Deck
-        websocket.send(JSON.stringify(json));
-    };
-
-    websocket.onmessage = function (evt) {
-        // Received message from Stream Deck
-        var jsonObj = JSON.parse(evt.data);
-        var event = jsonObj['event'];
-        // console.log("Received message", jsonObj);
-    };
+    streamDeck.settings.onDidReceiveSettings(ev => {
+        pi.extractSettings(ev.payload.settings);
+    });
 }

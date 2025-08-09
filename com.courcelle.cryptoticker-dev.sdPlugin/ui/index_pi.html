@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,minimal-ui,viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <title>com.courcelle.cryptoticker.ticker.property_inspector</title>
+    <title>com.courcelle.cryptoticker-dev.ticker.property_inspector</title>
     <link rel="stylesheet" href="css/pi.css">
 </head>
 
@@ -137,14 +137,17 @@
         </div>
         <div type="checkbox" class="sdpi-item">
             <div class="sdpi-item-label empty"></div>
-            <div class="sdpi-item-value">
-                <div class="sdpi-item-child">
-                    <input id="displayDailyChange" type="checkbox" value="on">
-                    <label for="displayDailyChange" class="sdpi-item-label"><span></span> Display daily change percent</label>
-                </div>
+            <div class="sdpi-item-child">
+                <input id="displayDailyChange" type="checkbox" value="on">
+                <label for="displayDailyChange" class="sdpi-item-label"><span></span> Display daily change percent</label>
             </div>
         </div>
+    </div>
 
+        <script type="module">
+            import streamDeck from "./libs/streamdeck.js";
+            window.streamDeck = streamDeck;
+        </script>
         <script src="js/pi.js"></script>
 </body>
 
