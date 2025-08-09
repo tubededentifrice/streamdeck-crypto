@@ -733,7 +733,7 @@ if (typeof streamDeck !== "undefined") {
             }
         }
         tickerAction.refreshSettings(ev.action.id, settings, ev.action);
-        tickerAction.refreshTimer(ev.action.id, settings);
+        tickerAction.refreshTimer(ev.action.id, settings, ev.actio);
     });
 
     streamDeck.ui.onSendToPlugin(ev => {
@@ -744,7 +744,7 @@ if (typeof streamDeck !== "undefined") {
             }
         }
         tickerAction.refreshSettings(ev.action.id, settings, ev.action);
-        tickerAction.refreshTimer(ev.action.id, settings);
+        tickerAction.refreshTimer(ev.action.id, settings, ev.actio);
     });
 
     streamDeck.onConnected(() => {
