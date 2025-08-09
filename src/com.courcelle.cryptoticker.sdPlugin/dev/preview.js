@@ -1,5 +1,6 @@
 const DEFAULT_RANGE = 1;
 const SAMPLE_CANDLE_COUNT = 20;
+const CANDLE_MARGIN_FACTOR = 0.05;
 
 tickerAction.sendCanvas = function () {};
 
