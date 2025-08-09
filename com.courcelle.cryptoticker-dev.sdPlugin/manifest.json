@@ -12,10 +12,10 @@
             ],
             "SupportedInMultiActions": false,
             "Tooltip": "Keep track of stock & crytocurrencies prices (uses Binance, Bitfinex, Yahoo Finance API)",
-            "UUID": "com.courcelle.cryptoticker-dev.ticker"
+            "UUID": "com.courcelle.cryptoticker.ticker"
         }
     ],
-    "UUID": "com.courcelle.cryptoticker-dev",
+    "UUID": "com.courcelle.cryptoticker",
     "Author": "Vincent Courcelle",
     "CodePath": "index.html",
     "PropertyInspectorPath": "index_pi.html",

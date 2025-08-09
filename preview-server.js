@@ -5,7 +5,7 @@ const path = require("path");
 const child_process = require("child_process");
 
 const port = process.env.PORT || 34115;
-const baseDir = path.join(__dirname, "com.courcelle.cryptoticker-dev.sdPlugin");
+const baseDir = path.join(__dirname, "com.courcelle.cryptoticker.sdPlugin");
 
 function openBrowser(url) {
     let command;
