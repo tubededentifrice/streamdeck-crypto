@@ -58,9 +58,10 @@
         "name": "FourDecimals",
         "settings": {
             "exchange": "YFINANCE",
-            "pair": "XBTUSD",
+            "pair": "PLTR",
             "digits": 4,
-            "mode": "ticker"
+            "mode": "ticker",
+            "title": "PLTR"
         },
         "values": {
             "changeDaily": 50,
@@ -124,11 +125,10 @@
         }
     },
     {
-        "name": "NoDailyChange",
+        "name": "NonExistent",
         "settings": {
-            "exchange": "YFINANCE",
-            "pair": "XBTUSD",
-            "displayDailyChange": "off",
+            "exchange": "BINANCE",
+            "pair": "XBTUSDT",
             "mode": "ticker"
         },
         "values": {
@@ -178,8 +178,8 @@
     {
         "name": "ETH",
         "settings": {
-            "exchange": "YFINANCE",
-            "pair": "ETHUSD",
+            "exchange": "BITFINEX",
+            "pair": "ETHUSDT",
             "mode": "ticker"
         },
         "values": {
@@ -195,7 +195,7 @@
         "name": "LTC",
         "settings": {
             "exchange": "BINANCE",
-            "pair": "LTCUSD",
+            "pair": "LTCUSDT",
             "mode": "ticker"
         },
         "values": {
@@ -258,8 +258,8 @@
     {
         "name": "DOT",
         "settings": {
-            "exchange": "YFINANCE",
-            "pair": "DOTUSD",
+            "exchange": "BINANCE",
+            "pair": "DOTUSDT",
             "mode": "ticker"
         },
         "values": {
@@ -275,7 +275,7 @@
         "name": "ADA",
         "settings": {
             "exchange": "BINANCE",
-            "pair": "ADAUSD",
+            "pair": "ADAUSDT",
             "mode": "ticker"
         },
         "values": {

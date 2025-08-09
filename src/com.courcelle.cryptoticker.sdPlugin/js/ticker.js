@@ -21,6 +21,7 @@ const tickerCache = {};
 const candlesCache = {};
 
 const defaultSettings = {
+    "title": null,
     "exchange": "BITFINEX",
     "pair": "BTCUSD",
     "fromCurrency": "USD",
