@@ -6,7 +6,7 @@ import { action, KeyDownEvent, KeyUpEvent , SingletonAction, WillAppearEvent } f
 const { tickerAction: legacy } = require("./tickerAction") as any;
 
 // Adapter that bridges the legacy object-based action to the new SingletonAction API.
-@action({ UUID: "com.courcelle.cryptoticker.ticker" })
+@action({ UUID: "com.courcelle.cryptoticker-dev.ticker" })
 export class TickerAction extends SingletonAction<TickerSettings> {
     /**
      * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first

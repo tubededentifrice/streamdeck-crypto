@@ -6,7 +6,7 @@ import path from "node:path";
 import url from "node:url";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
-const sdPlugin = "com.courcelle.cryptoticker.ticker.sdPlugin";
+const sdPlugin = "com.courcelle.cryptoticker-dev.sdPlugin";
 
 /**
  * @type {import('rollup').RollupOptions}

@@ -18,7 +18,7 @@
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
 
 ## Packaging
-- Bump the version in `com.courcelle.cryptoticker.sdPlugin/manifest.json`.
+- Bump the version in `com.courcelle.cryptoticker-dev.sdPlugin/manifest.json`.
 - Run `npm run build`
 
 ## Development
