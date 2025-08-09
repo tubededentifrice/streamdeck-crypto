@@ -42,7 +42,7 @@ const defaultSettings = {
 };
 
 const tickerAction = {
-    type: "com.courcelle.cryptoticker.ticker",
+    type: "com.courcelle.cryptoticker-dev.ticker",
     log: function (...data) {
         if (loggingEnabled) {
             console.log(...data);
