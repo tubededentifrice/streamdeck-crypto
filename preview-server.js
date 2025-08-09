@@ -4,8 +4,8 @@ const fs = require("fs");
 const path = require("path");
 const child_process = require("child_process");
 
-const port = process.env.PORT || 3000;
-const baseDir = path.join(__dirname, "src", "com.courcelle.cryptoticker.sdPlugin", "dev");
+const port = process.env.PORT || 34115;
+const baseDir = path.join(__dirname, "src", "com.courcelle.cryptoticker.sdPlugin");
 
 function openBrowser(url) {
     let command;
@@ -20,15 +20,20 @@ function openBrowser(url) {
         command = "xdg-open";
         args = [url];
     }
-    const proc = child_process.spawn(command, args, {detached: true, stdio: "ignore"});
-    proc.on("error", (e) => {
-        console.error("Failed to open browser:", e);
-    });
-    proc.unref();
+    try {
+        const proc = child_process.spawn(command, args, {detached: true, stdio: "ignore"});
+        proc.on("error", (e) => {
+            console.warn("Warning: could not open browser automatically:", e.message);
+        });
+        proc.unref();
+    } catch (e) {
+        console.warn("Warning: could not open browser automatically:", e.message);
+    }
 }
 
 const server = http.createServer((req, res) => {
-    const relPath = req.url === "/" ? "/preview.html" : req.url;
+    const urlPath = req.url.split("?")[0];
+    const relPath = urlPath === "/" ? "dev/preview.html" : urlPath.replace(/^\/+/g, "");
     const filePath = path.join(baseDir, relPath);
     fs.readFile(filePath, (err, data) => {
         if (err) {
@@ -51,7 +56,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, () => {
-    const url = `http://localhost:${port}/preview.html`;
+    const url = `http://localhost:${port}/dev/preview.html`;
     console.log(`Preview server running at ${url}`);
     openBrowser(url);
 });
