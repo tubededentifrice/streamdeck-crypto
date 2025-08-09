@@ -15,7 +15,8 @@ function generateSampleCandles(values) {
         const open = low + (range * i) / count;
         const close = low + (range * (i + 0.5)) / count;
         const highVal = Math.max(open, close) + range * 0.05;
-        const lowVal = Math.min(open, close) - range * 0.05;
+        const highVal = Math.max(open, close) + range * CANDLE_MARGIN_FACTOR;
+        const lowVal = Math.min(open, close) - range * CANDLE_MARGIN_FACTOR;
         candles.push({
             ts: i,
             open: open,
