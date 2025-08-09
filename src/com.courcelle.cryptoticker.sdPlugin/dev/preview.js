@@ -5,7 +5,7 @@ function generateSampleCandles(values) {
     const high = values.high || 0;
     const low = values.low || 0;
     const volumeQuote = values.volume || 0;
-    const range = high - low || 1;
+    const range = high - low || DEFAULT_RANGE;
     const count = 20;
     for (let i = 0; i < count; i++) {
         const open = low + (range * i) / count;
