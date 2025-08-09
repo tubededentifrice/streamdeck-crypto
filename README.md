@@ -18,12 +18,15 @@
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
 
 ## Installation
+- Run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.dev.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to use the dev version
+- - Run `mv com.courcelle.cryptoticker.sdPlugin com.courcelle.cryptoticker-dev.sdPlugin` to use the dev version
 - Run `streamdeck link ./com.courcelle.cryptoticker.sdPlugin` after having installed the [Elgato's CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started)
-- Once finished with testing, run `streamdeck unlink com.courcelle.cryptoticker` to go back to using the normal, published version, of the plugin.
+- Run `mv com.courcelle.cryptoticker-dev.sdPlugin com.courcelle.cryptoticker.sdPlugin` to use the dev version
+- Once finished with testing, run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to go back to public manifest
 
 ## Packaging
 - Bump the version in `src/com.courcelle.cryptoticker.sdPlugin/manifest.json`.
-- Run
+- Run `streamdeck pack com.courcelle.cryptoticker.sdPlugin`
 
 ## Development
 
