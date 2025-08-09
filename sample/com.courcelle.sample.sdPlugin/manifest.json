@@ -1,47 +1,47 @@
 {
-	"Name": "Sample plugin",
-	"Version": "0.1.0.0",
-	"Author": "Vincent Courcelle",
-	"Actions": [
-		{
-			"Name": "Counter",
-			"UUID": "com.courcelle.sample.increment",
-			"Icon": "imgs/actions/counter/icon",
-			"Tooltip": "Displays a count, which increments by one on press.",
-			"PropertyInspectorPath": "ui/increment-counter.html",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "imgs/actions/counter/key",
-					"TitleAlignment": "middle"
-				}
-			]
-		}
-	],
-	"Category": "Sample plugin",
-	"CategoryIcon": "imgs/plugin/category-icon",
-	"CodePath": "bin/plugin.js",
-	"Description": "Sample to test",
-	"Icon": "imgs/plugin/marketplace",
-	"SDKVersion": 2,
-	"Software": {
-		"MinimumVersion": "6.5"
-	},
-	"OS": [
-		{
-			"Platform": "mac",
-			"MinimumVersion": "12"
-		},
-		{
-			"Platform": "windows",
-			"MinimumVersion": "10"
-		}
-	],
-	"Nodejs": {
-		"Version": "20",
-		"Debug": "enabled"
-	},
-	"UUID": "com.courcelle.sample"
+    "Name": "Sample plugin",
+    "Version": "0.1.0.0",
+    "Author": "Vincent Courcelle",
+    "Actions": [
+        {
+            "Name": "Sample Counter",
+            "UUID": "com.courcelle.sample.increment",
+            "Icon": "imgs/actions/counter/icon",
+            "Tooltip": "Displays a count, which increments by one on press.",
+            "PropertyInspectorPath": "ui/increment-counter.html",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/counter/key",
+                    "TitleAlignment": "middle"
+                }
+            ]
+        }
+    ],
+    "Category": "Sample plugin",
+    "CategoryIcon": "imgs/plugin/category-icon",
+    "CodePath": "bin/plugin.js",
+    "Description": "Sample to test",
+    "Icon": "imgs/plugin/marketplace",
+    "SDKVersion": 2,
+    "Software": {
+        "MinimumVersion": "6.5"
+    },
+    "OS": [
+        {
+            "Platform": "mac",
+            "MinimumVersion": "12"
+        },
+        {
+            "Platform": "windows",
+            "MinimumVersion": "10"
+        }
+    ],
+    "Nodejs": {
+        "Version": "20",
+        "Debug": "enabled"
+    },
+    "UUID": "com.courcelle.sample"
 }
