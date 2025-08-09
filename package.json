@@ -1,0 +1,12 @@
+{
+    "name": "streamdeck-crypto",
+    "version": "1.0.0",
+    "description": "StreamDeck Crypto ticker plugin",
+    "devDependencies": {
+        "jest": "^29.7.0"
+    },
+    "scripts": {
+        "test": "jest",
+        "preview": "node preview-server.js"
+    }
+}

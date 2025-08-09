@@ -11,15 +11,17 @@ let canvasContext;
 let globalWs = null;
 const subscriptionsContexts = {}; // exchange/symbol => contexts, allowing to know with contexts to update
 const contextDetails = {};  // context => settings, ensure a single subscription per context
-const screenshotMode = false;   // Allows to have the canvas rendered on https://streamdeck.opendle.com/src/com.courcelle.cryptoticker.sdPlugin/
+const screenshotMode = false; // Allows rendering the canvas in an external preview
 
 const alertStatuses = {};
 const alertArmed = {};
 let rates = null;
 let ratesUpdate = 0;
+const tickerCache = {};
 const candlesCache = {};
 
 const defaultSettings = {
+    "title": null,
     "exchange": "BITFINEX",
     "pair": "BTCUSD",
     "fromCurrency": "USD",
@@ -160,7 +162,7 @@ const tickerAction = {
 
             const subscribe = async function () {
                 if (!globalWs.stopped) {
-                    for (c in contextDetails) {
+                    for (const c in contextDetails) {
                         jThis.subscribe(contextDetails[c]["context"], contextDetails[c]["settings"]);
                     }
                 }
@@ -547,11 +549,21 @@ const tickerAction = {
         this.websocketSend(JSON.stringify(json));
     },
     getRoundedValue: function (value, digits, multiplier) {
-        const digitPow = Math.pow(10, digits);
+        let scaled = value * multiplier;
+        let suffix = "";
+        let precision = digits;
+        if (scaled > 100000) {
+            scaled = scaled / 1000;
+            precision = 2;
+            suffix = "k";
+        } else if (scaled > 100) {
+            precision = 0;
+        }
 
-        let valueString = "" + Math.round(value * multiplier * digitPow) / digitPow;
+        const digitPow = Math.pow(10, precision);
+        let valueString = "" + Math.round(scaled * digitPow) / digitPow;
 
-        if (digits > 0) {
+        if (precision > 0) {
             // Make sure we always have the correct number of digits, even when rounded
             let digitPosition = valueString.indexOf(".");
             if (digitPosition < 0) {
@@ -560,20 +572,37 @@ const tickerAction = {
             }
 
             let actualDigits = valueString.length - digitPosition - 1;
-            while (actualDigits < digits) {
+            while (actualDigits < precision) {
                 valueString += "0";
                 actualDigits++;
             }
         }
 
-        return valueString;
+        return valueString + suffix;
     },
 
     getTickerValue: async function (pair, toCurrency, exchange) {
-        const response = await fetch(tProxyBase + "/api/Ticker/json/" + (exchange) + "/" + pair + "?fromCurrency=USD&toCurrency=" + (toCurrency));
-        const responseJson = await response.json();
-
-        return this.extractValues(responseJson);
+        try {
+            const response = await fetch(
+                tProxyBase + "/api/Ticker/json/" + exchange + "/" + pair + "?fromCurrency=USD&toCurrency=" + toCurrency
+            );
+            const responseJson = await response.json();
+            const values = await this.extractValues(responseJson);
+            tickerCache[pair] = values;
+            return values;
+        } catch (e) {
+            this.log("Error fetching ticker", e);
+            return tickerCache[pair] || {
+                "changeDaily": 0,
+                "changeDailyPercent": 0,
+                "last": 0,
+                "volume": 0,
+                "high": 0,
+                "low": 0,
+                "pair": pair,
+                "pairDisplay": pair,
+            };
+        }
     },
     extractValues: async function (responseJson, pair, toCurrency) {
         this.log("extractValues", responseJson, pair, toCurrency);
@@ -606,13 +635,19 @@ const tickerAction = {
             return cache[c];
         }
 
-        const response = await fetch(tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=20");
-        const val = this.getCandlesNormalized((await response.json()).candles);
-
-        cache[t] = now;
-        cache[c] = val;
-        candlesCache[cacheKey] = cache;
-        return cache[c];
+        try {
+            const response = await fetch(
+                tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=20"
+            );
+            const val = this.getCandlesNormalized((await response.json()).candles);
+            cache[t] = now;
+            cache[c] = val;
+            candlesCache[cacheKey] = cache;
+            return cache[c];
+        } catch (e) {
+            this.log("Error fetching candles", e);
+            return cache[c] || [];
+        }
     },
     convertCandlesInterval: function (interval) {
         switch (interval) {
@@ -725,7 +760,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
 
         if (settings != null) {
             //this.log("Received settings", settings);
-            for (k in defaultSettings) {
+            for (const k in defaultSettings) {
                 if (!settings[k]) {
                     settings[k] = defaultSettings[k];
                 }
@@ -779,4 +814,8 @@ if (screenshotMode) {
             await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
         }, 5000);
     }, 1000);
+}
+
+if (typeof module !== "undefined") {
+    module.exports = tickerAction;
 }

@@ -25,3 +25,10 @@ The Sources folder contains the source code of the plugin.
 - Change the version of the plugin in `Sources\com.courcelle.cryptoticker.sdPlugin\manifest.json`;
 - Ideally redownload the distribution tool from [https://docs.elgato.com/sdk/plugins/packaging](https://docs.elgato.com/sdk/plugins/packaging) (don't trust random Github repos!)
 - Build the package for distribution by running `DistributionToolWindows/DistributionTool.exe -b -i src/com.courcelle.cryptoticker.sdPlugin -o Release` at the root of the project.
+
+## Development
+
+Use the following npm scripts during development:
+
+- `npm test` – run the Jest unit tests
+- `npm run preview` – start a lightweight server on port 34115 and open the preview page in the default browser

@@ -1,0 +1,342 @@
+[
+    {
+        "name": "Default",
+        "settings": {
+            "exchange": "BITFINEX",
+            "pair": "BTCUSD",
+            "backgroundColor": "#000000",
+            "textColor": "#ffffff",
+            "digits": 2,
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 200,
+            "changeDailyPercent": 0.01,
+            "last": 20000,
+            "volume": 100,
+            "high": 20500,
+            "low": 19500
+        }
+    },
+    {
+        "name": "Light",
+        "settings": {
+            "exchange": "BITFINEX",
+            "pair": "BTCUSD",
+            "backgroundColor": "#ffffff",
+            "textColor": "#000000",
+            "digits": 2,
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": -150,
+            "changeDailyPercent": -0.0075,
+            "last": 19850,
+            "volume": 120,
+            "high": 20200,
+            "low": 19000
+        }
+    },
+    {
+        "name": "NoDecimals",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "BTCUSD",
+            "digits": 0,
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 100,
+            "changeDailyPercent": 0.005,
+            "last": 20100,
+            "volume": 80,
+            "high": 20300,
+            "low": 19700
+        }
+    },
+    {
+        "name": "FourDecimals",
+        "settings": {
+            "exchange": "YFINANCE",
+            "pair": "PLTR",
+            "digits": 4,
+            "mode": "ticker",
+            "title": "PLTR"
+        },
+        "values": {
+            "changeDaily": 50,
+            "changeDailyPercent": 0.0025,
+            "last": 20050,
+            "volume": 90,
+            "high": 20100,
+            "low": 19900
+        }
+    },
+    {
+        "name": "ThousandsMultiplier",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "BTCUSDT",
+            "multiplier": 0.001,
+            "digits": 2,
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 200,
+            "changeDailyPercent": 0.01,
+            "last": 20000,
+            "volume": 100,
+            "high": 20500,
+            "low": 19500
+        }
+    },
+    {
+        "name": "NoHighLow",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "ETHUSDT",
+            "displayHighLow": "off",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": -200,
+            "changeDailyPercent": -0.01,
+            "last": 19800,
+            "volume": 110,
+            "high": 20300,
+            "low": 19400
+        }
+    },
+    {
+        "name": "NoHighLowBar",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "BTCUSD",
+            "displayHighLowBar": "off",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 300,
+            "changeDailyPercent": 0.015,
+            "last": 20500,
+            "volume": 130,
+            "high": 20700,
+            "low": 19800
+        }
+    },
+    {
+        "name": "NonExistent",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "XBTUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 0,
+            "changeDailyPercent": 0,
+            "last": 20000,
+            "volume": 150,
+            "high": 21000,
+            "low": 19000
+        }
+    },
+    {
+        "name": "RobotoFont",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "BTCUSDT",
+            "font": "'Roboto Condensed'",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 250,
+            "changeDailyPercent": 0.0125,
+            "last": 20250,
+            "volume": 95,
+            "high": 20400,
+            "low": 19950
+        }
+    },
+    {
+        "name": "RedOnWhite",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "BTCUSD",
+            "backgroundColor": "#ffffff",
+            "textColor": "#ff0000",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": -400,
+            "changeDailyPercent": -0.02,
+            "last": 19600,
+            "volume": 160,
+            "high": 19800,
+            "low": 19000
+        }
+    },
+    {
+        "name": "ETH",
+        "settings": {
+            "exchange": "BITFINEX",
+            "pair": "ETHUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 20,
+            "changeDailyPercent": 0.02,
+            "last": 1000,
+            "volume": 200,
+            "high": 1025,
+            "low": 980
+        }
+    },
+    {
+        "name": "LTC",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "LTCUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 5,
+            "changeDailyPercent": 0.01,
+            "last": 150,
+            "volume": 300,
+            "high": 155,
+            "low": 140
+        }
+    },
+    {
+        "name": "XRP",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "XRPUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 0.1,
+            "changeDailyPercent": 0.025,
+            "last": 4,
+            "volume": 500,
+            "high": 4.2,
+            "low": 3.8
+        }
+    },
+    {
+        "name": "DOGE",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "DOGEUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 0.02,
+            "changeDailyPercent": 0.05,
+            "last": 0.4,
+            "volume": 1000,
+            "high": 0.45,
+            "low": 0.35
+        }
+    },
+    {
+        "name": "BNB",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "BNBUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": -10,
+            "changeDailyPercent": -0.02,
+            "last": 300,
+            "volume": 400,
+            "high": 310,
+            "low": 295
+        }
+    },
+    {
+        "name": "DOT",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "DOTUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 1,
+            "changeDailyPercent": 0.01,
+            "last": 20,
+            "volume": 600,
+            "high": 21,
+            "low": 19
+        }
+    },
+    {
+        "name": "ADA",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "ADAUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 0.3,
+            "changeDailyPercent": 0.015,
+            "last": 2,
+            "volume": 700,
+            "high": 2.1,
+            "low": 1.9
+        }
+    },
+    {
+        "name": "SOL",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "SOLUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": -2,
+            "changeDailyPercent": -0.01,
+            "last": 190,
+            "volume": 250,
+            "high": 195,
+            "low": 180
+        }
+    },
+    {
+        "name": "SHIB",
+        "settings": {
+            "exchange": "BINANCE",
+            "pair": "SHIBUSDT",
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 0.00001,
+            "changeDailyPercent": 0.02,
+            "last": 0.0005,
+            "volume": 800,
+            "high": 0.00055,
+            "low": 0.00045
+        }
+    },
+    {
+        "name": "CodeChangeReview",
+        "settings": {
+            "exchange": "BITFINEX",
+            "pair": "BTCUSD",
+            "backgroundColor": "#0000ff",
+            "textColor": "#ffff00",
+            "title": "Review",
+            "digits": 2,
+            "mode": "ticker"
+        },
+        "values": {
+            "changeDaily": 100,
+            "changeDailyPercent": 0.005,
+            "last": 20000,
+            "volume": 100,
+            "high": 20200,
+            "low": 19800
+        }
+    }
+]
