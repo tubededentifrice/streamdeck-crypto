@@ -1,6 +1,6 @@
 tickerAction.sendCanvas = function () {};
 
-fetch("options.json")
+fetch("/dev/options.json")
     .then(res => res.json())
     .then(options => {
         const container = document.getElementById("previews");

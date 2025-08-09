@@ -11,7 +11,7 @@ let canvasContext;
 let globalWs = null;
 const subscriptionsContexts = {}; // exchange/symbol => contexts, allowing to know with contexts to update
 const contextDetails = {};  // context => settings, ensure a single subscription per context
-const screenshotMode = false;   // Allows to have the canvas rendered on https://streamdeck.opendle.com/src/com.courcelle.cryptoticker.sdPlugin/
+const screenshotMode = false; // Allows rendering the canvas in an external preview
 
 const alertStatuses = {};
 const alertArmed = {};
