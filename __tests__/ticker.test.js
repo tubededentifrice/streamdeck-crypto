@@ -20,6 +20,11 @@ test("rounded value pads digits", () => {
     expect(ticker.getRoundedValue(12.3456, 2, 1)).toBe("12.35");
 });
 
+test("rounded value adjusts for large numbers", () => {
+    expect(ticker.getRoundedValue(150.123, 2, 1)).toBe("150");
+    expect(ticker.getRoundedValue(150000, 2, 1)).toBe("150.00k");
+});
+
 test("normalize value", () => {
     expect(ticker.normalizeValue(5, 0, 10)).toBeCloseTo(0.5);
 });

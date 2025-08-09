@@ -548,11 +548,21 @@ const tickerAction = {
         this.websocketSend(JSON.stringify(json));
     },
     getRoundedValue: function (value, digits, multiplier) {
-        const digitPow = Math.pow(10, digits);
+        let scaled = value * multiplier;
+        let suffix = "";
+        let precision = digits;
+        if (scaled > 100000) {
+            scaled = scaled / 1000;
+            precision = 2;
+            suffix = "k";
+        } else if (scaled > 100) {
+            precision = 0;
+        }
 
-        let valueString = "" + Math.round(value * multiplier * digitPow) / digitPow;
+        const digitPow = Math.pow(10, precision);
+        let valueString = "" + Math.round(scaled * digitPow) / digitPow;
 
-        if (digits > 0) {
+        if (precision > 0) {
             // Make sure we always have the correct number of digits, even when rounded
             let digitPosition = valueString.indexOf(".");
             if (digitPosition < 0) {
@@ -561,13 +571,13 @@ const tickerAction = {
             }
 
             let actualDigits = valueString.length - digitPosition - 1;
-            while (actualDigits < digits) {
+            while (actualDigits < precision) {
                 valueString += "0";
                 actualDigits++;
             }
         }
 
-        return valueString;
+        return valueString + suffix;
     },
 
     getTickerValue: async function (pair, toCurrency, exchange) {
