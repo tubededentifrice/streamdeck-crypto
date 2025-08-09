@@ -18,13 +18,19 @@
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
 
 ## Installation
-In the Release folder, you can find the file `com.courcelle.cryptoticker.streamDeckPlugin`. If you double-click this file on your machine, Stream Deck will install the plugin.
+- From Releases: download `com.courcelle.cryptoticker.streamDeckPlugin` from the `Release/` folder (or GitHub Releases) and double‑click it to install into Stream Deck.
+- Manual install (advanced):
+    - macOS: copy the `.sdPlugin` bundle into `~/Library/Application Support/com.elgato.StreamDeck/Plugins/`.
+    - Windows: copy the `.sdPlugin` bundle into `%appdata%\Elgato\StreamDeck\Plugins\`.
 
-## Source code
-The Sources folder contains the source code of the plugin.
-- Change the version of the plugin in `Sources\com.courcelle.cryptoticker.sdPlugin\manifest.json`;
-- Ideally redownload the distribution tool from [https://docs.elgato.com/sdk/plugins/packaging](https://docs.elgato.com/sdk/plugins/packaging) (don't trust random Github repos!)
-- Build the package for distribution by running `DistributionToolWindows/DistributionTool.exe -b -i src/com.courcelle.cryptoticker.sdPlugin -o Release` at the root of the project.
+## Packaging
+- Bump the version in `src/com.courcelle.cryptoticker.sdPlugin/manifest.json`.
+- Windows: build a distributable `.streamDeckPlugin` with the bundled tool:
+    - `DistributionToolWindows/DistributionTool.exe -b -i src/com.courcelle.cryptoticker.sdPlugin -o Release`
+    - The packaged file appears in `Release/`.
+- macOS/Linux: use Elgato’s official Distribution Tool (download from the Stream Deck SDK docs) to package the same input directory. Example:
+    - `DistributionTool -b -i src/com.courcelle.cryptoticker.sdPlugin -o Release`
+    - Then double‑click the generated `.streamDeckPlugin` to install.
 
 ## Development
 
