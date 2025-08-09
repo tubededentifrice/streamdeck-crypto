@@ -8,5 +8,8 @@
     "scripts": {
         "test": "jest",
         "preview": "node preview-server.js"
+    },
+    "dependencies": {
+        "@elgato/streamdeck": "^1.4.0"
     }
 }

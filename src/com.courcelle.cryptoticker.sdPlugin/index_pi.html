@@ -137,14 +137,17 @@
         </div>
         <div type="checkbox" class="sdpi-item">
             <div class="sdpi-item-label empty"></div>
-            <div class="sdpi-item-value">
-                <div class="sdpi-item-child">
-                    <input id="displayDailyChange" type="checkbox" value="on">
-                    <label for="displayDailyChange" class="sdpi-item-label"><span></span> Display daily change percent</label>
-                </div>
+            <div class="sdpi-item-child">
+                <input id="displayDailyChange" type="checkbox" value="on">
+                <label for="displayDailyChange" class="sdpi-item-label"><span></span> Display daily change percent</label>
             </div>
         </div>
+    </div>
 
+        <script type="module">
+            import streamDeck from "./libs/streamdeck.js";
+            window.streamDeck = streamDeck;
+        </script>
         <script src="js/pi.js"></script>
 </body>
 

@@ -15,18 +15,14 @@
 <body>
 	<canvas class="ticker" id="ticker" width="288" height="288"></canvas>
 
-	<!-- Stream Deck Libs -->
-    <script src="libs/js/constants.js"></script>
-	<script src="libs/js/prototypes.js"></script>
-	<script src="libs/js/timers.js"></script>
-	<script src="libs/js/utils.js"></script>
-    <script src="libs/js/events.js"></script>
-	<script src="libs/js/api.js"></script>
-    <script src="libs/js/stream-deck.js"></script>
-	<script src="libs/js/action.js"></script>
+        <!-- Stream Deck SDK -->
+        <script type="module">
+            import streamDeck from "./libs/streamdeck.js";
+            window.streamDeck = streamDeck;
+        </script>
 
-	<!-- Plugin Source -->
-	<script src="js/signalr_v8.0.0.min.js" integrity="sha512-7rhBJh1om/W5Ztx7WiYOR9h2wlSaTmPyQMoHFtbT/FVNIA12y6S6I8HY9mrBS1uJ3dSU/R3qaSAXsGYuRjMDxg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="js/ticker.js"></script>
+        <!-- Plugin Source -->
+        <script src="js/signalr_v8.0.0.min.js" integrity="sha512-7rhBJh1om/W5Ztx7WiYOR9h2wlSaTmPyQMoHFtbT/FVNIA12y6S6I8HY9mrBS1uJ3dSU/R3qaSAXsGYuRjMDxg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="js/ticker.js"></script>
 </body>
 </html>

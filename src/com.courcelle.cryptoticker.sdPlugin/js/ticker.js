@@ -1,11 +1,7 @@
-/// <reference path="../libs/js/action.js" />
-/// <reference path="../libs/js/stream-deck.js" />
-
 const tProxyBase = "https://tproxyv8.opendle.com";
 // const tProxyBase = "https://localhost:44330";
 
 let loggingEnabled = false;
-let websocket = null;
 let canvas;
 let canvasContext;
 let globalWs = null;
@@ -56,13 +52,8 @@ const tickerAction = {
         return (this.isConnected() || (globalWs && globalWs.state == "Connecting")) && !globalWs.stopped;
     },
 
-    websocketSend: function (object) {
-        if (websocket) {
-            websocket.send(object);
-        }
-    },
-
-    onKeyDown: async function (context, settings, coordinates, userDesiredState) {
+    onKeyDown: async function (action, settings, coordinates, userDesiredState) {
+        const context = action.id;
         // State machine between modes
         switch (settings.mode) {
             case "candles":
@@ -81,21 +72,18 @@ const tickerAction = {
         }
 
         // Update settings with current mode
-        this.websocketSend(JSON.stringify({
-            "event": "setSettings",
-            "context": context,
-            "payload": settings
-        }));
+        await action.setSettings(settings);
 
-        this.refreshTimer(context, settings);
+        this.refreshTimer(context, settings, action);
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
-    onKeyUp: function (context, settings, coordinates, userDesiredState) {
+    onKeyUp: function (action, settings, coordinates, userDesiredState) {
     },
-    onWillAppear: async function (context, settings, coordinates) {
+    onWillAppear: async function (action, settings, coordinates) {
+        const context = action.id;
         this.initCanvas();
 
-        this.refreshTimer(context, settings);
+        this.refreshTimer(context, settings, action);
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
     refreshTimers: async function () {
@@ -106,12 +94,13 @@ const tickerAction = {
             const details = contextDetails[ctx];
             this.refreshTimer(
                 details["context"],
-                details["settings"]
+                details["settings"],
+                details["action"]
             );
         }
     },
-    refreshTimer: async function (context, settings) {
-        this.refreshSettings(context, settings);
+    refreshTimer: async function (context, settings, action) {
+        this.refreshSettings(context, settings, action);
 
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
         this.updateTicker(context, settings);
@@ -250,10 +239,11 @@ const tickerAction = {
             await globalWs.invoke("Subscribe", settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
         }
     },
-    refreshSettings: function (context, settings) {
+    refreshSettings: function (context, settings, action) {
         contextDetails[context] = {
             "context": context,
-            "settings": settings
+            "settings": settings,
+            "action": action || (contextDetails[context] && contextDetails[context]["action"])
         };
 
         this.connectOrReconnectIfNeeded();
@@ -537,16 +527,10 @@ const tickerAction = {
         this.sendCanvas(context);
     },
     sendCanvas: function (context) {
-        var json = {
-            "event": "setImage",
-            "context": context,
-            "payload": {
-                "image": canvas.toDataURL(),
-                "target": DestinationEnum.HARDWARE_AND_SOFTWARE
-            }
+        const actionObj = contextDetails[context] && contextDetails[context]["action"];
+        if (actionObj) {
+            actionObj.setImage(canvas.toDataURL());
         }
-
-        this.websocketSend(JSON.stringify(json));
     },
     getRoundedValue: function (value, digits, multiplier) {
         let scaled = value * multiplier;
@@ -715,105 +699,59 @@ const tickerAction = {
     },
 };
 
-function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inApplicationInfo, inActionInfo) {
-    // Open the web socket
-    websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-
-    function registerPlugin(inPluginUUID) {
-        var json = {
-            "event": inRegisterEvent,
-            "uuid": inPluginUUID
-        };
-
-        tickerAction.websocketSend(JSON.stringify(json));
-    };
-
-    websocket.onopen = function () {
-        // WebSocket is connected, send message
-        registerPlugin(pluginUUID);
-    };
-
-    websocket.onmessage = async function (evt) {
-        //this.log("Message received", evt);
-
-        // Received message from Stream Deck
-        var jsonObj = JSON.parse(evt.data);
-        const event = jsonObj["event"];
-        const action = jsonObj["action"];
-        const context = jsonObj["context"];
-
-        const jsonPayload = jsonObj["payload"] || {};
-        const settings = jsonPayload["settings"];
-        const coordinates = jsonPayload["coordinates"];
-        const userDesiredState = jsonPayload["userDesiredState"];
-        // const title = jsonPayload["title"];
-
-        const ignoredEvents = [
-            "deviceDidConnect",
-            "titleParametersDidChange"
-        ];
-
-        if (ignoredEvents.indexOf(event) >= 0) {
-            // Ignore
-            return;
-        }
-
-        if (settings != null) {
-            //this.log("Received settings", settings);
-            for (const k in defaultSettings) {
-                if (!settings[k]) {
-                    settings[k] = defaultSettings[k];
-                }
+if (typeof streamDeck !== "undefined") {
+    streamDeck.actions.onKeyDown(async ev => {
+        const settings = ev.payload.settings || {};
+        for (const k in defaultSettings) {
+            if (!settings[k]) {
+                settings[k] = defaultSettings[k];
             }
         }
+        await tickerAction.onKeyDown(ev.action, settings, ev.payload.coordinates, ev.payload.userDesiredState);
+    });
 
-        if (event == "keyDown") {
-            await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
-        } else if (event == "keyUp") {
-            await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
-        } else if (event == "willAppear") {
-            await tickerAction.onWillAppear(context, settings, coordinates);
-        } else if (settings != null) {
-            //this.log("Received settings", settings);
-            tickerAction.refreshSettings(context, settings);
-            tickerAction.refreshTimer(context, settings);
-            // tickerAction.updateTicker(context, settings);    // Already done by refreshTimer
+    streamDeck.actions.onKeyUp(async ev => {
+        const settings = ev.payload.settings || {};
+        await tickerAction.onKeyUp(ev.action, settings, ev.payload.coordinates, ev.payload.userDesiredState);
+    });
+
+    streamDeck.actions.onWillAppear(async ev => {
+        const settings = ev.payload.settings || {};
+        for (const k in defaultSettings) {
+            if (!settings[k]) {
+                settings[k] = defaultSettings[k];
+            }
         }
-    };
+        await tickerAction.onWillAppear(ev.action, settings, ev.payload.coordinates);
+    });
 
-    websocket.onclose = function () {
-        // Websocket is closed
-    };
+    streamDeck.settings.onDidReceiveSettings(ev => {
+        const settings = ev.payload.settings || {};
+        for (const k in defaultSettings) {
+            if (!settings[k]) {
+                settings[k] = defaultSettings[k];
+            }
+        }
+        tickerAction.refreshSettings(ev.action.id, settings, ev.action);
+        tickerAction.refreshTimer(ev.action.id, settings);
+    });
 
-    setInterval(async function () {
-        await tickerAction.refreshTimers();
-    }, 300000);
-};
+    streamDeck.ui.onSendToPlugin(ev => {
+        const settings = ev.payload || {};
+        for (const k in defaultSettings) {
+            if (!settings[k]) {
+                settings[k] = defaultSettings[k];
+            }
+        }
+        tickerAction.refreshSettings(ev.action.id, settings, ev.action);
+        tickerAction.refreshTimer(ev.action.id, settings);
+    });
 
-if (screenshotMode) {
-    loggingEnabled = true;
-    tickerAction.connect();
-
-    const settings = defaultSettings;
-    settings["digits"] = 0;
-    settings["pair"] = "LTCUSD";
-    settings["mode"] = "ticker";    // or candles
-
-    const context = "test";
-    const coordinates = {
-        "column": 1,
-        "row": 1
-    };
-    const userDesiredState = null;
-
-    setTimeout(function() {
-        tickerAction.onWillAppear(context, settings, coordinates);
-
-        setInterval(async function() {
-            await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
-            await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
-        }, 5000);
-    }, 1000);
+    streamDeck.onConnected(() => {
+        setInterval(async function () {
+            await tickerAction.refreshTimers();
+        }, 300000);
+    });
 }
 
 if (typeof module !== "undefined") {
