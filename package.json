@@ -19,7 +19,7 @@
         "test": "jest",
         "preview": "node preview-server.js",
         "build": "rollup -c",
-        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.courcelle.cryptoticker-dev.ticker\""
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.courcelle.cryptoticker.ticker\""
     },
     "dependencies": {
         "@elgato/streamdeck": "^1.4.0"

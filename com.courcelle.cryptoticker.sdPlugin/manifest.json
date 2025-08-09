@@ -12,14 +12,14 @@
       ],
       "SupportedInMultiActions": false,
       "Tooltip": "Keep track of stock & crytocurrencies prices (uses Binance, Bitfinex, Yahoo Finance API)",
-      "UUID": "com.courcelle.cryptoticker-dev.ticker"
+      "UUID": "com.courcelle.cryptoticker.ticker"
     }
   ],
   "SDKVersion": 2,
   "Author": "Vincent Courcelle",
   "CodePath": "index.html",
   "PropertyInspectorPath": "index_pi.html",
-  "UUID": "com.courcelle.cryptoticker-dev",
+  "UUID": "com.courcelle.cryptoticker",
   "Name": "Crypto ticker PRO",
   "Category": "Crypto ticker PRO",
   "Description": "This lets you display the price of a crypto currency (all Binance and Bitfinex pairs are supported), and stock prices (all Yahoo Finance pairs). Supports a very wide range of customizations.",

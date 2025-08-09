@@ -37,7 +37,7 @@ const defaultSettings = {
     "mode": "ticker"
 };
 
-const tickerAction = {
+export const tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
     log: function (...data) {
         if (loggingEnabled) {
@@ -52,7 +52,7 @@ const tickerAction = {
         return (this.isConnected() || (globalWs && globalWs.state == "Connecting")) && !globalWs.stopped;
     },
 
-    onKeyDown: async function (action, settings, coordinates, userDesiredState) {
+    onKeyDown: async function (action, settings) {
         const context = action.id;
         // State machine between modes
         switch (settings.mode) {
@@ -77,9 +77,9 @@ const tickerAction = {
         this.refreshTimer(context, settings, action);
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
-    onKeyUp: function (action, settings, coordinates, userDesiredState) {
+    onKeyUp: function (action, settings) {
     },
-    onWillAppear: async function (action, settings, coordinates) {
+    onWillAppear: async function (action, settings) {
         const context = action.id;
         this.initCanvas();
 
