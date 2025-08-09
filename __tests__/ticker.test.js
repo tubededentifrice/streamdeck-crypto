@@ -1,4 +1,4 @@
-const ticker = require("../src/com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js");
+const ticker = require("../src/actions/tickerAction.js");
 
 test("subscription key builds with conversion", () => {
     const key = ticker.getSubscriptionContextKey("BITFINEX", "BTCUSD", "USD", "EUR");

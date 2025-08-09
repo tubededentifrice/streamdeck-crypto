@@ -1,18 +1,17 @@
 {
     "Actions": [
         {
-            "Icon": "images/actionIcon",
+            "Icon": "imgs/actionIcon",
             "Name": "Crypto ticker PRO-dev",
             "States": [
                 {
-                    "Image": "images/actionDefaultImage",
+                    "Image": "imgs/actionDefaultImage",
                     "TitleAlignment": "middle",
                     "FontSize": 12
                 }
             ],
             "SupportedInMultiActions": false,
             "Tooltip": "Keep track of stock & crytocurrencies prices (uses Binance, Bitfinex, Yahoo Finance API)",
-            "PropertyInspectorPath": "ui/index_pi.html",
             "UUID": "com.courcelle.cryptoticker-dev.ticker"
         }
     ],
@@ -21,9 +20,10 @@
     "PropertyInspectorPath": "ui/index_pi.html",
     "UUID": "com.courcelle.cryptoticker-dev",
     "Name": "Crypto ticker PRO-dev",
-    "Category": "Crypto ticker PRO-dev",
+    "Icon": "imgs/pluginIcon",
     "Description": "This lets you display the price of a crypto currency (all Binance and Bitfinex pairs are supported), and stock prices (all Yahoo Finance pairs). Supports a very wide range of customizations.",
-    "Icon": "images/pluginIcon",
+    "Category": "Crypto ticker PRO-dev",
+    "CategoryIcon": "imgs/pluginIcon",
     "URL": "https://github.com/tubededentifrice/streamdeck-crypto",
     "Version": "1.7.0.0",
     "SDKVersion": 2,

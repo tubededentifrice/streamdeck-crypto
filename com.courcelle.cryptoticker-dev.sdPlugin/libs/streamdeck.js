@@ -4,7 +4,7 @@
  * @license MIT
  * @copyright Copyright (c) Corsair Memory Inc.
  */
-export { DeviceType } from '@elgato/schemas/streamdeck/plugins';
+// export { DeviceType } from '@elgato/schemas/streamdeck/plugins';
 
 // Polyfill, explicit resource management https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-2.html#using-declarations-and-explicit-resource-management
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
