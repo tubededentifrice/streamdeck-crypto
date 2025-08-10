@@ -139,15 +139,18 @@ const pi = {
     },
     initPairsDropDown: async function () {
         const exchangeDropdown = settingsConfig["exchange"]["value"];
-        const providers = await this.getProviders();
-        providers.sort();
-        providers.forEach(function (provider) {
-            var option = document.createElement("option");
-            option.text = provider;
-            option.value = provider;
-            exchangeDropdown.add(option);
-        });
-        exchangeDropdown.value = currentSettings["exchange"];
+
+        if (exchangeDropdown.options.length <= 0) {
+            const providers = await this.getProviders();
+            providers.sort();
+            providers.forEach(function (provider) {
+                var option = document.createElement("option");
+                option.text = provider;
+                option.value = provider;
+                exchangeDropdown.add(option);
+            });
+            exchangeDropdown.value = currentSettings["exchange"];
+        }
 
         const thisTmp = this;
         const updatePairs = async function() {

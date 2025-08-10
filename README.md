@@ -18,19 +18,15 @@
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
 
 ## Installation
-- From Releases: download `com.courcelle.cryptoticker.streamDeckPlugin` from the `Release/` folder (or GitHub Releases) and double‑click it to install into Stream Deck.
-- Manual install (advanced):
-    - macOS: copy the `.sdPlugin` bundle into `~/Library/Application Support/com.elgato.StreamDeck/Plugins/`.
-    - Windows: copy the `.sdPlugin` bundle into `%appdata%\Elgato\StreamDeck\Plugins\`.
+- Run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.dev.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to use the dev version
+- Run `mv com.courcelle.cryptoticker.sdPlugin com.courcelle.cryptoticker-dev.sdPlugin` to use the dev version
+- Run `streamdeck link ./com.courcelle.cryptoticker.sdPlugin` after having installed the [Elgato's CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started)
+- Run `mv com.courcelle.cryptoticker-dev.sdPlugin com.courcelle.cryptoticker.sdPlugin` to use the dev version
+- Once finished with testing, run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to go back to public manifest
 
 ## Packaging
 - Bump the version in `src/com.courcelle.cryptoticker.sdPlugin/manifest.json`.
-- Windows: build a distributable `.streamDeckPlugin` with the bundled tool:
-    - `DistributionToolWindows/DistributionTool.exe -b -i src/com.courcelle.cryptoticker.sdPlugin -o Release`
-    - The packaged file appears in `Release/`.
-- macOS/Linux: use Elgato’s official Distribution Tool (download from the Stream Deck SDK docs) to package the same input directory. Example:
-    - `DistributionTool -b -i src/com.courcelle.cryptoticker.sdPlugin -o Release`
-    - Then double‑click the generated `.streamDeckPlugin` to install.
+- Run `streamdeck pack com.courcelle.cryptoticker.sdPlugin`
 
 ## Development
 

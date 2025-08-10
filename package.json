@@ -3,10 +3,12 @@
     "version": "1.0.0",
     "description": "StreamDeck Crypto ticker plugin",
     "devDependencies": {
-        "jest": "^29.7.0"
+        "jest": "^29.7.0",
+        "nodemon": "^3.0.0"
     },
     "scripts": {
         "test": "jest",
-        "preview": "node preview-server.js"
+        "preview": "node preview-server.js",
+        "watch": "nodemon --watch com.courcelle.cryptoticker.sdPlugin --exec \"streamdeck restart com.courcelle.cryptoticker\""
     }
 }
