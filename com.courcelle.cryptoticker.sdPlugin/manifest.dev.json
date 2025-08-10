@@ -11,7 +11,7 @@
                 }
             ],
             "SupportedInMultiActions": false,
-            "Tooltip": "Keep track of stock & crytocurrencies prices (uses Binance, Bitfinex, Yahoo Finance API)",
+            "Tooltip": "Keep track of stock & cryptocurrencies prices (uses Binance, Bitfinex, Yahoo Finance API)",
             "UUID": "com.courcelle.cryptoticker-dev.ticker"
         }
     ],
