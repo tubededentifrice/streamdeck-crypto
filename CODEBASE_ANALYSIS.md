@@ -33,7 +33,7 @@ Communication between the plugin and the Stream Deck software happens via a WebS
     -   It provides a form for users to configure settings like the pair, colors, fonts, and alert rules.
     -   It sends the updated settings to the core plugin logic (`ticker.js`).
 
--   `README.md`: Contains general information about the project, features, and installation/build instructions. The build process uses Elgato's `DistributionTool.exe` to package the plugin.
+-   `README.md`: Contains general information about the project, features, and installation/build instructions.
 
 ## Data Flow
 
