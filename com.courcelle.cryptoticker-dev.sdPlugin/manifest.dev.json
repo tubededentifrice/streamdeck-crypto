@@ -2,7 +2,7 @@
     "Actions": [
         {
             "Icon": "images/actionIcon",
-            "Name": "Crypto Ticker PRO",
+            "Name": "Crypto Ticker PRO dev",
             "States": [
                 {
                     "Image": "images/actionDefaultImage",

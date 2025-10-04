@@ -47,9 +47,32 @@
                 placeholder="Enter the number of digits to round values" pattern="^[0-9]*$">
         </div>
         <div class="sdpi-item">
+            <div class="sdpi-item-label">Price format</div>
+            <select class="sdpi-item-value select" id="priceFormat" name="priceFormat">
+                <option value="auto">Automatic</option>
+                <option value="full">Full (eg. 119,662)</option>
+                <option value="compact">Compact (eg. 119.66K)</option>
+            </select>
+        </div>
+        <div class="sdpi-item">
             <div class="sdpi-item-label">Font</div>
             <input type="text" class="sdpi-item-value" id="font" name="font"
                 placeholder="Font to use, comma separated (like CSS)">
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Base font size</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="fontSizeBase" name="fontSizeBase" value=""
+                placeholder="Default text size in px" pattern="^[0-9]*$" min="6" max="80">
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Price font size</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="fontSizePrice" name="fontSizePrice" value=""
+                placeholder="Price text size in px" pattern="^[0-9]*$" min="6" max="120">
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Change font size</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="fontSizeChange" name="fontSizeChange" value=""
+                placeholder="Daily change size in px" pattern="^[0-9]*$" min="6" max="80">
         </div>
         <div type="color" class="sdpi-item">
             <div class="sdpi-item-label">Background color</div>
@@ -115,6 +138,11 @@
                     <option value="7D">7 days</option>
                     <option value="1M">1 month</option>
             </select>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Candles displayed</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="candlesDisplayed" name="candlesDisplayed"
+                placeholder="Number of candles to draw" pattern="^[0-9]*$" min="5" max="60">
         </div>
 
         <div type="checkbox" class="sdpi-item">

@@ -27,9 +27,14 @@ const defaultSettings = {
     "fromCurrency": "USD",
     "currency": "USD",
     "candlesInterval": "1h",
+    "candlesDisplayed": 20,
     "multiplier": 1,
     "digits": 2,
     "font": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
+    "fontSizeBase": 25,
+    "fontSizePrice": 35,
+    "fontSizeChange": 19,
+    "priceFormat": "compact",
     "backgroundColor": "#000000",
     "textColor": "#ffffff",
     "displayHighLow": "on",
@@ -298,6 +303,14 @@ const tickerAction = {
         // Using a multiplier allows to simply change the canvas size and everything will adjust automatically
         return Math.max(canvasWidth / 144, canvasHeight / 144);
     },
+    getCandlesDisplayCount: function (settings) {
+        const parsed = parseInt(settings["candlesDisplayed"]);
+        if (isNaN(parsed)) {
+            return 20;
+        }
+
+        return Math.min(60, Math.max(5, parsed));
+    },
     updateCanvasTicker: function (context, settings, values) {
         this.log("updateCanvasTicker", context, settings, values);
 
@@ -313,6 +326,18 @@ const tickerAction = {
         const currency = settings["currency"];
         const multiplier = settings["multiplier"] || 1;
         const digits = settings["digits"] || 2;
+        const priceFormat = settings["priceFormat"] || "compact";
+        const parseNumberSetting = function(value, fallback) {
+            const parsed = parseFloat(value);
+            if (isNaN(parsed) || parsed <= 0) {
+                return fallback;
+            }
+
+            return parsed;
+        };
+        const baseFontSize = parseNumberSetting(settings["fontSizeBase"], 25);
+        const priceFontSize = parseNumberSetting(settings["fontSizePrice"], baseFontSize * 35 / 25);
+        const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
         let backgroundColor = settings["backgroundColor"] || "#000000";
         let textColor = settings["textColor"] || "#ffffff";
 
@@ -372,30 +397,30 @@ const tickerAction = {
         canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
 
         var font = settings["font"] || "Lato";
-        canvasContext.font = (25 * sizeMultiplier) + "px " + font;
+        canvasContext.font = (baseFontSize * sizeMultiplier) + "px " + font;
         canvasContext.fillStyle = textColor;
 
         canvasContext.textAlign = "left";
         canvasContext.fillText(pairDisplay, 10 * sizeMultiplier, 25 * sizeMultiplier);
 
-        canvasContext.font = "bold "+(35 * sizeMultiplier)+"px " + font;
+        canvasContext.font = "bold " + (priceFontSize * sizeMultiplier) + "px " + font;
         canvasContext.fillText(
-            this.getRoundedValue(values["last"], digits, multiplier),
+            this.getRoundedValue(values["last"], digits, multiplier, priceFormat),
             textPadding,
             60 * sizeMultiplier
         );
 
         if (settings["displayHighLow"] != "off") {
-            canvasContext.font = (25 * sizeMultiplier) + "px " + font;
+            canvasContext.font = (baseFontSize * sizeMultiplier) + "px " + font;
             canvasContext.fillText(
-                this.getRoundedValue(values["low"], digits, multiplier),
+                this.getRoundedValue(values["low"], digits, multiplier, priceFormat),
                 textPadding,
                 90 * sizeMultiplier
             );
 
             canvasContext.textAlign = "right";
             canvasContext.fillText(
-                this.getRoundedValue(values["high"], digits, multiplier),
+                this.getRoundedValue(values["high"], digits, multiplier, priceFormat),
                 canvasWidth - textPadding,
                 135 * sizeMultiplier
             );
@@ -411,7 +436,7 @@ const tickerAction = {
             } else if (Math.abs(changePercent) >= 10) {
                 digitsPercent = 0;
             }
-            let changePercentDisplay = this.getRoundedValue(changePercent, digitsPercent, 1);
+            let changePercentDisplay = this.getRoundedValue(changePercent, digitsPercent, 1, "plain");
             if (changePercent > 0) {
                 changePercentDisplay = "+" + changePercentDisplay;
                 canvasContext.fillStyle = "green";
@@ -431,7 +456,7 @@ const tickerAction = {
                 );*/
             }
 
-            canvasContext.font = (19 * sizeMultiplier) + "px " + font;
+            canvasContext.font = (changeFontSize * sizeMultiplier) + "px " + font;
             canvasContext.textAlign = "right";
             // canvasContext.rotate(Math.PI);
             canvasContext.fillText(
@@ -482,6 +507,7 @@ const tickerAction = {
     },
 
     updateCanvasCandles: function (context, settings, candlesNormalized) {
+        candlesNormalized = candlesNormalized || [];
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
         const sizeMultiplier = this.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
@@ -492,6 +518,14 @@ const tickerAction = {
 
         const pairDisplay = settings["title"] || settings["pair"];
         const interval = settings["candlesInterval"] || "1h";
+
+        const candlesToDisplay = candlesNormalized.slice(-this.getCandlesDisplayCount(settings));
+        const candleCount = candlesToDisplay.length;
+        const paddingWidth = canvasWidth - (2 * padding);
+        const paddingHeight = canvasHeight - (2 * padding);
+        const candleWidth = candleCount > 0 ? paddingWidth / candleCount : paddingWidth;
+        const wickWidth = Math.max(2 * sizeMultiplier, candleWidth * 0.15);
+        const bodyWidth = Math.max(4 * sizeMultiplier, candleWidth * 0.6);
 
 
         canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -506,9 +540,7 @@ const tickerAction = {
         canvasContext.fillText(interval, 10 * sizeMultiplier, canvasHeight - (5 * sizeMultiplier));
 
         //this.log("updateCanvasCandles", candlesNormalized);
-        candlesNormalized.forEach(function (candleNormalized) {
-            const paddingWidth = canvasWidth - (2 * padding);   // padding is already multiplied by sizeMultiplier above
-            const paddingHeight = canvasHeight - (2 * padding); // padding is already multiplied by sizeMultiplier above
+        candlesToDisplay.forEach(function (candleNormalized) {
             const xPosition = Math.round(padding + Math.round(candleNormalized.timePercent * paddingWidth));
 
             // Choose open/close color
@@ -521,7 +553,7 @@ const tickerAction = {
             canvasContext.beginPath();
             canvasContext.moveTo(xPosition, Math.round(padding + (1 - candleNormalized.highPercent) * paddingHeight));
             canvasContext.lineTo(xPosition, Math.round(padding + (1 - candleNormalized.lowPercent) * paddingHeight));
-            canvasContext.lineWidth = 2 * sizeMultiplier;
+            canvasContext.lineWidth = wickWidth;
             canvasContext.strokeStyle = textColor;
             canvasContext.stroke();
 
@@ -529,7 +561,7 @@ const tickerAction = {
             canvasContext.beginPath();
             canvasContext.moveTo(xPosition, Math.round(padding + (1 - candleNormalized.closePercent) * paddingHeight));
             canvasContext.lineTo(xPosition, Math.round(padding + (1 - candleNormalized.openPercent) * paddingHeight));
-            canvasContext.lineWidth = 5 * sizeMultiplier;
+            canvasContext.lineWidth = bodyWidth;
             canvasContext.strokeStyle = candleColor;
             canvasContext.stroke();
         });
@@ -548,37 +580,97 @@ const tickerAction = {
 
         this.websocketSend(JSON.stringify(json));
     },
-    getRoundedValue: function (value, digits, multiplier) {
-        let scaled = value * multiplier;
-        let suffix = "";
-        let precision = digits;
-        if (scaled > 100000) {
-            scaled = scaled / 1000;
+    getRoundedValue: function (value, digits, multiplier, format) {
+        const formatOption = format || "auto";
+        let precision = parseInt(digits);
+        if (isNaN(precision) || precision < 0) {
             precision = 2;
-            suffix = "k";
-        } else if (scaled > 100) {
-            precision = 0;
         }
 
-        const digitPow = Math.pow(10, precision);
-        let valueString = "" + Math.round(scaled * digitPow) / digitPow;
+        const scaledValue = value * multiplier;
+        const absoluteValue = Math.abs(scaledValue);
+        const sign = scaledValue < 0 ? "-" : "";
+        const roundWithPrecision = function (val, localPrecision) {
+            const pow = Math.pow(10, localPrecision);
+            return Math.round(val * pow) / pow;
+        };
 
-        if (precision > 0) {
-            // Make sure we always have the correct number of digits, even when rounded
-            let digitPosition = valueString.indexOf(".");
-            if (digitPosition < 0) {
-                valueString += ".";
-                digitPosition = valueString.length - 1;
+        const toLocale = function (val, options) {
+            try {
+                return val.toLocaleString(undefined, options);
+            } catch (err) {
+                // Some environments might not support the options argument
+                return val.toString();
             }
+        };
 
-            let actualDigits = valueString.length - digitPosition - 1;
-            while (actualDigits < precision) {
-                valueString += "0";
-                actualDigits++;
-            }
+        let formattedValue = "";
+
+        switch (formatOption) {
+            case "full":
+                const roundedFull = roundWithPrecision(absoluteValue, precision);
+                formattedValue = toLocale(roundedFull, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: precision,
+                    useGrouping: true
+                });
+                break;
+            case "compact":
+                const units = [
+                    { value: 1000000000000, suffix: "T" },
+                    { value: 1000000000, suffix: "B" },
+                    { value: 1000000, suffix: "M" },
+                    { value: 1000, suffix: "K" }
+                ];
+                let suffix = "";
+                let compactValue = absoluteValue;
+                for (const unit of units) {
+                    if (absoluteValue >= unit.value) {
+                        suffix = unit.suffix;
+                        compactValue = absoluteValue / unit.value;
+                        break;
+                    }
+                }
+
+                const compactPrecision = suffix ? Math.min(precision, 2) : precision;
+                const roundedCompact = roundWithPrecision(compactValue, compactPrecision);
+                formattedValue = toLocale(roundedCompact, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: compactPrecision,
+                    useGrouping: !suffix
+                }) + suffix;
+                break;
+            case "plain":
+                const roundedPlain = roundWithPrecision(absoluteValue, precision);
+                formattedValue = toLocale(roundedPlain, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: precision,
+                    useGrouping: false
+                });
+                break;
+            case "auto":
+            default:
+                let autoSuffix = "";
+                let autoValue = absoluteValue;
+                let autoPrecision = precision;
+                if (absoluteValue > 100000) {
+                    autoSuffix = "k";
+                    autoValue = absoluteValue / 1000;
+                    autoPrecision = Math.min(autoPrecision, 2);
+                } else if (absoluteValue > 100) {
+                    autoPrecision = 0;
+                }
+
+                const roundedAuto = roundWithPrecision(autoValue, autoPrecision);
+                formattedValue = toLocale(roundedAuto, {
+                    minimumFractionDigits: Math.max(0, autoPrecision),
+                    maximumFractionDigits: autoPrecision,
+                    useGrouping: false
+                }) + autoSuffix;
+                break;
         }
 
-        return valueString + suffix;
+        return sign + formattedValue;
     },
 
     getTickerValue: async function (pair, toCurrency, exchange) {
@@ -624,7 +716,8 @@ const tickerAction = {
         const exchange = settings["exchange"];
         const pair = settings["pair"];
         const interval = this.convertCandlesInterval(settings["candlesInterval"] || "1h");
-        const cacheKey = exchange + "_" + pair + "_" + interval;
+        const candlesCount = this.getCandlesDisplayCount(settings);
+        const cacheKey = exchange + "_" + pair + "_" + interval + "_" + candlesCount;
         const cache = candlesCache[cacheKey] || {};
         const now = new Date().getTime();
         const t = "time";
@@ -636,10 +729,13 @@ const tickerAction = {
         }
 
         try {
+            // Example URL: https://tproxyv8.opendle.com/api/Candles/json/BINANCE/BTCUSDT/HOURS_1?limit=24
             const response = await fetch(
-                tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=20"
+                tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24" // Always retrieve the max count due to caching
             );
-            const val = this.getCandlesNormalized((await response.json()).candles);
+            const responseJson = await response.json();
+            const preparedCandles = this.prepareCandlesForDisplay(responseJson.candles, candlesCount);
+            const val = this.getCandlesNormalized(preparedCandles);
             cache[t] = now;
             cache[c] = val;
             candlesCache[cacheKey] = cache;
@@ -673,9 +769,62 @@ const tickerAction = {
 
         return interval;
     },
+    prepareCandlesForDisplay: function (candles, maxCount) {
+        if (!Array.isArray(candles) || candles.length === 0) {
+            return [];
+        }
+
+        const sanitized = candles
+            .map(function (candle) {
+                if (!candle) {
+                    return null;
+                }
+
+                let ts = candle["ts"];
+                if (typeof ts !== "number") {
+                    const openTime = candle["openTime"];
+                    if (openTime) {
+                        const parsedOpenTime = Date.parse(openTime);
+                        if (!isNaN(parsedOpenTime)) {
+                            ts = Math.floor(parsedOpenTime / 1000);
+                        }
+                    }
+                }
+
+                if (typeof ts !== "number" || isNaN(ts)) {
+                    return null;
+                }
+
+                return {
+                    candle: candle,
+                    ts: ts
+                };
+            })
+            .filter(function (item) {
+                return item !== null;
+            })
+            .sort(function (a, b) {
+                return a.ts - b.ts;
+            })
+            .map(function (item) {
+                if (item.candle["ts"] === item.ts) {
+                    return item.candle;
+                }
+
+                return Object.assign({}, item.candle, {
+                    "ts": item.ts
+                });
+            });
+
+        if (typeof maxCount === "number" && maxCount > 0 && sanitized.length > maxCount) {
+            return sanitized.slice(-maxCount);
+        }
+
+        return sanitized;
+    },
     getCandlesNormalized: function (candles) {
         let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
-        candles.forEach(function (candle) {
+        (candles || []).forEach(function (candle) {
             timeMin = Math.min(timeMin, candle["ts"]);
             timeMax = Math.max(timeMax, candle["ts"]);
 
@@ -696,7 +845,7 @@ const tickerAction = {
 
         const jThis = this;
         const candlesNormalized = [];
-        candles.forEach(function (candle) {
+        (candles || []).forEach(function (candle) {
             candlesNormalized.push({
                 timePercent: jThis.normalizeValue(candle["ts"], timeMin, timeMax),
                 openPercent: jThis.normalizeValue(candle["open"], min, max),
@@ -711,6 +860,10 @@ const tickerAction = {
         return candlesNormalized;
     },
     normalizeValue: function (value, min, max) {
+        if (max - min === 0) {
+            return 0.5;
+        }
+
         return (value - min) / (max - min);
     },
 };

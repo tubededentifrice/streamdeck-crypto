@@ -18,19 +18,37 @@
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
 
 ## Installation
-- Run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.dev.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to use the dev version
-- Run `mv com.courcelle.cryptoticker.sdPlugin com.courcelle.cryptoticker-dev.sdPlugin` to use the dev version
-- Run `streamdeck link ./com.courcelle.cryptoticker.sdPlugin` after having installed the [Elgato's CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started)
-- Run `mv com.courcelle.cryptoticker-dev.sdPlugin com.courcelle.cryptoticker.sdPlugin` to use the dev version
-- Once finished with testing, run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to go back to public manifest
+- Run the following to be able to use the `dev` version in the Stream Deck (you need to have the [Elgato's CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started) installed):
+```
+streamdeck dev
+streamdeck link ./com.courcelle.cryptoticker-dev.sdPlugin
+open "http://localhost:23654/"
+npm run watch
+# You should have the "dev" plugin listed in your Stream Deck UI, if not quit it entirely and restart it
+```
+
+- Once finished testing, revert back to normal (optional):
+```
+streamdeck unlink com.courcelle.cryptoticker-dev
+```
 
 ## Packaging
-- Bump the version in `src/com.courcelle.cryptoticker.sdPlugin/manifest.json`.
-- Run `streamdeck pack com.courcelle.cryptoticker.sdPlugin`
+- Bump the version in `src/com.courcelle.cryptoticker-dev.sdPlugin/manifest.pub.json`.
+
+Run the following to create the "published" version of the plugin:
+```
+mkdir -p com.courcelle.cryptoticker.sdPlugin  # Make sure to never edit this, and only make changes to the -dev directory
+rsync -avh --delete ./com.courcelle.cryptoticker-dev.sdPlugin/ ./com.courcelle.cryptoticker.sdPlugin/
+cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
+rm -f com.courcelle.cryptoticker.streamDeckPlugin
+streamdeck pack com.courcelle.cryptoticker.sdPlugin
+```
+
 
 ## Development
 
 Use the following npm scripts during development:
 
 - `npm test` – run the Jest unit tests
+- `npm run watch` – watch for changes in the code and notify the Stream Deck UI to reload it whenever needed
 - `npm run preview` – start a lightweight server on port 34115 and open the preview page in the default browser

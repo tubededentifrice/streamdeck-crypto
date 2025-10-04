@@ -9,6 +9,6 @@
     "scripts": {
         "test": "jest",
         "preview": "node preview-server.js",
-        "watch": "nodemon --watch com.courcelle.cryptoticker.sdPlugin --exec \"streamdeck restart com.courcelle.cryptoticker\""
+        "watch": "nodemon --watch com.courcelle.cryptoticker-dev.sdPlugin --exec \"streamdeck restart com.courcelle.cryptoticker-dev\""
     }
 }

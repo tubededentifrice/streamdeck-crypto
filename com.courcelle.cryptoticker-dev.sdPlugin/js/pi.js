@@ -39,6 +39,10 @@ const settingsConfig = {
         "default": "1h",
         "value": document.getElementById("candlesInterval")
     },
+    "candlesDisplayed": {
+        "default": 20,
+        "value": document.getElementById("candlesDisplayed")
+    },
     "multiplier": {
         "default": 1,
         "value": document.getElementById("multiplier")
@@ -47,9 +51,25 @@ const settingsConfig = {
         "default": 2,
         "value": document.getElementById("digits")
     },
+    "priceFormat": {
+        "default": "compact",
+        "value": document.getElementById("priceFormat")
+    },
     "font": {
         "default": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
         "value": document.getElementById("font")
+    },
+    "fontSizeBase": {
+        "default": 25,
+        "value": document.getElementById("fontSizeBase")
+    },
+    "fontSizePrice": {
+        "default": 35,
+        "value": document.getElementById("fontSizePrice")
+    },
+    "fontSizeChange": {
+        "default": 19,
+        "value": document.getElementById("fontSizeChange")
     },
     "backgroundColor": {
         "default": "#000000",
