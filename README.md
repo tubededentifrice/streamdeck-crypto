@@ -37,9 +37,10 @@ streamdeck unlink com.courcelle.cryptoticker-dev
 
 Run the following to create the "published" version of the plugin:
 ```
-mkdir -f com.courcelle.cryptoticker.sdPlugin  # Make sure to never edit this, and only make changes to the -dev directory
+mkdir -p com.courcelle.cryptoticker.sdPlugin  # Make sure to never edit this, and only make changes to the -dev directory
 rsync -avh --delete ./com.courcelle.cryptoticker-dev.sdPlugin/ ./com.courcelle.cryptoticker.sdPlugin/
 cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
+rm -f com.courcelle.cryptoticker.streamDeckPlugin
 streamdeck pack com.courcelle.cryptoticker.sdPlugin
 ```
 
