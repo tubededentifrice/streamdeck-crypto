@@ -9,6 +9,9 @@
     return {
         tProxyBase: "https://tproxyv8.opendle.com",
         fallbackPollIntervalMs: 60000,
-        staleTickerTimeoutMs: 6 * 60 * 1000
+        staleTickerTimeoutMs: 6 * 60 * 1000,
+        binanceRestBaseUrl: "https://api.binance.com",
+        binanceWsBaseUrl: "wss://stream.binance.com:9443/ws",
+        binanceSymbolOverrides: {}
     };
 }));

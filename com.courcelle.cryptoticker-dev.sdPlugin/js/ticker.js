@@ -118,7 +118,10 @@ const tickerAction = {
                     this.log(...args);
                 },
                 fallbackPollIntervalMs: runtimeConfig.fallbackPollIntervalMs,
-                staleTickerTimeoutMs: runtimeConfig.staleTickerTimeoutMs
+                staleTickerTimeoutMs: runtimeConfig.staleTickerTimeoutMs,
+                binanceRestBaseUrl: runtimeConfig.binanceRestBaseUrl,
+                binanceWsBaseUrl: runtimeConfig.binanceWsBaseUrl,
+                binanceSymbolOverrides: runtimeConfig.binanceSymbolOverrides
             });
         }
 

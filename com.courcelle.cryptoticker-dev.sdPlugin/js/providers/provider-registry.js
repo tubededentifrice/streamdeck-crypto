@@ -30,6 +30,13 @@
             this.providers = {};
             this.fallbackPollIntervalMs = typeof opts.fallbackPollIntervalMs === "number" ? opts.fallbackPollIntervalMs : undefined;
             this.staleTickerTimeoutMs = typeof opts.staleTickerTimeoutMs === "number" ? opts.staleTickerTimeoutMs : undefined;
+            this.binanceRestBaseUrl = typeof opts.binanceRestBaseUrl === "string" && opts.binanceRestBaseUrl.length > 0
+                ? opts.binanceRestBaseUrl
+                : "https://api.binance.com";
+            this.binanceWsBaseUrl = typeof opts.binanceWsBaseUrl === "string" && opts.binanceWsBaseUrl.length > 0
+                ? opts.binanceWsBaseUrl
+                : "wss://stream.binance.com:9443/ws";
+            this.binanceSymbolOverrides = opts.binanceSymbolOverrides || {};
 
             const genericOptions = {
                 baseUrl: this.baseUrl,
@@ -48,7 +55,10 @@
                 logger: this.logger,
                 fallbackPollIntervalMs: this.fallbackPollIntervalMs,
                 staleTickerTimeoutMs: this.staleTickerTimeoutMs,
-                genericFallback: this.genericProvider
+                genericFallback: this.genericProvider,
+                binanceRestBaseUrl: this.binanceRestBaseUrl,
+                binanceWsBaseUrl: this.binanceWsBaseUrl,
+                binanceSymbolOverrides: this.binanceSymbolOverrides
             }));
             this.register(new BitfinexProvider({
                 baseUrl: this.baseUrl,
