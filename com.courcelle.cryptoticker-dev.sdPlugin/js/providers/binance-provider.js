@@ -45,6 +45,31 @@
         return parsed;
     }
 
+    function mapIntervalToBinance(interval) {
+        switch (interval) {
+            case "MINUTES_1":
+                return "1m";
+            case "MINUTES_5":
+                return "5m";
+            case "MINUTES_15":
+                return "15m";
+            case "HOURS_1":
+                return "1h";
+            case "HOURS_6":
+                return "6h";
+            case "HOURS_12":
+                return "12h";
+            case "DAYS_1":
+                return "1d";
+            case "DAYS_7":
+                return "1w";
+            case "MONTHS_1":
+                return "1M";
+        }
+
+        return null;
+    }
+
     function safeClearTimeout(timerId) {
         if (timerId) {
             clearTimeout(timerId);
@@ -331,6 +356,52 @@
         ensureEntryMeta(entry) {
             entry.meta = entry.meta || {};
             return entry.meta;
+        }
+
+        async fetchCandles(params) {
+            const symbol = this.resolveSymbol(params);
+            if (!symbol) {
+                throw new Error("BinanceProvider: unable to resolve symbol for candles");
+            }
+
+            const interval = mapIntervalToBinance(params.interval);
+            if (!interval) {
+                throw new Error("BinanceProvider: unsupported interval " + params.interval);
+            }
+
+            const limit = Math.min(Math.max(parseInt(params.limit, 10) || 24, 1), 1000);
+            const base = this.restBaseUrl.replace(/\/$/, "");
+            const url = base + "/api/v3/klines?symbol=" + encodeURIComponent(symbol) + "&interval=" + encodeURIComponent(interval) + "&limit=" + limit;
+
+            try {
+                const response = await fetch(url);
+                if (!response || !response.ok) {
+                    throw new Error("BinanceProvider: candles response not ok");
+                }
+
+                const json = await response.json();
+                if (!Array.isArray(json)) {
+                    throw new Error("BinanceProvider: unexpected candles payload");
+                }
+
+                return json.map(function (item) {
+                    return {
+                        ts: Math.floor((item[0] || 0) / 1000),
+                        open: toNumber(item[1]),
+                        high: toNumber(item[2]),
+                        low: toNumber(item[3]),
+                        close: toNumber(item[4]),
+                        volume: toNumber(item[5]),
+                        volumeQuote: toNumber(item[7])
+                    };
+                });
+            } catch (err) {
+                this.logger("BinanceProvider: error fetching candles", err);
+                if (this.genericFallback && typeof this.genericFallback.fetchCandles === "function") {
+                    return this.genericFallback.fetchCandles(params);
+                }
+                throw err;
+            }
         }
     }
 

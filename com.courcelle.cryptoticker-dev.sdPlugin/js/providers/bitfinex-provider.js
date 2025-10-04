@@ -45,6 +45,31 @@
         return parsed;
     }
 
+    function mapIntervalToBitfinex(interval) {
+        switch (interval) {
+            case "MINUTES_1":
+                return "1m";
+            case "MINUTES_5":
+                return "5m";
+            case "MINUTES_15":
+                return "15m";
+            case "HOURS_1":
+                return "1h";
+            case "HOURS_6":
+                return "6h";
+            case "HOURS_12":
+                return "12h";
+            case "DAYS_1":
+                return "1D";
+            case "DAYS_7":
+                return "1W";
+            case "MONTHS_1":
+                return "1M";
+        }
+
+        return null;
+    }
+
     function safeClearTimeout(timerId) {
         if (timerId) {
             clearTimeout(timerId);
@@ -413,6 +438,51 @@
         ensureEntryMeta(entry) {
             entry.meta = entry.meta || {};
             return entry.meta;
+        }
+
+        async fetchCandles(params) {
+            const symbol = this.resolveSymbol(params);
+            if (!symbol) {
+                throw new Error("BitfinexProvider: unable to resolve symbol for candles");
+            }
+
+            const interval = mapIntervalToBitfinex(params.interval);
+            if (!interval) {
+                throw new Error("BitfinexProvider: unsupported interval " + params.interval);
+            }
+
+            const limit = Math.min(Math.max(parseInt(params.limit, 10) || 24, 1), 1000);
+            const base = this.restBaseUrl.replace(/\/$/, "");
+            const url = base + "/v2/candles/trade:" + interval + ":" + encodeURIComponent(symbol) + "/hist?limit=" + limit;
+
+            try {
+                const response = await fetch(url);
+                if (!response || !response.ok) {
+                    throw new Error("BitfinexProvider: candles response not ok");
+                }
+
+                const json = await response.json();
+                if (!Array.isArray(json)) {
+                    throw new Error("BitfinexProvider: unexpected candles payload");
+                }
+
+                return json.map(function (item) {
+                    return {
+                        ts: Math.floor((item[0] || 0) / 1000),
+                        open: toNumber(item[1]),
+                        close: toNumber(item[2]),
+                        high: toNumber(item[3]),
+                        low: toNumber(item[4]),
+                        volumeQuote: toNumber(item[5])
+                    };
+                });
+            } catch (err) {
+                this.logger("BitfinexProvider: error fetching candles", err);
+                if (this.genericFallback && typeof this.genericFallback.fetchCandles === "function") {
+                    return this.genericFallback.fetchCandles(params);
+                }
+                throw err;
+            }
         }
     }
 

@@ -32,6 +32,10 @@
             return null;
         }
 
+        async fetchCandles(params) {
+            throw new Error("Provider must implement fetchCandles()");
+        }
+
         ensureConnection() {
             // Optional override by providers using websockets.
         }

@@ -721,22 +721,64 @@ const tickerAction = {
             return cache[c];
         }
 
+        const fetchParams = {
+            exchange: exchange,
+            symbol: pair,
+            interval: interval,
+            limit: 24
+        };
+
+        let rawCandles = null;
+
         try {
-            // Example URL: https://tproxyv8.opendle.com/api/Candles/json/BINANCE/BTCUSDT/HOURS_1?limit=24
-            const response = await fetch(
-                tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24" // Always retrieve the max count due to caching
-            );
-            const responseJson = await response.json();
-            const preparedCandles = this.prepareCandlesForDisplay(responseJson.candles, candlesCount);
-            const val = this.getCandlesNormalized(preparedCandles);
-            cache[t] = now;
-            cache[c] = val;
-            candlesCache[cacheKey] = cache;
-            return cache[c];
-        } catch (e) {
-            this.log("Error fetching candles", e);
+            const registry = this.getProviderRegistry();
+            const provider = registry.getProvider(exchange);
+            if (provider && typeof provider.fetchCandles === "function") {
+                rawCandles = await provider.fetchCandles(fetchParams);
+            }
+
+            if (!Array.isArray(rawCandles)) {
+                rawCandles = null;
+            }
+
+            if (rawCandles === null) {
+                const genericProvider = registry.getGenericProvider();
+                if (genericProvider && typeof genericProvider.fetchCandles === "function") {
+                    rawCandles = await genericProvider.fetchCandles(fetchParams);
+                    if (!Array.isArray(rawCandles)) {
+                        rawCandles = null;
+                    }
+                }
+            }
+        } catch (err) {
+            this.log("Error fetching provider candles", err);
+            rawCandles = null;
+        }
+
+        if (rawCandles === null) {
+            try {
+                const response = await fetch(
+                    tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24"
+                );
+                const responseJson = await response.json();
+                if (responseJson && Array.isArray(responseJson.candles)) {
+                    rawCandles = responseJson.candles;
+                }
+            } catch (e) {
+                this.log("Error fetching candles from proxy", e);
+            }
+        }
+
+        if (!Array.isArray(rawCandles)) {
             return cache[c] || [];
         }
+
+        const preparedCandles = this.prepareCandlesForDisplay(rawCandles, candlesCount);
+        const val = this.getCandlesNormalized(preparedCandles);
+        cache[t] = now;
+        cache[c] = val;
+        candlesCache[cacheKey] = cache;
+        return cache[c];
     },
     convertCandlesInterval: function (interval) {
         switch (interval) {

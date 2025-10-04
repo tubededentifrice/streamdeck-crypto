@@ -275,6 +275,30 @@
             this.subscriptionManager.handleStreamingUpdate(key, ticker);
         }
 
+        async fetchCandles(params) {
+            const exchange = params.exchange;
+            const symbol = params.symbol;
+            const interval = params.interval;
+            const limit = typeof params.limit === "number" && params.limit > 0 ? params.limit : 24;
+            const base = this.baseUrl.replace(/\/$/, "");
+            const url = base + "/api/Candles/json/" + encodeURIComponent(exchange) + "/" + encodeURIComponent(symbol) + "/" + interval + "?limit=" + limit;
+
+            try {
+                const response = await fetch(url);
+                if (!response || !response.ok) {
+                    throw new Error("GenericProvider: candles response not ok");
+                }
+                const json = await response.json();
+                if (Array.isArray(json.candles)) {
+                    return json.candles;
+                }
+                return [];
+            } catch (err) {
+                this.logger("GenericProvider: error fetching candles", err);
+                throw err;
+            }
+        }
+
         transformTickerResponse(responseJson) {
             const json = responseJson || {};
             return {
