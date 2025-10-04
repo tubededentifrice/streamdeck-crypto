@@ -1,24 +1,69 @@
 /// <reference path="../libs/js/action.js" />
 /// <reference path="../libs/js/stream-deck.js" />
 
-const tProxyBase = "https://tproxyv8.opendle.com";
-// const tProxyBase = "https://localhost:44330";
+const defaultConfig = {
+    "tProxyBase": "https://tproxyv8.opendle.com",
+    "fallbackPollIntervalMs": 60000,
+    "staleTickerTimeoutMs": 6 * 60 * 1000
+};
+
+function requireOrNull(modulePath) {
+    if (typeof require === "function") {
+        try {
+            return require(modulePath);
+        } catch (err) {
+            return null;
+        }
+    }
+
+    return null;
+}
+
+function resolveGlobalConfig() {
+    if (typeof CryptoTickerConfig !== "undefined") {
+        return CryptoTickerConfig;
+    }
+
+    return null;
+}
+
+const moduleConfig = requireOrNull("./config");
+const globalConfig = resolveGlobalConfig();
+const runtimeConfig = Object.assign({}, defaultConfig, moduleConfig || {}, globalConfig || {});
+const tProxyBase = runtimeConfig.tProxyBase;
+
+const subscriptionKeyModule = requireOrNull("./providers/subscription-key");
+const globalProviders = typeof CryptoTickerProviders !== "undefined" ? CryptoTickerProviders : null;
+const buildSubscriptionKey = subscriptionKeyModule && subscriptionKeyModule.buildSubscriptionKey
+    ? subscriptionKeyModule.buildSubscriptionKey
+    : globalProviders && typeof globalProviders.buildSubscriptionKey === "function"
+        ? globalProviders.buildSubscriptionKey
+        : function (exchange, symbol, fromCurrency, toCurrency) {
+            const exchangePart = exchange || "";
+            const symbolPart = symbol || "";
+            const fromPart = fromCurrency || null;
+            const toPart = toCurrency || null;
+            let convertPart = "";
+            if (fromPart !== null && toPart !== null && fromPart !== toPart) {
+                convertPart = "__" + fromPart + "_" + toPart;
+            }
+            return exchangePart + "__" + symbolPart + convertPart;
+        };
 
 let loggingEnabled = false;
 let websocket = null;
 let canvas;
 let canvasContext;
-let globalWs = null;
-const subscriptionsContexts = {}; // exchange/symbol => contexts, allowing to know with contexts to update
 const contextDetails = {};  // context => settings, ensure a single subscription per context
+const contextSubscriptions = {}; // context => provider subscription handle
 const screenshotMode = false; // Allows rendering the canvas in an external preview
 
 const alertStatuses = {};
 const alertArmed = {};
 let rates = null;
 let ratesUpdate = 0;
-const tickerCache = {};
 const candlesCache = {};
+let providerRegistrySingleton = null;
 
 const defaultSettings = {
     "title": null,
@@ -54,11 +99,30 @@ const tickerAction = {
         }
     },
 
-    isConnected: function() {
-        return globalWs && !globalWs.stopped && globalWs.state == "Connected";
-    },
-    isConnectedOrConnecting: function() {
-        return (this.isConnected() || (globalWs && globalWs.state == "Connecting")) && !globalWs.stopped;
+    getProviderRegistry: function () {
+        if (!providerRegistrySingleton) {
+            const providerRegistryModule = requireOrNull("./providers/provider-registry");
+            const ProviderRegistryClass = providerRegistryModule && providerRegistryModule.ProviderRegistry
+                ? providerRegistryModule.ProviderRegistry
+                : globalProviders && globalProviders.ProviderRegistry
+                    ? globalProviders.ProviderRegistry
+                    : null;
+
+            if (!ProviderRegistryClass) {
+                throw new Error("ProviderRegistry is not available");
+            }
+
+            providerRegistrySingleton = new ProviderRegistryClass({
+                baseUrl: tProxyBase,
+                logger: (...args) => {
+                    this.log(...args);
+                },
+                fallbackPollIntervalMs: runtimeConfig.fallbackPollIntervalMs,
+                staleTickerTimeoutMs: runtimeConfig.staleTickerTimeoutMs
+            });
+        }
+
+        return providerRegistrySingleton;
     },
 
     websocketSend: function (object) {
@@ -104,8 +168,6 @@ const tickerAction = {
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
     refreshTimers: async function () {
-        this.connectOrReconnectIfNeeded();
-
         // Make sure everybody is connected
         for (let ctx in contextDetails) {
             const details = contextDetails[ctx];
@@ -121,139 +183,72 @@ const tickerAction = {
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
         this.updateTicker(context, settings);
     },
-    connectOrReconnectIfNeeded: function () {
-        if (!this.isConnectedOrConnecting()) {
-            this.log("Reopening WS because not connected or connecting", globalWs);
-            if (globalWs) {
-                globalWs.stopped = true;
-                globalWs.stop();
-                globalWs = null;
-            }
-
-            this.connect();
-        }
-    },
     connect: function () {
-        const jThis = this;
-
-        if (globalWs === null) {
-            jThis.log("Connect");
-
-            globalWs = new signalR.HubConnectionBuilder()
-                .withUrl(tProxyBase + "/tickerhub")
-                .withAutomaticReconnect()
-                .configureLogging(signalR.LogLevel.Warning)
-                // .configureLogging(signalR.LogLevel.Debug)
-                .build();
-
-            globalWs.on("ticker", async (ticker) => {
-                jThis.log("Ticker received via WSS", ticker);
-
-                //TODO: Send to each context that have subscribe to this
-                const sKey = this.getSubscriptionContextKey(ticker["provider"], ticker["symbol"], ticker["conversionFromCurrency"], ticker["conversionToCurrency"]);
-                if (subscriptionsContexts[sKey]) {
-                    for (let c in subscriptionsContexts[sKey]) {
-                        const settings = contextDetails[c]["settings"];
-                        await jThis.updateCanvas(
-                            contextDetails[c]["context"],
-                            settings,
-                            await jThis.extractValues(ticker, settings["pair"], settings["currency"])
-                        );
-                    }
-                } else {
-                    console.error("Received a ticker for an unknow context " + sKey, ticker, subscriptionsContexts);
-                }
-            });
-
-            const subscribe = async function () {
-                if (!globalWs.stopped) {
-                    for (const c in contextDetails) {
-                        jThis.subscribe(contextDetails[c]["context"], contextDetails[c]["settings"]);
-                    }
-                }
-            };
-            globalWs.onreconnected(async (connectionId) => {
-                if (!globalWs.stopped) {
-                    subscribe();
-                }
-            });
-
-            const start = async function () {
-                if (!globalWs.stopped && !jThis.isConnectedOrConnecting()) {
-                    try {
-                        globalWs.start().then(async function () {
-                            await subscribe();
-                        }).catch(function (err) {
-                            return console.error(err.toString());
-                        });
-                    } catch (err) {
-                        // Retry after 5 seconds
-                        console.log(err);
-                        setTimeout(start, 5000);
-                    }
-                }
-            };
-    
-            // Start the connection.
-            globalWs.stopped = false;
-            start();
+        const registry = this.getProviderRegistry();
+        if (registry && typeof registry.ensureAllConnections === "function") {
+            registry.ensureAllConnections();
         }
     },
-    subscribe: async function (context, settings) {
-        const sKey = this.getSubscriptionContextKey(settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
-        subscriptionsContexts[sKey] = (subscriptionsContexts[sKey] || {});
-        subscriptionsContexts[sKey][context] = settings;
+    updateSubscription: function (context, settings) {
+        const exchange = settings["exchange"];
+        const pair = settings["pair"];
+        const fromCurrency = settings["fromCurrency"] || null;
+        const toCurrency = settings["currency"] || null;
+        const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, fromCurrency, toCurrency);
+        const current = contextSubscriptions[context];
+        if (current && current.key === subscriptionKey) {
+            return current;
+        }
 
-        // Make sure we aren't subscribe to something else
-        for (let k in subscriptionsContexts) {
-            if (k != sKey) {
-                const sKeyObj = subscriptionsContexts[k];
-
-                // If a single context on this subscription and it's us
-                // Then unsubscribe and then delete the whole key
-                if (Object.keys(sKeyObj).length == 1) {
-                    if (sKeyObj[context]) {
-                        const sKeyObjContextSettings = sKeyObj[context];
-                        try {
-                            if (this.isConnected()) {
-                                this.log(
-                                    "Unsubscribe",
-                                    sKeyObjContextSettings["exchange"],
-                                    sKeyObjContextSettings["pair"],
-                                    sKeyObjContextSettings["fromCurrency"] || null,
-                                    sKeyObjContextSettings["currency"] || null
-                                );
-                                await globalWs.invoke(
-                                    "Unsubscribe",
-                                    sKeyObjContextSettings["exchange"],
-                                    sKeyObjContextSettings["pair"],
-                                    sKeyObjContextSettings["fromCurrency"] || null,
-                                    sKeyObjContextSettings["currency"] || null
-                                );
-                            }
-                        } catch (e) {
-                            console.error("Error invoking Unsubscribe", context, settings, e);
-                        }
-
-                        delete subscriptionsContexts[k]
-                    }
-                }
-
-                // Otherwise just delete the context key
-                delete sKeyObj[context];
+        if (current && typeof current.unsubscribe === "function") {
+            try {
+                current.unsubscribe();
+            } catch (err) {
+                this.log("Error unsubscribing from provider", err);
             }
+            delete contextSubscriptions[context];
         }
 
-        if (this.isConnected()) {
-            this.log(
-                "Subscribe",
-                settings["exchange"],
-                settings["pair"],
-                settings["fromCurrency"] || null,
-                settings["currency"] || null
-            );
-            await globalWs.invoke("Subscribe", settings["exchange"], settings["pair"], settings["fromCurrency"] || null, settings["currency"] || null);
+        const registry = this.getProviderRegistry();
+        const provider = registry.getProvider(exchange);
+        const params = {
+            exchange: exchange,
+            symbol: pair,
+            fromCurrency: fromCurrency,
+            toCurrency: toCurrency
+        };
+        const self = this;
+
+        try {
+            const handle = provider.subscribeTicker(params, {
+                onData: async function (tickerValues) {
+                    const details = contextDetails[context];
+                    if (!details) {
+                        return;
+                    }
+
+                    try {
+                        await self.updateCanvas(details.context, details.settings, tickerValues);
+                    } catch (err) {
+                        self.log("Error updating canvas from subscription", err);
+                    }
+                },
+                onError: function (error) {
+                    self.log("Provider subscription error", error);
+                }
+            });
+
+            contextSubscriptions[context] = {
+                key: subscriptionKey,
+                unsubscribe: handle && typeof handle.unsubscribe === "function" ? handle.unsubscribe : function () {},
+                providerId: provider.getId ? provider.getId() : null
+            };
+            return contextSubscriptions[context];
+        } catch (err) {
+            this.log("Error subscribing to provider", err);
         }
+
+        return null;
     },
     refreshSettings: function (context, settings) {
         contextDetails[context] = {
@@ -261,23 +256,16 @@ const tickerAction = {
             "settings": settings
         };
 
-        this.connectOrReconnectIfNeeded();
-
         // Update the subscription in all cases
-        this.subscribe(context, settings);
+        this.updateSubscription(context, settings);
     },
     getSubscriptionContextKey: function (exchange, pair, fromCurrency, toCurrency) {
-        let convertPart = "";
-        if (fromCurrency != null && toCurrency != null && fromCurrency != toCurrency) {
-            convertPart = "__" + fromCurrency + "_" + toCurrency;
-        }
-
-        return exchange + "__" + pair + convertPart;
+        return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
     },
 
     updateTicker: async function (context, settings) {
         const pair = settings["pair"];
-        const values = await this.getTickerValue(pair, settings.currency, settings.exchange);
+        const values = await this.getTickerValue(pair, settings.currency, settings.exchange, settings.fromCurrency);
         this.updateCanvas(context, settings, values);
     },
     initCanvas: function () {
@@ -673,18 +661,31 @@ const tickerAction = {
         return sign + formattedValue;
     },
 
-    getTickerValue: async function (pair, toCurrency, exchange) {
+    getTickerValue: async function (pair, toCurrency, exchange, fromCurrency) {
+        const registry = this.getProviderRegistry();
+        const provider = registry.getProvider(exchange);
+        const resolvedFrom = fromCurrency || "USD";
+        const resolvedTo = toCurrency || null;
+        const params = {
+            exchange: exchange,
+            symbol: pair,
+            fromCurrency: resolvedFrom,
+            toCurrency: resolvedTo
+        };
+
         try {
-            const response = await fetch(
-                tProxyBase + "/api/Ticker/json/" + exchange + "/" + pair + "?fromCurrency=USD&toCurrency=" + toCurrency
-            );
-            const responseJson = await response.json();
-            const values = await this.extractValues(responseJson);
-            tickerCache[pair] = values;
-            return values;
-        } catch (e) {
-            this.log("Error fetching ticker", e);
-            return tickerCache[pair] || {
+            return await provider.fetchTicker(params);
+        } catch (err) {
+            this.log("Error fetching ticker", err);
+            const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, resolvedFrom, resolvedTo);
+            if (provider && typeof provider.getCachedTicker === "function") {
+                const cached = provider.getCachedTicker(subscriptionKey);
+                if (cached) {
+                    return cached;
+                }
+            }
+
+            return {
                 "changeDaily": 0,
                 "changeDailyPercent": 0,
                 "last": 0,
@@ -692,23 +693,9 @@ const tickerAction = {
                 "high": 0,
                 "low": 0,
                 "pair": pair,
-                "pairDisplay": pair,
+                "pairDisplay": pair
             };
         }
-    },
-    extractValues: async function (responseJson, pair, toCurrency) {
-        this.log("extractValues", responseJson, pair, toCurrency);
-
-        return {
-            "changeDaily": responseJson["dailyChange"],
-            "changeDailyPercent": responseJson["dailyChangeRelative"],
-            "last": responseJson["last"],
-            "volume": responseJson["volume"],
-            "high": responseJson["high24h"],
-            "low": responseJson["low24h"],
-            "pair": responseJson["symbol"],
-            "pairDisplay": responseJson["symbolDisplay"],
-        };
     },
     getCandles: async function (settings) {
         this.log("getCandles");
