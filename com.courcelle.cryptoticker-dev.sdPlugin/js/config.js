@@ -12,6 +12,9 @@
         staleTickerTimeoutMs: 6 * 60 * 1000,
         binanceRestBaseUrl: "https://api.binance.com",
         binanceWsBaseUrl: "wss://stream.binance.com:9443/ws",
-        binanceSymbolOverrides: {}
+        binanceSymbolOverrides: {},
+        bitfinexRestBaseUrl: "https://api-pub.bitfinex.com",
+        bitfinexWsBaseUrl: "wss://api-pub.bitfinex.com/ws/2",
+        bitfinexSymbolOverrides: {}
     };
 }));

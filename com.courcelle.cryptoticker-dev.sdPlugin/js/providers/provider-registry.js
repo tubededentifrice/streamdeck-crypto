@@ -37,6 +37,13 @@
                 ? opts.binanceWsBaseUrl
                 : "wss://stream.binance.com:9443/ws";
             this.binanceSymbolOverrides = opts.binanceSymbolOverrides || {};
+            this.bitfinexRestBaseUrl = typeof opts.bitfinexRestBaseUrl === "string" && opts.bitfinexRestBaseUrl.length > 0
+                ? opts.bitfinexRestBaseUrl
+                : "https://api-pub.bitfinex.com";
+            this.bitfinexWsBaseUrl = typeof opts.bitfinexWsBaseUrl === "string" && opts.bitfinexWsBaseUrl.length > 0
+                ? opts.bitfinexWsBaseUrl
+                : "wss://api-pub.bitfinex.com/ws/2";
+            this.bitfinexSymbolOverrides = opts.bitfinexSymbolOverrides || {};
 
             const genericOptions = {
                 baseUrl: this.baseUrl,
@@ -65,7 +72,10 @@
                 logger: this.logger,
                 fallbackPollIntervalMs: this.fallbackPollIntervalMs,
                 staleTickerTimeoutMs: this.staleTickerTimeoutMs,
-                genericFallback: this.genericProvider
+                genericFallback: this.genericProvider,
+                bitfinexRestBaseUrl: this.bitfinexRestBaseUrl,
+                bitfinexWsBaseUrl: this.bitfinexWsBaseUrl,
+                bitfinexSymbolOverrides: this.bitfinexSymbolOverrides
             }));
             this.register(new YFinanceProvider({
                 baseUrl: this.baseUrl,

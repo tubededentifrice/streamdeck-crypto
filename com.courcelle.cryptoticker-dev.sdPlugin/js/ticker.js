@@ -121,7 +121,10 @@ const tickerAction = {
                 staleTickerTimeoutMs: runtimeConfig.staleTickerTimeoutMs,
                 binanceRestBaseUrl: runtimeConfig.binanceRestBaseUrl,
                 binanceWsBaseUrl: runtimeConfig.binanceWsBaseUrl,
-                binanceSymbolOverrides: runtimeConfig.binanceSymbolOverrides
+                binanceSymbolOverrides: runtimeConfig.binanceSymbolOverrides,
+                bitfinexRestBaseUrl: runtimeConfig.bitfinexRestBaseUrl,
+                bitfinexWsBaseUrl: runtimeConfig.bitfinexWsBaseUrl,
+                bitfinexSymbolOverrides: runtimeConfig.bitfinexSymbolOverrides
             });
         }
 
