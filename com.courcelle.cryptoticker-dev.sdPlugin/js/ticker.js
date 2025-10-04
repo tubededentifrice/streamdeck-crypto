@@ -729,8 +729,9 @@ const tickerAction = {
         }
 
         try {
+            // Example URL: https://tproxyv8.opendle.com/api/Candles/json/BINANCE/BTCUSDT/HOURS_1?limit=24
             const response = await fetch(
-                tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=" + candlesCount
+                tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24" // Always retrieve the max count due to caching
             );
             const responseJson = await response.json();
             const preparedCandles = this.prepareCandlesForDisplay(responseJson.candles, candlesCount);

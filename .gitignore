@@ -1,3 +1,4 @@
 #DistributionToolWindows/
 node_modules/
 .DS_Store
+com.courcelle.cryptoticker.sdPlugin/
