@@ -579,51 +579,93 @@ const tickerAction = {
         canvasContext.lineWidth = Math.max(1.5 * sizeMultiplier, 1);
         canvasContext.strokeStyle = color;
         canvasContext.fillStyle = color;
-        canvasContext.setLineDash([]);
 
-        if (iconState === connectionStates.LIVE) {
+        const drawPolygon = (points) => {
+            if (!Array.isArray(points) || points.length === 0) {
+                return;
+            }
             canvasContext.beginPath();
-            canvasContext.moveTo(iconSize * 0.35, 0);
-            canvasContext.lineTo(iconSize, 0);
-            canvasContext.lineTo(iconSize * 0.55, iconSize * 0.55);
-            canvasContext.lineTo(iconSize * 0.9, iconSize * 0.55);
-            canvasContext.lineTo(iconSize * 0.45, iconSize);
-            canvasContext.lineTo(iconSize * 0.6, iconSize * 0.45);
-            canvasContext.lineTo(iconSize * 0.2, iconSize * 0.45);
+            for (let i = 0; i < points.length; i++) {
+                const pt = points[i];
+                const px = pt[0] * iconSize;
+                const py = pt[1] * iconSize;
+                if (i === 0) {
+                    canvasContext.moveTo(px, py);
+                } else {
+                    canvasContext.lineTo(px, py);
+                }
+            }
             canvasContext.closePath();
             canvasContext.fill();
+        };
+
+        if (iconState === connectionStates.LIVE) {
+            drawPolygon([
+                [0.7545784909869392, 0],
+                [0.18263591551829597, 0.5685964091677761],
+                [0.3947756629367107, 0.5685964091677761],
+                [0.23171302126434715, 1],
+                [0.8173281041988991, 0.43136761054941897],
+                [0.6051523764976793, 0.43136761054941897]
+            ]);
         } else if (iconState === connectionStates.DETACHED) {
-            canvasContext.setLineDash([iconSize * 0.35, iconSize * 0.2]);
-            canvasContext.beginPath();
-            canvasContext.moveTo(0, iconSize * 0.5);
-            canvasContext.lineTo(iconSize, iconSize * 0.5);
-            canvasContext.stroke();
+            drawPolygon([
+                [0.0, 0.45], [0.4, 0.45], [0.4, 0.6], [0.0, 0.6]
+            ]);
+            drawPolygon([
+                [0.6, 0.45], [1.0, 0.45], [1.0, 0.6], [0.6, 0.6]
+            ]);
         } else if (iconState === connectionStates.BACKUP) {
-            canvasContext.setLineDash([iconSize * 0.28, iconSize * 0.18]);
-            canvasContext.beginPath();
-            canvasContext.moveTo(0, iconSize * 0.35);
-            canvasContext.lineTo(iconSize, iconSize * 0.35);
-            canvasContext.stroke();
-            canvasContext.beginPath();
-            canvasContext.moveTo(0, iconSize * 0.65);
-            canvasContext.lineTo(iconSize, iconSize * 0.65);
-            canvasContext.stroke();
+            drawPolygon([
+                [0.0, 0.3], [0.4, 0.3], [0.4, 0.38], [0.0, 0.38]
+            ]);
+            drawPolygon([
+                [0.6, 0.3], [1.0, 0.3], [1.0, 0.38], [0.6, 0.38]
+            ]);
+
+            drawPolygon([
+                [0.0, 0.62], [0.4, 0.62], [0.4, 0.7], [0.0, 0.7]
+            ]);
+            drawPolygon([
+                [0.6, 0.62], [1.0, 0.62], [1.0, 0.7], [0.6, 0.7]
+            ]);
         } else if (iconState === connectionStates.BROKEN) {
-            canvasContext.setLineDash([]);
-            const midY = iconSize * 0.5;
-            const gap = iconSize * 0.1;
-            canvasContext.beginPath();
-            canvasContext.moveTo(0, midY - gap);
-            canvasContext.lineTo(iconSize * 0.35, midY);
-            canvasContext.stroke();
-            canvasContext.beginPath();
-            canvasContext.moveTo(iconSize, midY + gap);
-            canvasContext.lineTo(iconSize * 0.65, midY);
-            canvasContext.stroke();
-            canvasContext.beginPath();
-            canvasContext.moveTo(iconSize * 0.42, midY - iconSize * 0.25);
-            canvasContext.lineTo(iconSize * 0.6, midY + iconSize * 0.25);
-            canvasContext.stroke();
+            const drawRoundedRect = (width, height, radius) => {
+                const r = Math.min(radius, Math.min(width, height) / 2);
+                canvasContext.beginPath();
+                canvasContext.moveTo(r, 0);
+                canvasContext.lineTo(width - r, 0);
+                canvasContext.quadraticCurveTo(width, 0, width, r);
+                canvasContext.lineTo(width, height - r);
+                canvasContext.quadraticCurveTo(width, height, width - r, height);
+                canvasContext.lineTo(r, height);
+                canvasContext.quadraticCurveTo(0, height, 0, height - r);
+                canvasContext.lineTo(0, r);
+                canvasContext.quadraticCurveTo(0, 0, r, 0);
+                canvasContext.closePath();
+                canvasContext.fill();
+            };
+
+            const linkWidth = iconSize * 0.55;
+            const linkHeight = iconSize * 0.28;
+            const linkRadius = iconSize * 0.12;
+            const rotation = -Math.PI / 6;
+
+            canvasContext.save();
+            canvasContext.translate(iconSize * 0.08, iconSize * 0.4);
+            canvasContext.rotate(rotation);
+            drawRoundedRect(linkWidth, linkHeight, linkRadius);
+            canvasContext.restore();
+
+            canvasContext.save();
+            canvasContext.translate(iconSize * 0.45, iconSize * 0.05);
+            canvasContext.rotate(rotation);
+            drawRoundedRect(linkWidth, linkHeight, linkRadius);
+            canvasContext.restore();
+
+            drawPolygon([
+                [0.38, 0.32], [0.55, 0.22], [0.62, 0.38], [0.5, 0.48], [0.56, 0.62], [0.4, 0.58]
+            ]);
         }
 
         canvasContext.restore();
