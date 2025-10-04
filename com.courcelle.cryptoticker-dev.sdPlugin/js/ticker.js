@@ -507,6 +507,7 @@ const tickerAction = {
     },
 
     updateCanvasCandles: function (context, settings, candlesNormalized) {
+        candlesNormalized = candlesNormalized || [];
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
         const sizeMultiplier = this.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
@@ -731,7 +732,9 @@ const tickerAction = {
             const response = await fetch(
                 tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=" + candlesCount
             );
-            const val = this.getCandlesNormalized((await response.json()).candles);
+            const responseJson = await response.json();
+            const preparedCandles = this.prepareCandlesForDisplay(responseJson.candles, candlesCount);
+            const val = this.getCandlesNormalized(preparedCandles);
             cache[t] = now;
             cache[c] = val;
             candlesCache[cacheKey] = cache;
@@ -765,9 +768,62 @@ const tickerAction = {
 
         return interval;
     },
+    prepareCandlesForDisplay: function (candles, maxCount) {
+        if (!Array.isArray(candles) || candles.length === 0) {
+            return [];
+        }
+
+        const sanitized = candles
+            .map(function (candle) {
+                if (!candle) {
+                    return null;
+                }
+
+                let ts = candle["ts"];
+                if (typeof ts !== "number") {
+                    const openTime = candle["openTime"];
+                    if (openTime) {
+                        const parsedOpenTime = Date.parse(openTime);
+                        if (!isNaN(parsedOpenTime)) {
+                            ts = Math.floor(parsedOpenTime / 1000);
+                        }
+                    }
+                }
+
+                if (typeof ts !== "number" || isNaN(ts)) {
+                    return null;
+                }
+
+                return {
+                    candle: candle,
+                    ts: ts
+                };
+            })
+            .filter(function (item) {
+                return item !== null;
+            })
+            .sort(function (a, b) {
+                return a.ts - b.ts;
+            })
+            .map(function (item) {
+                if (item.candle["ts"] === item.ts) {
+                    return item.candle;
+                }
+
+                return Object.assign({}, item.candle, {
+                    "ts": item.ts
+                });
+            });
+
+        if (typeof maxCount === "number" && maxCount > 0 && sanitized.length > maxCount) {
+            return sanitized.slice(-maxCount);
+        }
+
+        return sanitized;
+    },
     getCandlesNormalized: function (candles) {
         let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
-        candles.forEach(function (candle) {
+        (candles || []).forEach(function (candle) {
             timeMin = Math.min(timeMin, candle["ts"]);
             timeMax = Math.max(timeMax, candle["ts"]);
 
@@ -788,7 +844,7 @@ const tickerAction = {
 
         const jThis = this;
         const candlesNormalized = [];
-        candles.forEach(function (candle) {
+        (candles || []).forEach(function (candle) {
             candlesNormalized.push({
                 timePercent: jThis.normalizeValue(candle["ts"], timeMin, timeMax),
                 openPercent: jThis.normalizeValue(candle["open"], min, max),
