@@ -1,4 +1,5 @@
 # Repository Guidelines
+This project is a Stream Deck plugin; The docs for the SDK are located at https://docs.elgato.com/streamdeck/sdk/introduction/getting-started/ (and it's sub pages).
 
 ## Project Structure & Module Organization
 - Source: `com.courcelle.cryptoticker.sdPlugin/` (plugin bundle).
