@@ -18,11 +18,27 @@
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
 
 ## Installation
-- Run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.dev.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to use the dev version
-- Run `mv com.courcelle.cryptoticker.sdPlugin com.courcelle.cryptoticker-dev.sdPlugin` to use the dev version
-- Run `streamdeck link ./com.courcelle.cryptoticker.sdPlugin` after having installed the [Elgato's CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started)
-- Run `mv com.courcelle.cryptoticker-dev.sdPlugin com.courcelle.cryptoticker.sdPlugin` to use the dev version
-- Once finished with testing, run `cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json` to go back to public manifest
+- Run the following to be able to use the `dev` version in the Stream Deck (you need to have the [Elgato's CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started) installed):
+```
+cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.dev.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
+mv com.courcelle.cryptoticker.sdPlugin com.courcelle.cryptoticker-dev.sdPlugin
+streamdeck link ./com.courcelle.cryptoticker-dev.sdPlugin
+# Open the Stream Deck UI, quit it and relaunch it
+# A "Crypto Ticker PRO-dev" plugin should be listed for you to test
+```
+
+- To debug:
+```
+streamdeck dev
+open "http://localhost:23654/"
+```
+
+- Once finished testing, revert back to normal:
+```
+streamdeck unlink com.courcelle.cryptoticker-dev
+mv com.courcelle.cryptoticker-dev.sdPlugin com.courcelle.cryptoticker.sdPlugin
+cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
+```
 
 ## Packaging
 - Bump the version in `src/com.courcelle.cryptoticker.sdPlugin/manifest.json`.

@@ -52,7 +52,7 @@ const settingsConfig = {
         "value": document.getElementById("digits")
     },
     "priceFormat": {
-        "default": "full",
+        "default": "compact",
         "value": document.getElementById("priceFormat")
     },
     "font": {
@@ -68,7 +68,7 @@ const settingsConfig = {
         "value": document.getElementById("fontSizePrice")
     },
     "fontSizeChange": {
-        "default": 24,
+        "default": 19,
         "value": document.getElementById("fontSizeChange")
     },
     "backgroundColor": {

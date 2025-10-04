@@ -33,8 +33,8 @@ const defaultSettings = {
     "font": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
     "fontSizeBase": 25,
     "fontSizePrice": 35,
-    "fontSizeChange": 24,
-    "priceFormat": "full",
+    "fontSizeChange": 19,
+    "priceFormat": "compact",
     "backgroundColor": "#000000",
     "textColor": "#ffffff",
     "displayHighLow": "on",
@@ -326,7 +326,7 @@ const tickerAction = {
         const currency = settings["currency"];
         const multiplier = settings["multiplier"] || 1;
         const digits = settings["digits"] || 2;
-        const priceFormat = settings["priceFormat"] || "full";
+        const priceFormat = settings["priceFormat"] || "compact";
         const parseNumberSetting = function(value, fallback) {
             const parsed = parseFloat(value);
             if (isNaN(parsed) || parsed <= 0) {
