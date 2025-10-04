@@ -662,7 +662,7 @@ const tickerAction = {
 
                 const roundedAuto = roundWithPrecision(autoValue, autoPrecision);
                 formattedValue = toLocale(roundedAuto, {
-                    minimumFractionDigits: autoPrecision > 0 ? autoPrecision : 0,
+                    minimumFractionDigits: Math.max(0, autoPrecision),
                     maximumFractionDigits: autoPrecision,
                     useGrouping: false
                 }) + autoSuffix;
