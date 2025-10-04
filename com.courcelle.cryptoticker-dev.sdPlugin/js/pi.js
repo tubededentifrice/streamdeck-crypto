@@ -220,6 +220,12 @@ const pi = {
             }
 
             selectPairDropdown.value = selectPairDropdown.value || savedPair;
+
+            const hasPairs = pairs.length > 0;
+            const dropdownGroup = document.getElementById("select-pair-dropdown-group");
+            if (dropdownGroup) {
+                dropdownGroup.style.display = hasPairs ? "" : "none";
+            }
         };
 
         const originalCallback = exchangeDropdown.onchange;
