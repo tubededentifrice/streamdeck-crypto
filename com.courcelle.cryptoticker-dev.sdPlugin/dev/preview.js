@@ -72,7 +72,7 @@ async function loadPreviews() {
                 settings.exchange
             );
         }
-        tickerAction.updateCanvasTicker(index + "-ticker", settings, tickerValues);
+        tickerAction.updateCanvasTicker(index + "-ticker", settings, tickerValues, tickerValues && tickerValues.connectionState);
 
         canvas = candleCanvas;
         canvasContext = candleCanvas.getContext("2d");
@@ -82,7 +82,7 @@ async function loadPreviews() {
         } else {
             candleValues = await tickerAction.getCandles(settings);
         }
-        tickerAction.updateCanvasCandles(index + "-candles", settings, candleValues);
+        tickerAction.updateCanvasCandles(index + "-candles", settings, candleValues, tickerValues && tickerValues.connectionState);
     }
 }
 

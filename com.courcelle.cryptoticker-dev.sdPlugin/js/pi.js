@@ -109,6 +109,16 @@ const settingsConfig = {
             this.value.checked = (val!="off");
         }
     },
+    "displayConnectionStatusIcon": {
+        "default": "OFF",
+        "value": document.getElementById("displayConnectionStatusIcon"),
+        "getValue": function() {
+            return (this.value.value || "OFF").toUpperCase();
+        },
+        "setValue": function(val) {
+            this.value.value = (val || "OFF").toUpperCase();
+        }
+    },
     "alertRule": {
         "default": "",
         "value": document.getElementById("alertRule")

@@ -1,17 +1,25 @@
 (function (root, factory) {
     if (typeof module === "object" && module.exports) {
         module.exports = factory(
-            require("./subscription-key")
+            require("./subscription-key"),
+            require("./connection-states")
         );
     } else {
         root.CryptoTickerProviders = root.CryptoTickerProviders || {};
         const exports = factory(
-            root.CryptoTickerProviders
+            root.CryptoTickerProviders,
+            root.CryptoTickerConnectionStates
         );
         root.CryptoTickerProviders.TickerSubscriptionManager = exports.TickerSubscriptionManager;
     }
-}(typeof self !== "undefined" ? self : this, function (subscriptionKeyModule) {
+}(typeof self !== "undefined" ? self : this, function (subscriptionKeyModule, connectionStatesModule) {
     const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
+    const ConnectionStates = connectionStatesModule || {
+        LIVE: "live",
+        DETACHED: "detached",
+        BACKUP: "backup",
+        BROKEN: "broken"
+    };
 
     const DEFAULT_FALLBACK_POLL_INTERVAL_MS = 60000;
     const DEFAULT_STALE_TICKER_TIMEOUT_MS = 5 * 60 * 1000;
@@ -49,6 +57,7 @@
             this.subscriptionKeyBuilder = typeof opts.buildSubscriptionKey === "function" ? opts.buildSubscriptionKey : buildSubscriptionKey;
             this.fallbackPollIntervalMs = typeof opts.fallbackPollIntervalMs === "number" ? opts.fallbackPollIntervalMs : DEFAULT_FALLBACK_POLL_INTERVAL_MS;
             this.staleTickerTimeoutMs = typeof opts.staleTickerTimeoutMs === "number" ? opts.staleTickerTimeoutMs : DEFAULT_STALE_TICKER_TIMEOUT_MS;
+            this.connectionStates = ConnectionStates;
 
             this.entries = {};
             this.cache = {};
@@ -73,6 +82,7 @@
             const self = this;
             if (this.fetchTickerFn) {
                 this.fetchTickerFn(entry.params).then(function (ticker) {
+                    self.applyTickerStateFromFetch(entry, ticker);
                     self.cache[entry.key] = ticker;
                     self.notifySubscribers(entry, ticker);
                 }).catch(function (err) {
@@ -124,6 +134,7 @@
             }
 
             entry.lastStreamUpdate = Date.now();
+            this.setEntryConnectionState(entry, this.connectionStates.LIVE, ticker);
             this.cache[key] = ticker;
             this.notifySubscribers(entry, ticker);
         }
@@ -257,10 +268,12 @@
 
             const self = this;
             this.fetchTickerFn(entry.params).then(function (ticker) {
+                self.applyTickerStateFromFetch(entry, ticker);
                 self.cache[entry.key] = ticker;
                 self.notifySubscribers(entry, ticker);
             }).catch(function (err) {
                 self.logger("TickerSubscriptionManager: fallback fetch error", err);
+                self.handleFetchError(entry);
             });
         }
 
@@ -293,12 +306,63 @@
                     streamingActive: false,
                     lastStreamUpdate: 0,
                     fallbackTimerId: null,
-                    meta: {}
+                    meta: {},
+                    connectionState: null
                 };
                 this.entries[key] = entry;
             }
 
             return entry;
+        }
+
+        setEntryConnectionState(entry, state, ticker) {
+            if (!entry) {
+                return;
+            }
+
+            entry.connectionState = state;
+            if (ticker && typeof ticker === "object") {
+                ticker.connectionState = state;
+            }
+        }
+
+        applyTickerStateFromFetch(entry, ticker) {
+            if (!entry || !ticker) {
+                return;
+            }
+
+            const state = ticker.connectionState || (entry.streamingActive ? this.connectionStates.LIVE : this.connectionStates.DETACHED);
+            this.setEntryConnectionState(entry, state, ticker);
+        }
+
+        handleFetchError(entry) {
+            if (!entry) {
+                return;
+            }
+
+            this.setEntryConnectionState(entry, this.connectionStates.BROKEN);
+            const key = entry.key;
+            const cached = this.cache[key];
+            if (cached) {
+                cached.connectionState = this.connectionStates.BROKEN;
+                this.notifySubscribers(entry, cached);
+                return;
+            }
+
+            const fallbackTicker = {
+                changeDaily: 0,
+                changeDailyPercent: 0,
+                last: 0,
+                volume: 0,
+                high: 0,
+                low: 0,
+                pair: entry.params.symbol,
+                pairDisplay: entry.params.symbol,
+                connectionState: this.connectionStates.BROKEN
+            };
+
+            this.cache[key] = fallbackTicker;
+            this.notifySubscribers(entry, fallbackTicker);
         }
     }
 

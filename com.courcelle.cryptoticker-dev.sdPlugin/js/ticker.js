@@ -50,12 +50,21 @@ const buildSubscriptionKey = subscriptionKeyModule && subscriptionKeyModule.buil
             return exchangePart + "__" + symbolPart + convertPart;
         };
 
+const connectionStatesModule = requireOrNull("./providers/connection-states");
+const connectionStates = connectionStatesModule || (typeof CryptoTickerConnectionStates !== "undefined" ? CryptoTickerConnectionStates : {
+    LIVE: "live",
+    DETACHED: "detached",
+    BACKUP: "backup",
+    BROKEN: "broken"
+});
+
 let loggingEnabled = false;
 let websocket = null;
 let canvas;
 let canvasContext;
 const contextDetails = {};  // context => settings, ensure a single subscription per context
 const contextSubscriptions = {}; // context => provider subscription handle
+const contextConnectionStates = {};
 const screenshotMode = false; // Allows rendering the canvas in an external preview
 
 const alertStatuses = {};
@@ -85,6 +94,7 @@ const defaultSettings = {
     "displayHighLow": "on",
     "displayHighLowBar": "on",
     "displayDailyChange": "on",
+    "displayConnectionStatusIcon": "OFF",
     "alertRule": "",
     "backgroundColorRule": "",
     "textColorRule": "",
@@ -97,6 +107,32 @@ const tickerAction = {
         if (loggingEnabled) {
             console.log(...data);
         }
+    },
+
+    setContextConnectionState: function (context, state) {
+        if (!context) {
+            return;
+        }
+
+        if (state) {
+            contextConnectionStates[context] = state;
+        }
+    },
+
+    getContextConnectionState: function (context) {
+        if (!context) {
+            return null;
+        }
+
+        return contextConnectionStates[context] || null;
+    },
+
+    clearContextConnectionState: function (context) {
+        if (!context) {
+            return;
+        }
+
+        delete contextConnectionStates[context];
     },
 
     getProviderRegistry: function () {
@@ -213,6 +249,7 @@ const tickerAction = {
                 this.log("Error unsubscribing from provider", err);
             }
             delete contextSubscriptions[context];
+            this.clearContextConnectionState(context);
         }
 
         const registry = this.getProviderRegistry();
@@ -233,6 +270,7 @@ const tickerAction = {
                         return;
                     }
 
+                    self.setContextConnectionState(details.context, tickerValues && tickerValues.connectionState);
                     try {
                         await self.updateCanvas(details.context, details.settings, tickerValues);
                     } catch (err) {
@@ -241,6 +279,7 @@ const tickerAction = {
                 },
                 onError: function (error) {
                     self.log("Provider subscription error", error);
+                    self.setContextConnectionState(context, connectionStates.BROKEN);
                 }
             });
 
@@ -272,6 +311,7 @@ const tickerAction = {
     updateTicker: async function (context, settings) {
         const pair = settings["pair"];
         const values = await this.getTickerValue(pair, settings.currency, settings.exchange, settings.fromCurrency);
+        this.setContextConnectionState(context, values && values.connectionState);
         this.updateCanvas(context, settings, values);
     },
     initCanvas: function () {
@@ -281,14 +321,16 @@ const tickerAction = {
     updateCanvas: async function (context, settings, tickerValues) {
         this.log("updateCanvas", context, settings, tickerValues);
 
+        const connectionState = (tickerValues && tickerValues.connectionState) || this.getContextConnectionState(context);
+
         switch (settings.mode) {
             case "candles":
                 const candleValues = await this.getCandles(settings);
-                this.updateCanvasCandles(context, settings, candleValues);
+                this.updateCanvasCandles(context, settings, candleValues, connectionState);
                 break;
             case "ticker":
             default:
-                this.updateCanvasTicker(context, settings, tickerValues);
+                this.updateCanvasTicker(context, settings, tickerValues, connectionState);
                 break;
         }
     },
@@ -305,7 +347,7 @@ const tickerAction = {
 
         return Math.min(60, Math.max(5, parsed));
     },
-    updateCanvasTicker: function (context, settings, values) {
+    updateCanvasTicker: function (context, settings, values, connectionState) {
         this.log("updateCanvasTicker", context, settings, values);
 
         const canvasWidth = canvas.width;
@@ -334,6 +376,7 @@ const tickerAction = {
         const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
         let backgroundColor = settings["backgroundColor"] || "#000000";
         let textColor = settings["textColor"] || "#ffffff";
+        const effectiveConnectionState = connectionState || (values && values.connectionState) || null;
 
         let alertMode = false;
         const changeDaily = values["changeDaily"];
@@ -497,10 +540,96 @@ const tickerAction = {
             canvasContext.fill();
         }
 
+        const connectionIconSetting = (settings["displayConnectionStatusIcon"] || "OFF").toUpperCase();
+        if (connectionIconSetting !== "OFF") {
+            this.renderConnectionStatusIcon(
+                effectiveConnectionState,
+                textColor,
+                sizeMultiplier,
+                connectionIconSetting
+            );
+        }
+
         this.sendCanvas(context);
     },
 
-    updateCanvasCandles: function (context, settings, candlesNormalized) {
+    renderConnectionStatusIcon: function (state, color, sizeMultiplier, position) {
+        if (!state) {
+            return;
+        }
+
+        const pos = (position || "OFF").toUpperCase();
+        if (pos === "OFF") {
+            return;
+        }
+
+        const iconState = String(state).toLowerCase();
+        const iconSize = 20 * sizeMultiplier;
+        const margin = 4 * sizeMultiplier;
+
+        let x = canvas.width - iconSize - margin;
+        let y = margin;
+        if (pos === "BOTTOM_LEFT") {
+            x = margin;
+            y = canvas.height - iconSize - margin;
+        }
+
+        canvasContext.save();
+        canvasContext.translate(x, y);
+        canvasContext.lineWidth = Math.max(1.5 * sizeMultiplier, 1);
+        canvasContext.strokeStyle = color;
+        canvasContext.fillStyle = color;
+        canvasContext.setLineDash([]);
+
+        if (iconState === connectionStates.LIVE) {
+            canvasContext.beginPath();
+            canvasContext.moveTo(iconSize * 0.35, 0);
+            canvasContext.lineTo(iconSize, 0);
+            canvasContext.lineTo(iconSize * 0.55, iconSize * 0.55);
+            canvasContext.lineTo(iconSize * 0.9, iconSize * 0.55);
+            canvasContext.lineTo(iconSize * 0.45, iconSize);
+            canvasContext.lineTo(iconSize * 0.6, iconSize * 0.45);
+            canvasContext.lineTo(iconSize * 0.2, iconSize * 0.45);
+            canvasContext.closePath();
+            canvasContext.fill();
+        } else if (iconState === connectionStates.DETACHED) {
+            canvasContext.setLineDash([iconSize * 0.35, iconSize * 0.2]);
+            canvasContext.beginPath();
+            canvasContext.moveTo(0, iconSize * 0.5);
+            canvasContext.lineTo(iconSize, iconSize * 0.5);
+            canvasContext.stroke();
+        } else if (iconState === connectionStates.BACKUP) {
+            canvasContext.setLineDash([iconSize * 0.28, iconSize * 0.18]);
+            canvasContext.beginPath();
+            canvasContext.moveTo(0, iconSize * 0.35);
+            canvasContext.lineTo(iconSize, iconSize * 0.35);
+            canvasContext.stroke();
+            canvasContext.beginPath();
+            canvasContext.moveTo(0, iconSize * 0.65);
+            canvasContext.lineTo(iconSize, iconSize * 0.65);
+            canvasContext.stroke();
+        } else if (iconState === connectionStates.BROKEN) {
+            canvasContext.setLineDash([]);
+            const midY = iconSize * 0.5;
+            const gap = iconSize * 0.1;
+            canvasContext.beginPath();
+            canvasContext.moveTo(0, midY - gap);
+            canvasContext.lineTo(iconSize * 0.35, midY);
+            canvasContext.stroke();
+            canvasContext.beginPath();
+            canvasContext.moveTo(iconSize, midY + gap);
+            canvasContext.lineTo(iconSize * 0.65, midY);
+            canvasContext.stroke();
+            canvasContext.beginPath();
+            canvasContext.moveTo(iconSize * 0.42, midY - iconSize * 0.25);
+            canvasContext.lineTo(iconSize * 0.6, midY + iconSize * 0.25);
+            canvasContext.stroke();
+        }
+
+        canvasContext.restore();
+    },
+
+    updateCanvasCandles: function (context, settings, candlesNormalized, connectionState) {
         candlesNormalized = candlesNormalized || [];
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
@@ -509,6 +638,7 @@ const tickerAction = {
         const padding = 10 * sizeMultiplier;
         let backgroundColor = settings["backgroundColor"];
         let textColor = settings["textColor"];
+        const effectiveConnectionState = connectionState || this.getContextConnectionState(context);
 
         const pairDisplay = settings["title"] || settings["pair"];
         const interval = settings["candlesInterval"] || "1h";
@@ -559,6 +689,16 @@ const tickerAction = {
             canvasContext.strokeStyle = candleColor;
             canvasContext.stroke();
         });
+
+        const connectionIconSettingCandles = (settings["displayConnectionStatusIcon"] || "OFF").toUpperCase();
+        if (connectionIconSettingCandles !== "OFF") {
+            this.renderConnectionStatusIcon(
+                effectiveConnectionState,
+                textColor,
+                sizeMultiplier,
+                connectionIconSettingCandles
+            );
+        }
 
         this.sendCanvas(context);
     },
@@ -680,13 +820,20 @@ const tickerAction = {
         };
 
         try {
-            return await provider.fetchTicker(params);
+            const ticker = await provider.fetchTicker(params);
+            if (ticker && typeof ticker === "object" && !ticker.connectionState) {
+                ticker.connectionState = connectionStates.DETACHED;
+            }
+            return ticker;
         } catch (err) {
             this.log("Error fetching ticker", err);
             const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, resolvedFrom, resolvedTo);
             if (provider && typeof provider.getCachedTicker === "function") {
                 const cached = provider.getCachedTicker(subscriptionKey);
                 if (cached) {
+                    if (!cached.connectionState) {
+                        cached.connectionState = connectionStates.BACKUP;
+                    }
                     return cached;
                 }
             }
@@ -699,7 +846,8 @@ const tickerAction = {
                 "high": 0,
                 "low": 0,
                 "pair": pair,
-                "pairDisplay": pair
+                "pairDisplay": pair,
+                "connectionState": connectionStates.BROKEN
             };
         }
     },

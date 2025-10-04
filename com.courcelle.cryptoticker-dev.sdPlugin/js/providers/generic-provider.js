@@ -3,21 +3,29 @@
         module.exports = factory(
             require("./provider-interface"),
             require("./subscription-key"),
-            require("./ticker-subscription-manager")
+            require("./ticker-subscription-manager"),
+            require("./connection-states")
         );
     } else {
         root.CryptoTickerProviders = root.CryptoTickerProviders || {};
         const exports = factory(
             root.CryptoTickerProviders,
             root.CryptoTickerProviders,
-            root.CryptoTickerProviders
+            root.CryptoTickerProviders,
+            root.CryptoTickerConnectionStates
         );
         root.CryptoTickerProviders.GenericProvider = exports.GenericProvider;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, subscriptionKeyModule, managerModule) {
+}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, subscriptionKeyModule, managerModule, connectionStatesModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
     const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
+    const ConnectionStates = connectionStatesModule || {
+        LIVE: "live",
+        DETACHED: "detached",
+        BACKUP: "backup",
+        BROKEN: "broken"
+    };
 
     const CONNECTION_STATE_CONNECTED = "Connected";
     const DEFAULT_RETRY_DELAY_MS = 5000;
@@ -241,15 +249,20 @@
             return fetch(url).then(function (response) {
                 return response.json();
             }).then(function (json) {
-                return self.transformTickerResponse(json);
+                const ticker = self.transformTickerResponse(json);
+                ticker.connectionState = ConnectionStates.BACKUP;
+                return ticker;
             }).catch(function (err) {
                 self.logger("GenericProvider: error fetching ticker", err);
                 const key = self.subscriptionManager.buildKey(exchange, symbol, fromCurrency, toCurrency);
                 const cached = self.subscriptionManager.getCachedTicker(key);
                 if (cached) {
+                    cached.connectionState = cached.connectionState || ConnectionStates.BACKUP;
                     return cached;
                 }
-                return self.buildEmptyTicker(symbol);
+                const fallback = self.buildEmptyTicker(symbol);
+                fallback.connectionState = ConnectionStates.BROKEN;
+                return fallback;
             });
         }
 
@@ -323,7 +336,8 @@
                 high: 0,
                 low: 0,
                 pair: sym,
-                pairDisplay: sym
+                pairDisplay: sym,
+                connectionState: ConnectionStates.BROKEN
             };
         }
     }

@@ -172,7 +172,16 @@
                 </div>
             </div>
         </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Connection status icon</div>
+            <select class="sdpi-item-value select" id="displayConnectionStatusIcon" name="displayConnectionStatusIcon">
+                <option value="OFF">Disabled</option>
+                <option value="TOP_RIGHT">Top right corner</option>
+                <option value="BOTTOM_LEFT">Bottom left corner</option>
+            </select>
+        </div>
 
+        <script src="js/providers/connection-states.js"></script>
         <script src="js/pi/providers/index.js"></script>
         <script src="js/pi/providers/binance.js"></script>
         <script src="js/pi/providers/bitfinex.js"></script>

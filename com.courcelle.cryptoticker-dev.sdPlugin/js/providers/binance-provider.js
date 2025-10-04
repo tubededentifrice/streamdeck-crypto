@@ -3,21 +3,29 @@
         module.exports = factory(
             require("./provider-interface"),
             require("./generic-provider"),
-            require("./ticker-subscription-manager")
+            require("./ticker-subscription-manager"),
+            require("./connection-states")
         );
     } else {
         root.CryptoTickerProviders = root.CryptoTickerProviders || {};
         const exports = factory(
             root.CryptoTickerProviders,
             root.CryptoTickerProviders,
-            root.CryptoTickerProviders
+            root.CryptoTickerProviders,
+            root.CryptoTickerConnectionStates
         );
         root.CryptoTickerProviders.BinanceProvider = exports.BinanceProvider;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule) {
+}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
     const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
+    const ConnectionStates = connectionStatesModule || {
+        LIVE: "live",
+        DETACHED: "detached",
+        BACKUP: "backup",
+        BROKEN: "broken"
+    };
 
     const DEFAULT_WS_RECONNECT_DELAY_MS = 5000;
 
@@ -158,11 +166,17 @@
                     throw new Error("BinanceProvider: REST response not ok for " + symbol);
                 }
                 const json = await response.json();
-                return this.transformRestTicker(json, params, symbol);
+                const ticker = this.transformRestTicker(json, params, symbol);
+                ticker.connectionState = ConnectionStates.DETACHED;
+                return ticker;
             } catch (err) {
                 this.logger("BinanceProvider: REST fetch error", err);
                 if (this.genericFallback && typeof this.genericFallback.fetchTicker === "function") {
-                    return this.genericFallback.fetchTicker(params);
+                    const fallbackTicker = await this.genericFallback.fetchTicker(params);
+                    if (fallbackTicker && typeof fallbackTicker === "object" && !fallbackTicker.connectionState) {
+                        fallbackTicker.connectionState = ConnectionStates.BACKUP;
+                    }
+                    return fallbackTicker;
                 }
                 throw err;
             }
@@ -177,14 +191,12 @@
             meta.binanceSymbol = this.resolveSymbol(entry.params);
             if (!meta.binanceSymbol) {
                 this.logger("BinanceProvider: cannot subscribe, unresolved symbol", entry.params);
-                this.ensureGenericFallback(entry);
                 return false;
             }
 
             const WebSocketCtor = getWebSocketConstructor();
             if (!WebSocketCtor) {
                 this.logger("BinanceProvider: WebSocket not available in this environment");
-                this.ensureGenericFallback(entry);
                 return false;
             }
 
@@ -262,7 +274,6 @@
             const ctor = WebSocketCtor || getWebSocketConstructor();
             if (!ctor) {
                 this.logger("BinanceProvider: WebSocket constructor unavailable");
-                this.ensureGenericFallback(entry);
                 return;
             }
 
