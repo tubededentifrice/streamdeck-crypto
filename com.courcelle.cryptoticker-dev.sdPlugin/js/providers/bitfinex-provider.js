@@ -21,6 +21,22 @@
 
     const DEFAULT_WS_RECONNECT_DELAY_MS = 5000;
 
+    function getWebSocketConstructor() {
+        if (typeof WebSocket !== "undefined") {
+            return WebSocket;
+        }
+
+        if (typeof window !== "undefined" && window.WebSocket) {
+            return window.WebSocket;
+        }
+
+        if (typeof global !== "undefined" && global.WebSocket) {
+            return global.WebSocket;
+        }
+
+        return null;
+    }
+
     function toNumber(val) {
         const parsed = parseFloat(val);
         if (isNaN(parsed)) {
@@ -140,19 +156,19 @@
                 return false;
             }
 
-            if (typeof WebSocket === "undefined") {
+            const WebSocketCtor = getWebSocketConstructor();
+            if (!WebSocketCtor) {
                 this.logger("BitfinexProvider: WebSocket not available in this environment");
                 this.ensureGenericFallback(entry);
                 return false;
             }
 
-            if (meta.ws && meta.ws.readyState === WebSocket.OPEN) {
+            if (meta.ws && meta.ws.readyState === WebSocketCtor.OPEN) {
                 entry.streamingActive = true;
-                this.detachGenericFallback(entry);
                 return true;
             }
 
-            this.connectWebSocket(entry);
+            this.connectWebSocket(entry, WebSocketCtor);
             return true;
         }
 
@@ -184,7 +200,6 @@
             safeClearTimeout(meta.wsReconnectTimer);
             meta.wsReconnectTimer = null;
             entry.streamingActive = false;
-            this.detachGenericFallback(entry);
             return true;
         }
 
@@ -203,11 +218,13 @@
             }
 
             const sanitized = original.replace(/[:/]/g, "");
-            if (sanitized.startsWith("T")) {
-                return sanitized;
+            if (!sanitized) {
+                return null;
             }
 
-            return "T" + sanitized;
+            const upper = sanitized.toUpperCase();
+            const withoutLeadingT = upper.startsWith("T") ? upper.substring(1) : upper;
+            return "t" + withoutLeadingT;
         }
 
         buildRestUrl(symbol) {
@@ -215,7 +232,7 @@
             return base + "/v2/ticker/" + encodeURIComponent(symbol);
         }
 
-        connectWebSocket(entry) {
+        connectWebSocket(entry, WebSocketCtor) {
             const meta = this.ensureEntryMeta(entry);
             const symbol = meta.bitfinexSymbol;
             const url = this.wsBaseUrl;
@@ -227,12 +244,18 @@
             safeClearTimeout(meta.wsReconnectTimer);
             meta.wsReconnectTimer = null;
 
+            const ctor = WebSocketCtor || getWebSocketConstructor();
+            if (!ctor) {
+                this.logger("BitfinexProvider: WebSocket constructor unavailable");
+                this.ensureGenericFallback(entry);
+                return;
+            }
+
             let ws;
             try {
-                ws = new WebSocket(url);
+                ws = new ctor(url);
             } catch (err) {
                 this.logger("BitfinexProvider: error creating WebSocket", err);
-                this.ensureGenericFallback(entry);
                 return;
             }
 
@@ -262,7 +285,6 @@
             ws.onerror = function (err) {
                 self.logger("BitfinexProvider: WebSocket error", err);
                 entry.streamingActive = false;
-                self.ensureGenericFallback(entry);
             };
 
             ws.onclose = function () {
@@ -271,7 +293,6 @@
                 if (!meta.wsClosedByUser) {
                     self.scheduleReconnect(entry);
                 }
-                self.ensureGenericFallback(entry);
             };
         }
 
@@ -311,7 +332,6 @@
                 meta.subscribed = true;
                 meta.chanId = eventObj.chanId;
                 entry.streamingActive = true;
-                this.detachGenericFallback(entry);
                 return;
             }
 
@@ -370,47 +390,6 @@
                     self.connectWebSocket(existingEntry);
                 }
             }, this.wsReconnectDelayMs);
-        }
-
-        ensureGenericFallback(entry) {
-            if (!this.genericFallback || !entry) {
-                return;
-            }
-
-            const meta = this.ensureEntryMeta(entry);
-            if (meta.genericHandle) {
-                return;
-            }
-
-            try {
-                meta.genericHandle = this.genericFallback.subscribeTicker(entry.params, {
-                    onData: (ticker) => {
-                        this.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
-                    },
-                    onError: (err) => {
-                        this.logger("BitfinexProvider: generic fallback error", err);
-                    }
-                });
-            } catch (err) {
-                this.logger("BitfinexProvider: error subscribing to generic fallback", err);
-            }
-        }
-
-        detachGenericFallback(entry) {
-            if (!entry) {
-                return;
-            }
-
-            const meta = this.ensureEntryMeta(entry);
-            const handle = meta.genericHandle;
-            if (handle && typeof handle.unsubscribe === "function") {
-                try {
-                    handle.unsubscribe();
-                } catch (err) {
-                    this.logger("BitfinexProvider: error unsubscribing generic fallback", err);
-                }
-            }
-            meta.genericHandle = null;
         }
 
         transformRestTicker(json, params, resolvedSymbol) {

@@ -14,7 +14,7 @@
     const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
 
     const DEFAULT_FALLBACK_POLL_INTERVAL_MS = 60000;
-    const DEFAULT_STALE_TICKER_TIMEOUT_MS = 6 * 60 * 1000;
+    const DEFAULT_STALE_TICKER_TIMEOUT_MS = 5 * 60 * 1000;
 
     function noop() {}
 

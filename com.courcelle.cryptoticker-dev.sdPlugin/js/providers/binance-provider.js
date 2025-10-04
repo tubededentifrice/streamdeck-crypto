@@ -21,6 +21,22 @@
 
     const DEFAULT_WS_RECONNECT_DELAY_MS = 5000;
 
+    function getWebSocketConstructor() {
+        if (typeof WebSocket !== "undefined") {
+            return WebSocket;
+        }
+
+        if (typeof window !== "undefined" && window.WebSocket) {
+            return window.WebSocket;
+        }
+
+        if (typeof global !== "undefined" && global.WebSocket) {
+            return global.WebSocket;
+        }
+
+        return null;
+    }
+
     function toNumber(value) {
         const parsed = parseFloat(value);
         if (isNaN(parsed)) {
@@ -140,19 +156,19 @@
                 return false;
             }
 
-            if (typeof WebSocket === "undefined") {
+            const WebSocketCtor = getWebSocketConstructor();
+            if (!WebSocketCtor) {
                 this.logger("BinanceProvider: WebSocket not available in this environment");
                 this.ensureGenericFallback(entry);
                 return false;
             }
 
-            if (meta.ws && meta.ws.readyState === WebSocket.OPEN) {
+            if (meta.ws && meta.ws.readyState === WebSocketCtor.OPEN) {
                 entry.streamingActive = true;
-                this.detachGenericFallback(entry);
                 return true;
             }
 
-            this.connectWebSocket(entry);
+            this.connectWebSocket(entry, WebSocketCtor);
             return true;
         }
 
@@ -174,7 +190,6 @@
             safeClearTimeout(meta.wsReconnectTimer);
             meta.wsReconnectTimer = null;
             entry.streamingActive = false;
-            this.detachGenericFallback(entry);
             return true;
         }
 
@@ -209,7 +224,7 @@
             return base + "/" + symbol.toLowerCase() + "@ticker";
         }
 
-        connectWebSocket(entry) {
+        connectWebSocket(entry, WebSocketCtor) {
             const meta = this.ensureEntryMeta(entry);
             const symbol = meta.binanceSymbol;
             const url = this.buildWsUrl(symbol);
@@ -219,12 +234,18 @@
             safeClearTimeout(meta.wsReconnectTimer);
             meta.wsReconnectTimer = null;
 
+            const ctor = WebSocketCtor || getWebSocketConstructor();
+            if (!ctor) {
+                this.logger("BinanceProvider: WebSocket constructor unavailable");
+                this.ensureGenericFallback(entry);
+                return;
+            }
+
             let ws;
             try {
-                ws = new WebSocket(url);
+                ws = new ctor(url);
             } catch (err) {
                 this.logger("BinanceProvider: error creating WebSocket", err);
-                this.ensureGenericFallback(entry);
                 return;
             }
 
@@ -233,7 +254,6 @@
 
             ws.onopen = function () {
                 entry.streamingActive = true;
-                self.detachGenericFallback(entry);
             };
 
             ws.onmessage = function (event) {
@@ -249,7 +269,6 @@
             ws.onerror = function (err) {
                 self.logger("BinanceProvider: WebSocket error", err);
                 entry.streamingActive = false;
-                self.ensureGenericFallback(entry);
             };
 
             ws.onclose = function () {
@@ -257,7 +276,6 @@
                 if (!meta.wsClosedByUser) {
                     self.scheduleReconnect(entry);
                 }
-                self.ensureGenericFallback(entry);
             };
         }
 
@@ -279,47 +297,6 @@
                     self.connectWebSocket(existingEntry);
                 }
             }, this.wsReconnectDelayMs);
-        }
-
-        ensureGenericFallback(entry) {
-            if (!this.genericFallback || !entry) {
-                return;
-            }
-
-            const meta = this.ensureEntryMeta(entry);
-            if (meta.genericHandle) {
-                return;
-            }
-
-            try {
-                meta.genericHandle = this.genericFallback.subscribeTicker(entry.params, {
-                    onData: (ticker) => {
-                        this.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
-                    },
-                    onError: (err) => {
-                        this.logger("BinanceProvider: generic fallback error", err);
-                    }
-                });
-            } catch (err) {
-                this.logger("BinanceProvider: error subscribing to generic fallback", err);
-            }
-        }
-
-        detachGenericFallback(entry) {
-            if (!entry) {
-                return;
-            }
-
-            const meta = this.ensureEntryMeta(entry);
-            const handle = meta.genericHandle;
-            if (handle && typeof handle.unsubscribe === "function") {
-                try {
-                    handle.unsubscribe();
-                } catch (err) {
-                    this.logger("BinanceProvider: error unsubscribing generic fallback", err);
-                }
-            }
-            meta.genericHandle = null;
         }
 
         transformRestTicker(json, params, resolvedSymbol) {
