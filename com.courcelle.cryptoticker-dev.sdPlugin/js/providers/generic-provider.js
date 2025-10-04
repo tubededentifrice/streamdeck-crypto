@@ -2,50 +2,64 @@
     if (typeof module === "object" && module.exports) {
         module.exports = factory(
             require("./provider-interface"),
-            require("./subscription-key")
+            require("./subscription-key"),
+            require("./ticker-subscription-manager")
         );
     } else {
         root.CryptoTickerProviders = root.CryptoTickerProviders || {};
         const exports = factory(
             root.CryptoTickerProviders,
+            root.CryptoTickerProviders,
             root.CryptoTickerProviders
         );
         root.CryptoTickerProviders.GenericProvider = exports.GenericProvider;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, subscriptionKeyModule) {
+}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, subscriptionKeyModule, managerModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
+    const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
 
     const CONNECTION_STATE_CONNECTED = "Connected";
     const DEFAULT_RETRY_DELAY_MS = 5000;
-    const DEFAULT_FALLBACK_POLL_INTERVAL_MS = 60000;
-    const DEFAULT_STALE_TICKER_TIMEOUT_MS = 6 * 60 * 1000;
-
-    function normalizeHandlers(handlers) {
-        const h = handlers || {};
-        return {
-            onData: typeof h.onData === "function" ? h.onData : null,
-            onError: typeof h.onError === "function" ? h.onError : null
-        };
-    }
 
     class GenericProvider extends ProviderInterface {
         constructor(options) {
             super(options);
             const opts = options || {};
             this.retryDelayMs = typeof opts.retryDelayMs === "number" ? opts.retryDelayMs : DEFAULT_RETRY_DELAY_MS;
-            this.fallbackPollIntervalMs = typeof opts.fallbackPollIntervalMs === "number" ? opts.fallbackPollIntervalMs : DEFAULT_FALLBACK_POLL_INTERVAL_MS;
-            this.staleTickerTimeoutMs = typeof opts.staleTickerTimeoutMs === "number" ? opts.staleTickerTimeoutMs : DEFAULT_STALE_TICKER_TIMEOUT_MS;
-            this.subscriptions = {};
-            this.cache = {};
             this.connection = null;
             this.shouldReconnect = true;
             this.connectionState = "Disconnected";
             this.startingConnection = false;
+
+            const managerOptions = {
+                logger: (...args) => {
+                    this.logger(...args);
+                },
+                fetchTicker: this.rawFetchTicker.bind(this),
+                subscribeStreaming: this.subscribeEntry.bind(this),
+                unsubscribeStreaming: this.unsubscribeEntry.bind(this),
+                ensureConnection: this.ensureConnection.bind(this),
+                buildSubscriptionKey: function (exchange, symbol, fromCurrency, toCurrency) {
+                    return buildSubscriptionKey(exchange, symbol, fromCurrency, toCurrency);
+                },
+                fallbackPollIntervalMs: opts.fallbackPollIntervalMs,
+                staleTickerTimeoutMs: opts.staleTickerTimeoutMs
+            };
+
+            this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
         }
 
         getId() {
             return "GENERIC";
+        }
+
+        subscribeTicker(params, handlers) {
+            return this.subscriptionManager.subscribe(params, handlers);
+        }
+
+        getCachedTicker(key) {
+            return this.subscriptionManager.getCachedTicker(key);
         }
 
         ensureConnection() {
@@ -71,7 +85,7 @@
                 });
                 this.connection.onreconnected(function () {
                     self.logger("GenericProvider: connection re-established, resubscribing.");
-                    self.resubscribeAll();
+                    self.onConnectionEstablished();
                 });
                 this.connection.onclose(function () {
                     self.connectionState = "Disconnected";
@@ -96,7 +110,7 @@
             this.connection.start().then(function () {
                 self.connectionState = CONNECTION_STATE_CONNECTED;
                 self.startingConnection = false;
-                self.flushPendingSubscriptions();
+                self.onConnectionEstablished();
             }).catch(function (err) {
                 self.connectionState = "Disconnected";
                 self.startingConnection = false;
@@ -111,136 +125,132 @@
             return this.connection && this.connectionState === CONNECTION_STATE_CONNECTED;
         }
 
-        subscribeTicker(params, handlers) {
-            const normalizedHandlers = normalizeHandlers(handlers);
-            const subscriptionKey = buildSubscriptionKey(
+        onConnectionEstablished() {
+            const self = this;
+            this.subscriptionManager.forEachEntry(function (entry) {
+                if (entry) {
+                    entry.streamingActive = false;
+                    if (entry.meta) {
+                        entry.meta.isSubscribed = false;
+                        entry.meta.pending = true;
+                    }
+                    self.subscriptionManager.ensureStreaming(entry);
+                }
+            });
+        }
+
+        subscribeEntry(entry) {
+            if (!entry) {
+                return false;
+            }
+
+            entry.meta = entry.meta || {};
+
+            if (!this.connection) {
+                this.ensureConnection();
+                entry.meta.pending = true;
+                entry.streamingActive = false;
+                return false;
+            }
+
+            if (!this.isConnected()) {
+                this.startConnection();
+                entry.meta.pending = true;
+                entry.streamingActive = false;
+                return false;
+            }
+
+            if (entry.meta.isSubscribed) {
+                entry.meta.pending = false;
+                return true;
+            }
+
+            entry.meta.pending = true;
+            const params = entry.params;
+            const self = this;
+
+            return this.connection.invoke(
+                "Subscribe",
                 params.exchange,
                 params.symbol,
                 params.fromCurrency,
                 params.toCurrency
-            );
-
-            let entry = this.subscriptions[subscriptionKey];
-            if (!entry) {
-                entry = {
-                    params: {
-                        exchange: params.exchange,
-                        symbol: params.symbol,
-                        fromCurrency: params.fromCurrency || null,
-                        toCurrency: params.toCurrency || null
-                    },
-                    subscribers: [],
-                    isSubscribed: false,
-                    pending: true,
-                    lastWsUpdate: 0,
-                    fallbackTimerId: null,
-                    key: subscriptionKey
-                };
-                this.subscriptions[subscriptionKey] = entry;
-            }
-
-            const subscriber = {
-                onData: normalizedHandlers.onData,
-                onError: normalizedHandlers.onError
-            };
-            entry.subscribers.push(subscriber);
-
-            this.ensureConnection();
-            this.subscribeEntry(entry);
-            this.startFallbackPolling(entry);
-
-            const self = this;
-            this.fetchTicker(entry.params).then(function (ticker) {
-                self.notifySubscribers(subscriptionKey, ticker);
-            }).catch(function (err) {
-                if (subscriber.onError) {
-                    subscriber.onError(err);
-                }
-            });
-
-            return {
-                key: subscriptionKey,
-                unsubscribe: function () {
-                    self.unsubscribeTicker(subscriptionKey, subscriber);
-                }
-            };
-        }
-
-        unsubscribeTicker(key, subscriber) {
-            const entry = this.subscriptions[key];
-            if (!entry) {
-                return;
-            }
-
-            const idx = entry.subscribers.indexOf(subscriber);
-            if (idx >= 0) {
-                entry.subscribers.splice(idx, 1);
-            }
-
-            if (entry.subscribers.length === 0) {
-                this.stopFallbackPolling(entry);
-                if (entry.isSubscribed && this.isConnected()) {
-                    try {
-                        this.connection.invoke(
-                            "Unsubscribe",
-                            entry.params.exchange,
-                            entry.params.symbol,
-                            entry.params.fromCurrency,
-                            entry.params.toCurrency
-                        ).catch((err) => {
-                            this.logger("GenericProvider: error invoking Unsubscribe", err);
-                        });
-                    } catch (err) {
-                        this.logger("GenericProvider: error invoking Unsubscribe", err);
-                    }
-                }
-                delete this.subscriptions[key];
-            }
-        }
-
-        subscribeEntry(entry) {
-            if (!this.connection || !this.isConnected()) {
-                entry.pending = true;
-                return;
-            }
-
-            if (entry.isSubscribed) {
-                return;
-            }
-
-            const self = this;
-            this.connection.invoke(
-                "Subscribe",
-                entry.params.exchange,
-                entry.params.symbol,
-                entry.params.fromCurrency,
-                entry.params.toCurrency
             ).then(function () {
-                entry.isSubscribed = true;
-                entry.pending = false;
+                entry.meta.isSubscribed = true;
+                entry.meta.pending = false;
+                entry.streamingActive = true;
+                return true;
             }).catch(function (err) {
-                entry.pending = true;
+                entry.meta.isSubscribed = false;
+                entry.meta.pending = false;
+                entry.streamingActive = false;
                 self.logger("GenericProvider: error invoking Subscribe", err);
+                return false;
             });
         }
 
-        flushPendingSubscriptions() {
-            const keys = Object.keys(this.subscriptions);
-            for (let i = 0; i < keys.length; i++) {
-                const entry = this.subscriptions[keys[i]];
-                entry.isSubscribed = false;
-                this.subscribeEntry(entry);
+        unsubscribeEntry(entry) {
+            if (!entry) {
+                return true;
             }
+
+            entry.meta = entry.meta || {};
+
+            if (!this.connection || !entry.meta.isSubscribed) {
+                entry.meta.isSubscribed = false;
+                entry.streamingActive = false;
+                return true;
+            }
+
+            const params = entry.params;
+            const self = this;
+
+            return this.connection.invoke(
+                "Unsubscribe",
+                params.exchange,
+                params.symbol,
+                params.fromCurrency,
+                params.toCurrency
+            ).then(function () {
+                entry.meta.isSubscribed = false;
+                entry.streamingActive = false;
+                return true;
+            }).catch(function (err) {
+                entry.meta.isSubscribed = false;
+                entry.streamingActive = false;
+                self.logger("GenericProvider: error invoking Unsubscribe", err);
+                return false;
+            });
         }
 
-        resubscribeAll() {
-            const keys = Object.keys(this.subscriptions);
-            for (let i = 0; i < keys.length; i++) {
-                const entry = this.subscriptions[keys[i]];
-                entry.isSubscribed = false;
-                entry.pending = true;
+        fetchTicker(params) {
+            return this.rawFetchTicker(params);
+        }
+
+        rawFetchTicker(params) {
+            const exchange = params.exchange;
+            const symbol = params.symbol;
+            const fromCurrency = params.fromCurrency || "USD";
+            const toCurrency = params.toCurrency || null;
+            let url = this.baseUrl + "/api/Ticker/json/" + exchange + "/" + symbol + "?fromCurrency=" + encodeURIComponent(fromCurrency);
+            if (toCurrency !== null) {
+                url += "&toCurrency=" + encodeURIComponent(toCurrency);
             }
-            this.flushPendingSubscriptions();
+
+            const self = this;
+            return fetch(url).then(function (response) {
+                return response.json();
+            }).then(function (json) {
+                return self.transformTickerResponse(json);
+            }).catch(function (err) {
+                self.logger("GenericProvider: error fetching ticker", err);
+                const key = self.subscriptionManager.buildKey(exchange, symbol, fromCurrency, toCurrency);
+                const cached = self.subscriptionManager.getCachedTicker(key);
+                if (cached) {
+                    return cached;
+                }
+                return self.buildEmptyTicker(symbol);
+            });
         }
 
         handleTickerMessage(message) {
@@ -252,125 +262,17 @@
             const symbol = message.symbol || message["symbol"];
             const fromCurrency = message.conversionFromCurrency || message["conversionFromCurrency"] || null;
             const toCurrency = message.conversionToCurrency || message["conversionToCurrency"] || null;
-            const key = buildSubscriptionKey(provider, symbol, fromCurrency, toCurrency);
-            const entry = this.subscriptions[key];
-            if (!entry) {
-                return;
-            }
-
+            const key = this.subscriptionManager.buildKey(provider, symbol, fromCurrency, toCurrency);
             const ticker = this.transformTickerResponse(message);
-            this.cache[key] = ticker;
-            entry.lastWsUpdate = Date.now();
-            this.notifySubscribers(key, ticker);
-        }
 
-        startFallbackPolling(entry) {
-            if (!entry || entry.fallbackTimerId) {
-                return;
+            const entry = this.subscriptionManager.getEntry(key);
+            if (entry && entry.meta) {
+                entry.meta.isSubscribed = true;
+                entry.meta.pending = false;
+                entry.streamingActive = true;
             }
 
-            const self = this;
-            entry.fallbackTimerId = setInterval(function () {
-                self.pollEntryIfNeeded(entry);
-            }, this.fallbackPollIntervalMs);
-        }
-
-        stopFallbackPolling(entry) {
-            if (!entry || !entry.fallbackTimerId) {
-                return;
-            }
-
-            clearInterval(entry.fallbackTimerId);
-            entry.fallbackTimerId = null;
-        }
-
-        pollEntryIfNeeded(entry) {
-            if (!entry) {
-                return;
-            }
-
-            if (!this.shouldPollEntry(entry)) {
-                return;
-            }
-
-            const self = this;
-            this.fetchTicker(entry.params).then(function (ticker) {
-                const key = entry.key;
-                if (key) {
-                    self.cache[key] = ticker;
-                    self.notifySubscribers(key, ticker);
-                }
-            }).catch(function (err) {
-                self.logger("GenericProvider: fallback fetch failed", err);
-            });
-        }
-
-        shouldPollEntry(entry) {
-            if (!entry) {
-                return false;
-            }
-
-            if (!this.isConnected()) {
-                return true;
-            }
-
-            const lastUpdate = entry.lastWsUpdate || 0;
-            if (!lastUpdate) {
-                return true;
-            }
-
-            const now = Date.now();
-            return now - lastUpdate > this.staleTickerTimeoutMs;
-        }
-
-        notifySubscribers(key, ticker) {
-            const entry = this.subscriptions[key];
-            if (!entry) {
-                return;
-            }
-
-            for (let i = 0; i < entry.subscribers.length; i++) {
-                const subscriber = entry.subscribers[i];
-                if (subscriber && subscriber.onData) {
-                    try {
-                        subscriber.onData(ticker);
-                    } catch (err) {
-                        this.logger("GenericProvider: subscriber onData threw", err);
-                    }
-                }
-            }
-        }
-
-        async fetchTicker(params) {
-            const exchange = params.exchange;
-            const symbol = params.symbol;
-            const fromCurrency = params.fromCurrency || "USD";
-            const toCurrency = params.toCurrency || null;
-            const key = buildSubscriptionKey(exchange, symbol, fromCurrency, toCurrency);
-
-            let url = this.baseUrl + "/api/Ticker/json/" + exchange + "/" + symbol + "?fromCurrency=" + encodeURIComponent(fromCurrency);
-            if (toCurrency !== null) {
-                url += "&toCurrency=" + encodeURIComponent(toCurrency);
-            }
-
-            try {
-                const response = await fetch(url);
-                const responseJson = await response.json();
-                const ticker = this.transformTickerResponse(responseJson);
-                this.cache[key] = ticker;
-                return ticker;
-            } catch (err) {
-                this.logger("GenericProvider: error fetching ticker", err);
-                const cached = this.cache[key];
-                if (cached) {
-                    return cached;
-                }
-                return this.buildEmptyTicker(symbol);
-            }
-        }
-
-        getCachedTicker(key) {
-            return this.cache[key] || null;
+            this.subscriptionManager.handleStreamingUpdate(key, ticker);
         }
 
         transformTickerResponse(responseJson) {
