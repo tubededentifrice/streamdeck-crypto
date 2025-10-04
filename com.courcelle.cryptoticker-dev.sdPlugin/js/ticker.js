@@ -27,7 +27,7 @@ const defaultSettings = {
     "fromCurrency": "USD",
     "currency": "USD",
     "candlesInterval": "1h",
-    "candlesDisplayed": 12,
+    "candlesDisplayed": 20,
     "multiplier": 1,
     "digits": 2,
     "font": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
@@ -306,7 +306,7 @@ const tickerAction = {
     getCandlesDisplayCount: function (settings) {
         const parsed = parseInt(settings["candlesDisplayed"]);
         if (isNaN(parsed)) {
-            return 12;
+            return 20;
         }
 
         return Math.min(60, Math.max(5, parsed));

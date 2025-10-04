@@ -40,7 +40,7 @@ const settingsConfig = {
         "value": document.getElementById("candlesInterval")
     },
     "candlesDisplayed": {
-        "default": 12,
+        "default": 20,
         "value": document.getElementById("candlesDisplayed")
     },
     "multiplier": {

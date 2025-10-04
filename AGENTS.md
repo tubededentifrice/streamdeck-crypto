@@ -2,7 +2,7 @@
 This project is a Stream Deck plugin; The docs for the SDK are located at https://docs.elgato.com/streamdeck/sdk/introduction/getting-started/ (and it's sub pages).
 
 ## Project Structure & Module Organization
-- Source: `com.courcelle.cryptoticker.sdPlugin/` (plugin bundle).
+- Source: `com.courcelle.cryptoticker-dev.sdPlugin/` (plugin bundle).
 - Core files: `manifest.json`, `index.html`, `js/ticker.js` (plugin logic), `js/pi.js` (property inspector), `css/`, `images/`.
 - Dev preview: `dev/preview.html` and `dev/preview.js` served by the local preview server.
 - Tests: `__tests__/` (e.g., `__tests__/ticker.test.js`).

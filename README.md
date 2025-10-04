@@ -20,33 +20,34 @@
 ## Installation
 - Run the following to be able to use the `dev` version in the Stream Deck (you need to have the [Elgato's CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started) installed):
 ```
-cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.dev.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
-mv com.courcelle.cryptoticker.sdPlugin com.courcelle.cryptoticker-dev.sdPlugin
-streamdeck link ./com.courcelle.cryptoticker-dev.sdPlugin
-# Open the Stream Deck UI, quit it and relaunch it
-# A "Crypto Ticker PRO-dev" plugin should be listed for you to test
-```
-
-- To debug:
-```
 streamdeck dev
+streamdeck link ./com.courcelle.cryptoticker-dev.sdPlugin
 open "http://localhost:23654/"
+npm run watch
+# You should have the "dev" plugin listed in your Stream Deck UI, if not quit it entirely and restart it
 ```
 
-- Once finished testing, revert back to normal:
+- Once finished testing, revert back to normal (optional):
 ```
 streamdeck unlink com.courcelle.cryptoticker-dev
-mv com.courcelle.cryptoticker-dev.sdPlugin com.courcelle.cryptoticker.sdPlugin
-cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
 ```
 
 ## Packaging
-- Bump the version in `src/com.courcelle.cryptoticker.sdPlugin/manifest.json`.
-- Run `streamdeck pack com.courcelle.cryptoticker.sdPlugin`
+- Bump the version in `src/com.courcelle.cryptoticker-dev.sdPlugin/manifest.pub.json`.
+
+Run the following to create the "published" version of the plugin:
+```
+cp -r com.courcelle.cryptoticker-dev.sdPlugin com.courcelle.cryptoticker.sdPlugin
+cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
+streamdeck pack com.courcelle.cryptoticker.sdPlugin
+rm -rf com.courcelle.cryptoticker.sdPlugin
+```
+
 
 ## Development
 
 Use the following npm scripts during development:
 
 - `npm test` – run the Jest unit tests
+- `npm run watch` – watch for changes in the code and notify the Stream Deck UI to reload it whenever needed
 - `npm run preview` – start a lightweight server on port 34115 and open the preview page in the default browser

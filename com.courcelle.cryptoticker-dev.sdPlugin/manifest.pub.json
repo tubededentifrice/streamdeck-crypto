@@ -25,7 +25,7 @@
     "Category": "Crypto Ticker PRO",
     "CategoryIcon": "images/pluginIcon",
     "URL": "https://github.com/tubededentifrice/streamdeck-crypto",
-    "Version": "1.7.0.0",
+    "Version": "1.8.0.0",
     "SDKVersion": 2,
     "Software": {
         "MinimumVersion": "6.5"
