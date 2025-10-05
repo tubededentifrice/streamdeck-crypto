@@ -4,7 +4,8 @@
             require("./provider-interface"),
             require("./generic-provider"),
             require("./ticker-subscription-manager"),
-            require("./connection-states")
+            require("./connection-states"),
+            require("./websocket-connection-pool")
         );
     } else {
         root.CryptoTickerProviders = root.CryptoTickerProviders || {};
@@ -12,11 +13,12 @@
             root.CryptoTickerProviders,
             root.CryptoTickerProviders,
             root.CryptoTickerProviders,
-            root.CryptoTickerConnectionStates
+            root.CryptoTickerConnectionStates,
+            root.CryptoTickerProviders
         );
         root.CryptoTickerProviders.BitfinexProvider = exports.BitfinexProvider;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule) {
+}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule, poolModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
     const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
@@ -26,6 +28,7 @@
         BACKUP: "backup",
         BROKEN: "broken"
     };
+    const WebSocketConnectionPool = poolModule.WebSocketConnectionPool || poolModule;
 
     const DEFAULT_WS_RECONNECT_DELAY_MS = 5000;
 
@@ -78,12 +81,6 @@
         return null;
     }
 
-    function safeClearTimeout(timerId) {
-        if (timerId) {
-            clearTimeout(timerId);
-        }
-    }
-
     class BitfinexProvider extends ProviderInterface {
         constructor(options) {
             super(options);
@@ -113,6 +110,44 @@
             };
 
             this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
+
+            this.channelIdToSymbol = {};
+            this.webSocketPool = new WebSocketConnectionPool({
+                logger: (...args) => {
+                    this.logger(...args);
+                },
+                reconnectDelayMs: this.wsReconnectDelayMs,
+                createWebSocket: () => {
+                    const WebSocketCtor = getWebSocketConstructor();
+                    if (!WebSocketCtor) {
+                        this.logger("BitfinexProvider: WebSocket not available in this environment");
+                        return null;
+                    }
+
+                    const url = this.wsBaseUrl.replace(/\/$/, "");
+                    try {
+                        return new WebSocketCtor(url);
+                    } catch (err) {
+                        this.logger("BitfinexProvider: error creating pooled WebSocket", err);
+                        return null;
+                    }
+                },
+                subscribe: (ws, symbol) => {
+                    this.sendBitfinexSubscribe(ws, symbol);
+                },
+                unsubscribe: (ws, symbol, meta) => {
+                    this.sendBitfinexUnsubscribe(ws, symbol, meta);
+                },
+                handleMessage: (event, helpers) => {
+                    this.handlePoolMessage(event, helpers);
+                },
+                onError: (err) => {
+                    this.logger("BitfinexProvider: pooled WebSocket error", err);
+                },
+                onClose: () => {
+                    this.channelIdToSymbol = {};
+                }
+            });
         }
 
         getId() {
@@ -194,18 +229,40 @@
                 return false;
             }
 
-            const WebSocketCtor = getWebSocketConstructor();
-            if (!WebSocketCtor) {
-                this.logger("BitfinexProvider: WebSocket not available in this environment");
+            meta.chanId = null;
+
+            const subscriptionHandle = this.webSocketPool.subscribe(meta.bitfinexSymbol, {
+                context: entry,
+                onData: (payload) => {
+                    const ticker = this.buildTickerFromArray(payload, entry);
+                    if (ticker) {
+                        this.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
+                    }
+                },
+                onSubscribed: () => {
+                    entry.streamingActive = true;
+                    const poolMeta = subscriptionHandle.getMetadata ? subscriptionHandle.getMetadata() : null;
+                    if (poolMeta && poolMeta.chanId) {
+                        meta.chanId = poolMeta.chanId;
+                        this.channelIdToSymbol[meta.chanId] = meta.bitfinexSymbol;
+                    }
+                },
+                onDisconnected: () => {
+                    entry.streamingActive = false;
+                    meta.chanId = null;
+                },
+                onError: (err) => {
+                    this.logger("BitfinexProvider: subscription error", err);
+                }
+            });
+
+            if (!subscriptionHandle) {
+                entry.streamingActive = false;
                 return false;
             }
 
-            if (meta.ws && meta.ws.readyState === WebSocketCtor.OPEN) {
-                entry.streamingActive = true;
-                return true;
-            }
-
-            this.connectWebSocket(entry, WebSocketCtor);
+            meta.poolSubscription = subscriptionHandle;
+            entry.streamingActive = true;
             return true;
         }
 
@@ -215,27 +272,11 @@
             }
 
             const meta = this.ensureEntryMeta(entry);
-            meta.wsClosedByUser = true;
-            if (meta.ws) {
-                try {
-                    if (meta.subscribed && meta.chanId) {
-                        meta.ws.send(JSON.stringify({
-                            event: "unsubscribe",
-                            chanId: meta.chanId
-                        }));
-                    }
-                } catch (err) {
-                    this.logger("BitfinexProvider: error sending unsubscribe", err);
-                }
-                try {
-                    meta.ws.close();
-                } catch (err) {
-                    this.logger("BitfinexProvider: error closing WebSocket", err);
-                }
-                meta.ws = null;
+            if (meta.poolSubscription && typeof meta.poolSubscription.unsubscribe === "function") {
+                meta.poolSubscription.unsubscribe();
             }
-            safeClearTimeout(meta.wsReconnectTimer);
-            meta.wsReconnectTimer = null;
+            meta.poolSubscription = null;
+            meta.chanId = null;
             entry.streamingActive = false;
             return true;
         }
@@ -269,119 +310,128 @@
             return base + "/v2/ticker/" + encodeURIComponent(symbol);
         }
 
-        connectWebSocket(entry, WebSocketCtor) {
-            const meta = this.ensureEntryMeta(entry);
-            const symbol = meta.bitfinexSymbol;
-            const url = this.wsBaseUrl;
-            const self = this;
-
-            meta.wsClosedByUser = false;
-            meta.subscribed = false;
-            meta.chanId = null;
-            safeClearTimeout(meta.wsReconnectTimer);
-            meta.wsReconnectTimer = null;
-
-            const ctor = WebSocketCtor || getWebSocketConstructor();
-            if (!ctor) {
-                this.logger("BitfinexProvider: WebSocket constructor unavailable");
+        sendBitfinexSubscribe(ws, symbol) {
+            if (!ws || !symbol) {
                 return;
             }
 
-            let ws;
+            const payload = {
+                event: "subscribe",
+                channel: "ticker",
+                symbol: symbol
+            };
+
             try {
-                ws = new ctor(url);
+                ws.send(JSON.stringify(payload));
             } catch (err) {
-                this.logger("BitfinexProvider: error creating WebSocket", err);
-                return;
+                this.logger("BitfinexProvider: error sending subscribe", err);
             }
-
-            meta.ws = ws;
-            entry.streamingActive = false;
-
-            ws.onopen = function () {
-                try {
-                    ws.send(JSON.stringify({
-                        event: "subscribe",
-                        channel: "ticker",
-                        symbol: symbol
-                    }));
-                } catch (err) {
-                    self.logger("BitfinexProvider: error sending subscribe", err);
-                }
-            };
-
-            ws.onmessage = function (event) {
-                try {
-                    self.handleWsMessage(entry, event.data);
-                } catch (err) {
-                    self.logger("BitfinexProvider: error processing WebSocket message", err);
-                }
-            };
-
-            ws.onerror = function (err) {
-                self.logger("BitfinexProvider: WebSocket error", err);
-                entry.streamingActive = false;
-            };
-
-            ws.onclose = function () {
-                entry.streamingActive = false;
-                meta.subscribed = false;
-                if (!meta.wsClosedByUser) {
-                    self.scheduleReconnect(entry);
-                }
-            };
         }
 
-        handleWsMessage(entry, rawData) {
-            if (!rawData) {
+        sendBitfinexUnsubscribe(ws, symbol, meta) {
+            if (!ws) {
                 return;
             }
 
-            let data = rawData;
-            if (typeof rawData === "string") {
+            const chanId = meta && meta.chanId;
+            if (!chanId) {
+                return;
+            }
+
+            try {
+                ws.send(JSON.stringify({
+                    event: "unsubscribe",
+                    chanId: chanId
+                }));
+            } catch (err) {
+                this.logger("BitfinexProvider: error sending unsubscribe", err);
+            }
+        }
+
+        handlePoolMessage(event, helpers) {
+            if (!event) {
+                return;
+            }
+
+            let message = event.data;
+            if (!message) {
+                return;
+            }
+
+            if (typeof message === "string") {
                 try {
-                    data = JSON.parse(rawData);
+                    message = JSON.parse(message);
                 } catch (err) {
-                    this.logger("BitfinexProvider: failed to parse message", err);
+                    this.logger("BitfinexProvider: failed to parse WebSocket message", err);
                     return;
                 }
             }
 
-            if (Array.isArray(data)) {
-                this.handleWsDataArray(entry, data);
+            if (!message) {
                 return;
             }
 
-            if (data && typeof data === "object") {
-                this.handleWsEvent(entry, data);
+            if (Array.isArray(message)) {
+                this.handleBitfinexDataArray(message, helpers);
+                return;
+            }
+
+            if (message && typeof message === "object") {
+                this.handleBitfinexEvent(message, helpers);
             }
         }
 
-        handleWsEvent(entry, eventObj) {
-            if (!eventObj) {
+        handleBitfinexEvent(eventObj, helpers) {
+            if (!eventObj || typeof eventObj !== "object") {
                 return;
             }
 
-            const meta = this.ensureEntryMeta(entry);
             const eventType = eventObj.event;
             if (eventType === "subscribed" && eventObj.channel === "ticker") {
-                meta.subscribed = true;
-                meta.chanId = eventObj.chanId;
-                entry.streamingActive = true;
+                const symbol = typeof eventObj.symbol === "string" ? eventObj.symbol : "";
+                if (!symbol) {
+                    return;
+                }
+
+                const chanId = eventObj.chanId;
+                if (chanId) {
+                    this.channelIdToSymbol[chanId] = symbol;
+                }
+
+                helpers.markSubscribed(symbol, {
+                    chanId: chanId || null
+                });
+                return;
+            }
+
+            if (eventType === "unsubscribed") {
+                const chanId = eventObj.chanId;
+                let symbol = null;
+                if (chanId) {
+                    symbol = this.channelIdToSymbol[chanId] || helpers.findSymbol(function (meta) {
+                        return meta && meta.chanId === chanId;
+                    });
+                    delete this.channelIdToSymbol[chanId];
+                }
+
+                if (symbol) {
+                    helpers.markUnsubscribed(symbol);
+                    helpers.updateMetadata(symbol, { chanId: null });
+                }
                 return;
             }
 
             if (eventType === "error") {
                 this.logger("BitfinexProvider: subscription error", eventObj);
-                entry.streamingActive = false;
             }
         }
 
-        handleWsDataArray(entry, arr) {
+        handleBitfinexDataArray(arr, helpers) {
             if (!Array.isArray(arr) || arr.length < 2) {
                 return;
             }
 
+            const chanId = arr[0];
             const data = arr[1];
             if (data === "hb") {
                 return;
@@ -391,9 +441,25 @@
                 return;
             }
 
+            const symbol = this.channelIdToSymbol[chanId] || helpers.findSymbol(function (meta) {
+                return meta && meta.chanId === chanId;
+            });
+
+            if (!symbol) {
+                return;
+            }
+
+            helpers.dispatch(symbol, data, arr);
+        }
+
+        buildTickerFromArray(data, entry) {
+            if (!Array.isArray(data)) {
+                return null;
+            }
+
             const params = entry ? entry.params : null;
             const pair = params && params.symbol ? params.symbol : this.ensureEntryMeta(entry).bitfinexSymbol;
-            const ticker = {
+            return {
                 changeDaily: toNumber(data[4]),
                 changeDailyPercent: toNumber(data[5]),
                 last: toNumber(data[6]),
@@ -403,28 +469,6 @@
                 pair: pair,
                 pairDisplay: pair
             };
-
-            this.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
-        }
-
-        scheduleReconnect(entry) {
-            const meta = this.ensureEntryMeta(entry);
-            if (meta.wsClosedByUser) {
-                return;
-            }
-
-            if (meta.wsReconnectTimer) {
-                return;
-            }
-
-            const self = this;
-            meta.wsReconnectTimer = setTimeout(function () {
-                meta.wsReconnectTimer = null;
-                const existingEntry = self.subscriptionManager.getEntry(entry.key);
-                if (existingEntry) {
-                    self.connectWebSocket(existingEntry);
-                }
-            }, this.wsReconnectDelayMs);
         }
 
         transformRestTicker(json, params, resolvedSymbol) {

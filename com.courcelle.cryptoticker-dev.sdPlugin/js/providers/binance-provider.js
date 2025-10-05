@@ -4,7 +4,8 @@
             require("./provider-interface"),
             require("./generic-provider"),
             require("./ticker-subscription-manager"),
-            require("./connection-states")
+            require("./connection-states"),
+            require("./websocket-connection-pool")
         );
     } else {
         root.CryptoTickerProviders = root.CryptoTickerProviders || {};
@@ -12,11 +13,12 @@
             root.CryptoTickerProviders,
             root.CryptoTickerProviders,
             root.CryptoTickerProviders,
-            root.CryptoTickerConnectionStates
+            root.CryptoTickerConnectionStates,
+            root.CryptoTickerProviders
         );
         root.CryptoTickerProviders.BinanceProvider = exports.BinanceProvider;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule) {
+}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule, poolModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
     const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
@@ -26,6 +28,7 @@
         BACKUP: "backup",
         BROKEN: "broken"
     };
+    const WebSocketConnectionPool = poolModule.WebSocketConnectionPool || poolModule;
 
     const DEFAULT_WS_RECONNECT_DELAY_MS = 5000;
 
@@ -82,12 +85,6 @@
         return null;
     }
 
-    function safeClearTimeout(timerId) {
-        if (timerId) {
-            clearTimeout(timerId);
-        }
-    }
-
     class BinanceProvider extends ProviderInterface {
         constructor(options) {
             super(options);
@@ -117,6 +114,44 @@
             };
 
             this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
+
+            this.wsRequestId = 0;
+            this.webSocketPool = new WebSocketConnectionPool({
+                logger: (...args) => {
+                    this.logger(...args);
+                },
+                reconnectDelayMs: this.wsReconnectDelayMs,
+                createWebSocket: () => {
+                    const WebSocketCtor = getWebSocketConstructor();
+                    if (!WebSocketCtor) {
+                        this.logger("BinanceProvider: WebSocket not available in this environment");
+                        return null;
+                    }
+
+                    const url = this.wsBaseUrl.replace(/\/$/, "");
+                    try {
+                        return new WebSocketCtor(url);
+                    } catch (err) {
+                        this.logger("BinanceProvider: error creating pooled WebSocket", err);
+                        return null;
+                    }
+                },
+                subscribe: (ws, symbol) => {
+                    this.sendBinanceSubscription(ws, symbol, true);
+                },
+                unsubscribe: (ws, symbol) => {
+                    this.sendBinanceSubscription(ws, symbol, false);
+                },
+                handleMessage: (event, helpers) => {
+                    this.handlePoolMessage(event, helpers);
+                },
+                onError: (err) => {
+                    this.logger("BinanceProvider: pooled WebSocket error", err);
+                },
+                onClose: () => {
+                    this.wsRequestId = 0;
+                }
+            });
         }
 
         getId() {
@@ -198,18 +233,30 @@
                 return false;
             }
 
-            const WebSocketCtor = getWebSocketConstructor();
-            if (!WebSocketCtor) {
-                this.logger("BinanceProvider: WebSocket not available in this environment");
+            const subscriptionHandle = this.webSocketPool.subscribe(meta.binanceSymbol, {
+                context: entry,
+                onData: (payload) => {
+                    const ticker = this.transformStreamTicker(payload, entry, meta.binanceSymbol);
+                    this.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
+                },
+                onSubscribed: () => {
+                    entry.streamingActive = true;
+                },
+                onDisconnected: () => {
+                    entry.streamingActive = false;
+                },
+                onError: (err) => {
+                    this.logger("BinanceProvider: subscription error", err);
+                }
+            });
+
+            if (!subscriptionHandle) {
+                entry.streamingActive = false;
                 return false;
             }
 
-            if (meta.ws && meta.ws.readyState === WebSocketCtor.OPEN) {
-                entry.streamingActive = true;
-                return true;
-            }
-
-            this.connectWebSocket(entry, WebSocketCtor);
+            meta.poolSubscription = subscriptionHandle;
+            entry.streamingActive = true;
             return true;
         }
 
@@ -219,17 +266,10 @@
             }
 
             const meta = this.ensureEntryMeta(entry);
-            meta.wsClosedByUser = true;
-            if (meta.ws) {
-                try {
-                    meta.ws.close();
-                } catch (err) {
-                    this.logger("BinanceProvider: error closing WebSocket", err);
-                }
-                meta.ws = null;
+            if (meta.poolSubscription && typeof meta.poolSubscription.unsubscribe === "function") {
+                meta.poolSubscription.unsubscribe();
             }
-            safeClearTimeout(meta.wsReconnectTimer);
-            meta.wsReconnectTimer = null;
+            meta.poolSubscription = null;
             entry.streamingActive = false;
             return true;
         }
@@ -260,83 +300,85 @@
             return base + "/api/v3/ticker/24hr?symbol=" + encodeURIComponent(symbol);
         }
 
-        buildWsUrl(symbol) {
-            const base = this.wsBaseUrl.replace(/\/$/, "");
-            return base + "/" + symbol.toLowerCase() + "@ticker";
-        }
-
-        connectWebSocket(entry, WebSocketCtor) {
-            const meta = this.ensureEntryMeta(entry);
-            const symbol = meta.binanceSymbol;
-            const url = this.buildWsUrl(symbol);
-            const self = this;
-
-            meta.wsClosedByUser = false;
-            safeClearTimeout(meta.wsReconnectTimer);
-            meta.wsReconnectTimer = null;
-
-            const ctor = WebSocketCtor || getWebSocketConstructor();
-            if (!ctor) {
-                this.logger("BinanceProvider: WebSocket constructor unavailable");
+        sendBinanceSubscription(ws, symbol, subscribe) {
+            if (!ws || !symbol) {
                 return;
             }
 
-            let ws;
+            const streamName = symbol.toLowerCase() + "@ticker";
+            const payload = {
+                method: subscribe ? "SUBSCRIBE" : "UNSUBSCRIBE",
+                params: [streamName],
+                id: this.nextWsRequestId()
+            };
+
             try {
-                ws = new ctor(url);
+                ws.send(JSON.stringify(payload));
             } catch (err) {
-                this.logger("BinanceProvider: error creating WebSocket", err);
-                return;
+                this.logger("BinanceProvider: error sending subscription message", err);
             }
-
-            meta.ws = ws;
-            entry.streamingActive = false;
-
-            ws.onopen = function () {
-                entry.streamingActive = true;
-            };
-
-            ws.onmessage = function (event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    const ticker = self.transformStreamTicker(data, entry, symbol);
-                    self.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
-                } catch (err) {
-                    self.logger("BinanceProvider: error parsing WebSocket message", err);
-                }
-            };
-
-            ws.onerror = function (err) {
-                self.logger("BinanceProvider: WebSocket error", err);
-                entry.streamingActive = false;
-            };
-
-            ws.onclose = function () {
-                entry.streamingActive = false;
-                if (!meta.wsClosedByUser) {
-                    self.scheduleReconnect(entry);
-                }
-            };
         }
 
-        scheduleReconnect(entry) {
-            const meta = this.ensureEntryMeta(entry);
-            if (meta.wsClosedByUser) {
+        nextWsRequestId() {
+            this.wsRequestId += 1;
+            if (this.wsRequestId > 1000000) {
+                this.wsRequestId = 1;
+            }
+            return this.wsRequestId;
+        }
+
+        handlePoolMessage(event, helpers) {
+            if (!event) {
                 return;
             }
 
-            if (meta.wsReconnectTimer) {
+            let message = event.data;
+            if (!message) {
                 return;
             }
 
-            const self = this;
-            meta.wsReconnectTimer = setTimeout(function () {
-                meta.wsReconnectTimer = null;
-                const existingEntry = self.subscriptionManager.getEntry(entry.key);
-                if (existingEntry) {
-                    self.connectWebSocket(existingEntry);
+            if (typeof message === "string") {
+                try {
+                    message = JSON.parse(message);
+                } catch (err) {
+                    this.logger("BinanceProvider: failed to parse WebSocket message", err);
+                    return;
                 }
-            }, this.wsReconnectDelayMs);
+            }
+
+            if (!message) {
+                return;
+            }
+
+            if (Array.isArray(message)) {
+                return;
+            }
+
+            if (message.error) {
+                this.logger("BinanceProvider: WebSocket error message", message.error);
+                return;
+            }
+
+            if (typeof message.result !== "undefined") {
+                return;
+            }
+
+            let payload = message;
+            if (message.data && typeof message.data === "object") {
+                payload = message.data;
+            }
+
+            if (!payload || typeof payload !== "object") {
+                return;
+            }
+
+            const symbol = (payload.s || payload.symbol || "").toUpperCase();
+            if (!symbol) {
+                return;
+            }
+
+            helpers.markSubscribed(symbol);
+            helpers.dispatch(symbol, payload, message);
         }
 
         transformRestTicker(json, params, resolvedSymbol) {
