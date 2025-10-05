@@ -69,35 +69,6 @@ const attemptDelay = Math.min(
 
 ## 5. ERROR HANDLING & USER FEEDBACK
 
-            ### 5.1 Graceful Network Error Handling in Property Inspector
-
-            **Why?**
-            - **User experience**: Failures when fetching provider lists/pairs result in empty dropdowns with no feedback
-            - **Debugging**: Users don't know if issue is network, proxy, or API rate limiting
-            - **Reliability**: Slow networks or temporary outages make plugin appear broken
-
-            **What needs to be changed?**
-            - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-              - Lines 265-338: Provider/pair/currency fetching functions
-            - **Implementation**:
-              1. Wrap all `fetch()` calls in try-catch with timeout (e.g., 10 seconds)
-              2. Add retry logic with exponential backoff (3 attempts)
-              3. Show loading spinner while fetching data
-              4. Display user-friendly error messages in UI:
-                - "Loading pairs..." → "Failed to load pairs. Retrying..."
-                - "Network error. Please check connection and try again."
-              5. Add "Retry" button for manual retry
-              6. Cache last successful fetch to show stale data with warning
-              7. Log detailed errors to console for support/debugging
-
-            **Risks & Considerations**:
-            - **UX design**: Need to design error message UI in property inspector
-            - **Timeout tuning**: Balance between patience and responsiveness
-            - **Retry logic**: Avoid hammering APIs with rapid retries (respect rate limits)
-            - **Testing**: Mock network failures and slow responses
-
----
-
 ### 5.2 Improved Error Handling Throughout Plugin
 
 **Why?**
@@ -380,27 +351,19 @@ const attemptDelay = Math.min(
         **Why?**
         - **Scale**: Binance has ~1500 pairs, making dropdown unusable
         - **Speed**: Users waste time scrolling through long list
-        - **Favorites**: Power users repeatedly select same pairs
 
         **What needs to be changed?**
         - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
           - Replace simple `<select>` with searchable dropdown
         - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-          - Add search/filter logic, favorites management
+          - Add search/filter logic
         - **Implementation**:
           1. Add search input above pair dropdown
           2. Filter pairs as user types
-          3. Add "Favorites" section at top of dropdown
-          4. Add star/favorite button next to each pair
-          5. Store favorites per provider
-          6. Show recently used pairs
-          7. Support keyboard navigation (arrow keys, enter)
-          8. Add pair categories (BTC pairs, ETH pairs, Stablecoins, etc.)
+          3. Support keyboard navigation (arrow keys, enter)
 
         **Risks & Considerations**:
         - **Performance**: Filtering 1500 items in real-time might need optimization
-        - **Storage**: Favorites stored in plugin settings or separate storage
-        - **Sync**: Consider syncing favorites across devices (future enhancement)
         - **UI**: Custom dropdown may have accessibility challenges
 
 ---

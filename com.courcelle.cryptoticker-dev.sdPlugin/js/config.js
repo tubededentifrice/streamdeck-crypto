@@ -21,7 +21,7 @@
             stale: "STALE",
             noData: "NO DATA",
             misconfigured: "INVALID PAIR",
-            conversionError: "CONVERSION ERROR"
+            conversionError: "CONVERT ERROR"
         }
     };
 }));
