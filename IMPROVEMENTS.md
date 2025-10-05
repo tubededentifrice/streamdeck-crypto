@@ -260,67 +260,6 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
 
-### 2.1 Single Source of Truth for Default Settings
-
-**Why?**
-- **Consistency**: Settings defaults are duplicated in `ticker.js:44-94` and `pi.js:14-116`
-- **Maintenance burden**: Adding new settings requires updating multiple locations
-- **Bug prevention**: Mismatched defaults cause confusing behavior
-- **Type safety**: Shared module can define interfaces for TypeScript migration
-
-**What needs to be changed?**
-- **Create new file**: `com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js`
-- **Files to refactor**:
-  - `js/ticker.js`: Import defaults from shared module (lines 93-144)
-  - `js/pi.js`: Import defaults from shared module (lines 14-116)
-  - `dev/preview.js`: Import defaults for preview rendering
-  - `__tests__/ticker.test.js`: Import defaults for tests
-- **Implementation**:
-  1. Extract complete settings schema with defaults, types, and validation rules
-  2. Export as module that works in both Node.js and browser contexts
-  3. Update all consumers to import from shared module
-  4. Add validation function to check settings against schema
-
-**Risks & Considerations**:
-- **Module loading**: Ensure shared module works in StreamDeck plugin environment (may need globals)
-- **Build process**: May need bundler to handle module imports correctly
-- **Migration**: Existing settings must remain compatible
-- **Testing**: Update all tests to use shared defaults
-
----
-
-### 2.2 Refactor Monolithic `ticker.js`
-
-**Why?**
-- **Maintainability**: 1200+ lines handling rendering, data fetching, WebSocket management, and business logic
-- **Testing**: Monolithic file is difficult to unit test in isolation
-- **Code navigation**: Hard to find specific functionality
-- **Reusability**: Logic cannot be shared across plugin and preview modes
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-- **Proposed structure**:
-  1. **`js/canvas-renderer.js`**: Extract lines 350-746 (canvas drawing logic)
-     - `drawTicker()`, `drawCandles()`, `drawHighLowBar()`, formatting helpers
-  2. **`js/settings-manager.js`**: Extract settings handling
-     - Default settings, settings validation, settings change handlers
-  3. **`js/alert-manager.js`**: Extract lines related to alert logic
-     - Alert evaluation, alert arming/disarming, alert state management
-  4. **`js/formatters.js`**: Extract formatting utilities
-     - Price formatting, number formatting, date formatting
-  5. **`js/ticker-state.js`**: Centralized state management
-     - `contextDetails`, `contextSubscriptions`, `contextConnectionStates`, caches
-  6. Keep main plugin lifecycle and StreamDeck integration in `ticker.js`
-
-**Risks & Considerations**:
-- **Breaking changes**: Ensure all dependencies are properly passed between modules
-- **Global state**: Carefully manage shared state during refactor (consider dependency injection)
-- **Testing**: Create tests for each new module before extraction
-- **Gradual migration**: Can be done incrementally to reduce risk
-- **StreamDeck compatibility**: Verify module loading works in plugin environment
-
----
-
 ### 2.5 Implement Exponential Backoff for Reconnections
 
 **Priority:** 🟡 Medium (prevents API hammering)
@@ -497,7 +436,7 @@ const attemptDelay = Math.min(
   6. `__tests__/pi-helpers.test.js`: Test property inspector utilities
   7. `__tests__/formatters.test.js`: Test price/number formatting
 - **Coverage areas**:
-  - WebSocket reconnection logic with exponential backoff
+  - WebSocket reconnection logic
   - Provider failover when primary fails
   - Conversion rate caching and expiration
   - Alert rule evaluation (post-eval replacement)
@@ -534,7 +473,7 @@ const attemptDelay = Math.min(
   - Prettier rules for code formatting (2 spaces, single quotes, etc.)
   - Pre-commit hooks to auto-format and lint changed files
   - Git hooks with husky to prevent committing unlinted code
-- **Scripts**: Add `npm run lint`, `npm run format`, `npm run lint:fix`
+- **Scripts**: Add and document `npm run lint`, `npm run format`, `npm run lint:fix` (remember in AGENTS.md to always run them after corresponding code changes)
 
 **Risks & Considerations**:
 - **Initial effort**: Fixing existing violations will be time-consuming
@@ -1399,7 +1338,7 @@ function onConnectionStateChange(context, oldState, newState) {
 1. Implement bounded cache (2.3)
 2. Optimize canvas rendering (5.1)
 3. WebSocket connection pooling (5.2)
-4. Refactor monolithic ticker.js (2.2) - ongoing
+4. Refactor monolithic ticker.js (2.2) - ✅ completed
 
 ### Phase 5: Build & Tooling (1-2 weeks)
 1. Add module bundler (6.2)
