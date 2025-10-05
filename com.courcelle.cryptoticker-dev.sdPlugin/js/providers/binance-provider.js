@@ -53,6 +53,10 @@
         return parsed;
     }
 
+    function toPercent(value) {
+        return toNumber(value) / 100;
+    }
+
     function mapIntervalToBinance(interval) {
         switch (interval) {
             case "MINUTES_1":
@@ -339,7 +343,7 @@
             const pair = params && params.symbol ? params.symbol : resolvedSymbol;
             return {
                 changeDaily: toNumber(json["priceChange"]),
-                changeDailyPercent: toNumber(json["priceChangePercent"]),
+                changeDailyPercent: toPercent(json["priceChangePercent"]),
                 last: toNumber(json["lastPrice"]),
                 volume: toNumber(json["volume"]),
                 high: toNumber(json["highPrice"]),
@@ -354,7 +358,7 @@
             const pair = params && params.symbol ? params.symbol : resolvedSymbol;
             return {
                 changeDaily: toNumber(json["p"] || json["priceChange"]),
-                changeDailyPercent: toNumber(json["P"] || json["priceChangePercent"]),
+                changeDailyPercent: toPercent(json["P"] || json["priceChangePercent"]),
                 last: toNumber(json["c"] || json["lastPrice"]),
                 volume: toNumber(json["v"] || json["volume"]),
                 high: toNumber(json["h"] || json["highPrice"]),

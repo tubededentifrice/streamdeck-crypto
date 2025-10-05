@@ -47,6 +47,11 @@
                 placeholder="Enter the number of digits to round values" pattern="^[0-9]*$">
         </div>
         <div class="sdpi-item">
+            <div class="sdpi-item-label">Low/high digits</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="highLowDigits" name="highLowDigits" value=""
+                placeholder="Optional. Uses Digits when empty" pattern="^[0-9]*$">
+        </div>
+        <div class="sdpi-item">
             <div class="sdpi-item-label">Price format</div>
             <select class="sdpi-item-value select" id="priceFormat" name="priceFormat">
                 <option value="auto">Automatic</option>
@@ -68,6 +73,11 @@
             <div class="sdpi-item-label">Price font size</div>
             <input type="number" inputmode="numeric" class="sdpi-item-value" id="fontSizePrice" name="fontSizePrice" value=""
                 placeholder="Price text size in px" pattern="^[0-9]*$" min="6" max="120">
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Low/high font size</div>
+            <input type="number" inputmode="numeric" class="sdpi-item-value" id="fontSizeHighLow" name="fontSizeHighLow" value=""
+                placeholder="Optional. Defaults to base font size" pattern="^[0-9]*$" min="6" max="120">
         </div>
         <div class="sdpi-item">
             <div class="sdpi-item-label">Change font size</div>

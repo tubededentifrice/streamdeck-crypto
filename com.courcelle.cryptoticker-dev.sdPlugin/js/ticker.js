@@ -27,6 +27,22 @@ function resolveGlobalConfig() {
     return null;
 }
 
+function normalizeCurrencyCode(value) {
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+            return null;
+        }
+        return trimmed.toUpperCase();
+    }
+
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    return String(value).trim().toUpperCase() || null;
+}
+
 const moduleConfig = requireOrNull("./config");
 const globalConfig = resolveGlobalConfig();
 const runtimeConfig = Object.assign({}, defaultConfig, moduleConfig || {}, globalConfig || {});
@@ -69,8 +85,8 @@ const screenshotMode = false; // Allows rendering the canvas in an external prev
 
 const alertStatuses = {};
 const alertArmed = {};
-let rates = null;
-let ratesUpdate = 0;
+const CONVERSION_CACHE_TTL_MS = 60 * 60 * 1000;
+const conversionRatesCache = {};
 const candlesCache = {};
 let providerRegistrySingleton = null;
 
@@ -84,9 +100,11 @@ const defaultSettings = {
     "candlesDisplayed": 20,
     "multiplier": 1,
     "digits": 2,
+    "highLowDigits": "",
     "font": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
     "fontSizeBase": 25,
     "fontSizePrice": 35,
+    "fontSizeHighLow": "",
     "fontSizeChange": 19,
     "priceFormat": "compact",
     "backgroundColor": "#000000",
@@ -234,9 +252,8 @@ const tickerAction = {
     updateSubscription: function (context, settings) {
         const exchange = settings["exchange"];
         const pair = settings["pair"];
-        const fromCurrency = settings["fromCurrency"] || null;
-        const toCurrency = settings["currency"] || null;
-        const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, fromCurrency, toCurrency);
+        const currencies = this.resolveConversionCurrencies(settings["fromCurrency"], settings["currency"]);
+        const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, currencies.from, null);
         const current = contextSubscriptions[context];
         if (current && current.key === subscriptionKey) {
             return current;
@@ -257,8 +274,8 @@ const tickerAction = {
         const params = {
             exchange: exchange,
             symbol: pair,
-            fromCurrency: fromCurrency,
-            toCurrency: toCurrency
+            fromCurrency: currencies.from,
+            toCurrency: null
         };
         const self = this;
 
@@ -272,7 +289,12 @@ const tickerAction = {
 
                     self.setContextConnectionState(details.context, tickerValues && tickerValues.connectionState);
                     try {
-                        await self.updateCanvas(details.context, details.settings, tickerValues);
+                        const convertedTicker = await self.convertTickerValues(
+                            tickerValues,
+                            details.settings && details.settings.fromCurrency,
+                            details.settings && details.settings.currency
+                        );
+                        await self.updateCanvas(details.context, details.settings, convertedTicker);
                     } catch (err) {
                         self.log("Error updating canvas from subscription", err);
                     }
@@ -306,6 +328,194 @@ const tickerAction = {
     },
     getSubscriptionContextKey: function (exchange, pair, fromCurrency, toCurrency) {
         return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
+    },
+
+    resolveConversionCurrencies: function (fromCurrency, toCurrency) {
+        const resolvedFrom = normalizeCurrencyCode(fromCurrency) || "USD";
+        const resolvedTo = normalizeCurrencyCode(toCurrency);
+
+        if (!resolvedTo || resolvedTo === resolvedFrom) {
+            return {
+                from: resolvedFrom,
+                to: null
+            };
+        }
+
+        return {
+            from: resolvedFrom,
+            to: resolvedTo
+        };
+    },
+
+    getConversionRate: async function (fromCurrency, toCurrency) {
+        const from = normalizeCurrencyCode(fromCurrency);
+        const to = normalizeCurrencyCode(toCurrency);
+
+        if (!from || !to || from === to) {
+            return 1;
+        }
+
+        const key = from + "_" + to;
+        const now = Date.now();
+        let cacheEntry = conversionRatesCache[key];
+        if (!cacheEntry) {
+            cacheEntry = {};
+            conversionRatesCache[key] = cacheEntry;
+        }
+
+        if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0 && cacheEntry.fetchedAt && (now - cacheEntry.fetchedAt) < CONVERSION_CACHE_TTL_MS) {
+            return cacheEntry.rate;
+        }
+
+        if (cacheEntry.promise) {
+            try {
+                return await cacheEntry.promise;
+            } catch (promiseErr) {
+                this.log("Conversion rate promise failed", promiseErr);
+            }
+        }
+
+        const fetchFn = typeof fetch === "function" ? fetch : null;
+        if (!fetchFn) {
+            return typeof cacheEntry.rate === "number" && cacheEntry.rate > 0 ? cacheEntry.rate : 1;
+        }
+
+        const baseUrl = (tProxyBase || "").replace(/\/$/, "");
+        if (!baseUrl) {
+            return typeof cacheEntry.rate === "number" && cacheEntry.rate > 0 ? cacheEntry.rate : 1;
+        }
+
+        const url = baseUrl + "/api/ticker/json/currency/" + encodeURIComponent(from) + "/" + encodeURIComponent(to);
+        const self = this;
+
+        cacheEntry.promise = (async function () {
+            try {
+                const response = await fetchFn(url);
+                if (!response || !response.ok) {
+                    throw new Error("Conversion rate response not ok");
+                }
+
+                const json = await response.json();
+                const parsedRate = json && json.rate !== undefined ? parseFloat(json.rate) : NaN;
+                if (!parsedRate || !isFinite(parsedRate) || parsedRate <= 0) {
+                    throw new Error("Invalid conversion rate");
+                }
+
+                cacheEntry.rate = parsedRate;
+                cacheEntry.fetchedAt = Date.now();
+                return parsedRate;
+            } catch (err) {
+                self.log("Error fetching conversion rate", err);
+                throw err;
+            } finally {
+                delete cacheEntry.promise;
+            }
+        })();
+
+        try {
+            return await cacheEntry.promise;
+        } catch (err) {
+            if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0) {
+                return cacheEntry.rate;
+            }
+
+            return 1;
+        }
+    },
+
+    convertTickerValues: async function (tickerValues, fromCurrency, toCurrency) {
+        if (!tickerValues) {
+            return tickerValues;
+        }
+
+        const currencies = this.resolveConversionCurrencies(fromCurrency, toCurrency);
+        if (!currencies.to) {
+            return tickerValues;
+        }
+
+        const existingTo = normalizeCurrencyCode(tickerValues.conversionToCurrency);
+        const existingFrom = normalizeCurrencyCode(tickerValues.conversionFromCurrency);
+        if (existingTo === currencies.to && existingFrom === currencies.from) {
+            return tickerValues;
+        }
+
+        const rate = await this.getConversionRate(currencies.from, currencies.to);
+        if (!rate || !isFinite(rate) || rate <= 0) {
+            return tickerValues;
+        }
+
+        return this.applyTickerConversion(tickerValues, rate, currencies.from, currencies.to);
+    },
+
+    applyTickerConversion: function (tickerValues, rate, fromCurrency, toCurrency) {
+        if (!tickerValues || typeof tickerValues !== "object") {
+            return tickerValues;
+        }
+
+        const converted = Object.assign({}, tickerValues);
+        const keysToConvert = [
+            "last",
+            "high",
+            "low",
+            "open",
+            "close",
+            "changeDaily"
+        ];
+
+        for (let i = 0; i < keysToConvert.length; i++) {
+            const key = keysToConvert[i];
+            if (!Object.prototype.hasOwnProperty.call(tickerValues, key)) {
+                continue;
+            }
+
+            const value = tickerValues[key];
+            const numeric = typeof value === "number" ? value : parseFloat(value);
+            if (!isNaN(numeric)) {
+                converted[key] = numeric * rate;
+            }
+        }
+
+        converted.conversionRate = rate;
+        converted.conversionFromCurrency = fromCurrency;
+        converted.conversionToCurrency = toCurrency;
+
+        return converted;
+    },
+
+    applyCandlesConversion: function (candles, rate) {
+        if (!Array.isArray(candles) || !rate || !isFinite(rate) || rate <= 0) {
+            return candles;
+        }
+
+        return candles.map(function (candle) {
+            if (!candle || typeof candle !== "object") {
+                return candle;
+            }
+
+            const converted = Object.assign({}, candle);
+            const priceKeys = ["open", "close", "high", "low"];
+            for (let i = 0; i < priceKeys.length; i++) {
+                const key = priceKeys[i];
+                if (!Object.prototype.hasOwnProperty.call(candle, key)) {
+                    continue;
+                }
+                const value = candle[key];
+                const numeric = typeof value === "number" ? value : parseFloat(value);
+                if (!isNaN(numeric)) {
+                    converted[key] = numeric * rate;
+                }
+            }
+
+            if (Object.prototype.hasOwnProperty.call(candle, "volumeQuote")) {
+                const volumeValue = candle["volumeQuote"];
+                const volumeNumeric = typeof volumeValue === "number" ? volumeValue : parseFloat(volumeValue);
+                if (!isNaN(volumeNumeric)) {
+                    converted["volumeQuote"] = volumeNumeric * rate;
+                }
+            }
+
+            return converted;
+        });
     },
 
     updateTicker: async function (context, settings) {
@@ -361,7 +571,6 @@ const tickerAction = {
         const pairDisplay = settings["title"] || (values["pairDisplay"] || pair);
         const currency = settings["currency"];
         const multiplier = settings["multiplier"] || 1;
-        const digits = settings["digits"] || 2;
         const priceFormat = settings["priceFormat"] || "compact";
         const parseNumberSetting = function(value, fallback) {
             const parsed = parseFloat(value);
@@ -371,8 +580,19 @@ const tickerAction = {
 
             return parsed;
         };
+        const parseDigitsSetting = function (value, fallback) {
+            const parsed = parseInt(value, 10);
+            if (isNaN(parsed) || parsed < 0) {
+                return fallback;
+            }
+
+            return parsed;
+        };
+        const digits = parseDigitsSetting(settings["digits"], 2);
+        const highLowDigits = parseDigitsSetting(settings["highLowDigits"], digits);
         const baseFontSize = parseNumberSetting(settings["fontSizeBase"], 25);
         const priceFontSize = parseNumberSetting(settings["fontSizePrice"], baseFontSize * 35 / 25);
+        const highLowFontSize = parseNumberSetting(settings["fontSizeHighLow"], baseFontSize);
         const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
         let backgroundColor = settings["backgroundColor"] || "#000000";
         let textColor = settings["textColor"] || "#ffffff";
@@ -448,16 +668,16 @@ const tickerAction = {
         );
 
         if (settings["displayHighLow"] != "off") {
-            canvasContext.font = (baseFontSize * sizeMultiplier) + "px " + font;
+            canvasContext.font = (highLowFontSize * sizeMultiplier) + "px " + font;
             canvasContext.fillText(
-                this.getRoundedValue(values["low"], digits, multiplier, priceFormat),
+                this.getRoundedValue(values["low"], highLowDigits, multiplier, priceFormat),
                 textPadding,
                 90 * sizeMultiplier
             );
 
             canvasContext.textAlign = "right";
             canvasContext.fillText(
-                this.getRoundedValue(values["high"], digits, multiplier, priceFormat),
+                this.getRoundedValue(values["high"], highLowDigits, multiplier, priceFormat),
                 canvasWidth - textPadding,
                 135 * sizeMultiplier
             );
@@ -781,13 +1001,14 @@ const tickerAction = {
         };
 
         let formattedValue = "";
+        const fixedDigits = Math.max(0, precision);
 
         switch (formatOption) {
             case "full":
-                const roundedFull = roundWithPrecision(absoluteValue, precision);
+                const roundedFull = roundWithPrecision(absoluteValue, fixedDigits);
                 formattedValue = toLocale(roundedFull, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: precision,
+                    minimumFractionDigits: fixedDigits,
+                    maximumFractionDigits: fixedDigits,
                     useGrouping: true
                 });
                 break;
@@ -808,19 +1029,18 @@ const tickerAction = {
                     }
                 }
 
-                const compactPrecision = suffix ? Math.min(precision, 2) : precision;
-                const roundedCompact = roundWithPrecision(compactValue, compactPrecision);
+                const roundedCompact = roundWithPrecision(compactValue, fixedDigits);
                 formattedValue = toLocale(roundedCompact, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: compactPrecision,
+                    minimumFractionDigits: fixedDigits,
+                    maximumFractionDigits: fixedDigits,
                     useGrouping: !suffix
                 }) + suffix;
                 break;
             case "plain":
-                const roundedPlain = roundWithPrecision(absoluteValue, precision);
+                const roundedPlain = roundWithPrecision(absoluteValue, fixedDigits);
                 formattedValue = toLocale(roundedPlain, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: precision,
+                    minimumFractionDigits: fixedDigits,
+                    maximumFractionDigits: fixedDigits,
                     useGrouping: false
                 });
                 break;
@@ -828,19 +1048,15 @@ const tickerAction = {
             default:
                 let autoSuffix = "";
                 let autoValue = absoluteValue;
-                let autoPrecision = precision;
                 if (absoluteValue > 100000) {
-                    autoSuffix = "k";
+                    autoSuffix = "K";
                     autoValue = absoluteValue / 1000;
-                    autoPrecision = Math.min(autoPrecision, 2);
-                } else if (absoluteValue > 100) {
-                    autoPrecision = 0;
                 }
 
-                const roundedAuto = roundWithPrecision(autoValue, autoPrecision);
+                const roundedAuto = roundWithPrecision(autoValue, fixedDigits);
                 formattedValue = toLocale(roundedAuto, {
-                    minimumFractionDigits: Math.max(0, autoPrecision),
-                    maximumFractionDigits: autoPrecision,
+                    minimumFractionDigits: fixedDigits,
+                    maximumFractionDigits: fixedDigits,
                     useGrouping: false
                 }) + autoSuffix;
                 break;
@@ -852,31 +1068,34 @@ const tickerAction = {
     getTickerValue: async function (pair, toCurrency, exchange, fromCurrency) {
         const registry = this.getProviderRegistry();
         const provider = registry.getProvider(exchange);
-        const resolvedFrom = fromCurrency || "USD";
-        const resolvedTo = toCurrency || null;
+        const currencies = this.resolveConversionCurrencies(fromCurrency, toCurrency);
         const params = {
             exchange: exchange,
             symbol: pair,
-            fromCurrency: resolvedFrom,
-            toCurrency: resolvedTo
+            fromCurrency: currencies.from,
+            toCurrency: null
         };
 
         try {
             const ticker = await provider.fetchTicker(params);
-            if (ticker && typeof ticker === "object" && !ticker.connectionState) {
-                ticker.connectionState = connectionStates.DETACHED;
+            const convertedTicker = await this.convertTickerValues(ticker, currencies.from, currencies.to);
+            const finalTicker = convertedTicker || ticker;
+            if (finalTicker && typeof finalTicker === "object" && !finalTicker.connectionState) {
+                finalTicker.connectionState = connectionStates.DETACHED;
             }
-            return ticker;
+            return finalTicker;
         } catch (err) {
             this.log("Error fetching ticker", err);
-            const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, resolvedFrom, resolvedTo);
+            const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, currencies.from, null);
             if (provider && typeof provider.getCachedTicker === "function") {
                 const cached = provider.getCachedTicker(subscriptionKey);
                 if (cached) {
-                    if (!cached.connectionState) {
-                        cached.connectionState = connectionStates.BACKUP;
+                    const convertedCached = await this.convertTickerValues(cached, currencies.from, currencies.to);
+                    const finalCached = convertedCached || cached;
+                    if (finalCached && !finalCached.connectionState) {
+                        finalCached.connectionState = connectionStates.BACKUP;
                     }
-                    return cached;
+                    return finalCached;
                 }
             }
 
@@ -900,7 +1119,9 @@ const tickerAction = {
         const pair = settings["pair"];
         const interval = this.convertCandlesInterval(settings["candlesInterval"] || "1h");
         const candlesCount = this.getCandlesDisplayCount(settings);
-        const cacheKey = exchange + "_" + pair + "_" + interval + "_" + candlesCount;
+        const currencies = this.resolveConversionCurrencies(settings["fromCurrency"], settings["currency"]);
+        const cacheCurrencyKey = currencies.to || currencies.from || "";
+        const cacheKey = exchange + "_" + pair + "_" + interval + "_" + candlesCount + "_" + cacheCurrencyKey;
         const cache = candlesCache[cacheKey] || {};
         const now = new Date().getTime();
         const t = "time";
@@ -964,7 +1185,16 @@ const tickerAction = {
         }
 
         const preparedCandles = this.prepareCandlesForDisplay(rawCandles, candlesCount);
-        const val = this.getCandlesNormalized(preparedCandles);
+
+        let candlesForDisplay = preparedCandles;
+        if (currencies.to) {
+            const rate = await this.getConversionRate(currencies.from, currencies.to);
+            if (rate && isFinite(rate) && rate > 0) {
+                candlesForDisplay = this.applyCandlesConversion(preparedCandles, rate);
+            }
+        }
+
+        const val = this.getCandlesNormalized(candlesForDisplay);
         cache[t] = now;
         cache[c] = val;
         candlesCache[cacheKey] = cache;

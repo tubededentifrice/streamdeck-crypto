@@ -51,6 +51,10 @@ const settingsConfig = {
         "default": 2,
         "value": document.getElementById("digits")
     },
+    "highLowDigits": {
+        "default": "",
+        "value": document.getElementById("highLowDigits")
+    },
     "priceFormat": {
         "default": "compact",
         "value": document.getElementById("priceFormat")
@@ -66,6 +70,10 @@ const settingsConfig = {
     "fontSizePrice": {
         "default": 35,
         "value": document.getElementById("fontSizePrice")
+    },
+    "fontSizeHighLow": {
+        "default": "",
+        "value": document.getElementById("fontSizeHighLow")
     },
     "fontSizeChange": {
         "default": 19,
@@ -352,6 +360,13 @@ const pi = {
 
         // const fromCurrencyDropDown = settingsConfig["fromCurrency"]["value"];
         const toCurrencyDropDown = settingsConfig["currency"]["value"];
+
+        this.removeAllOptions(toCurrencyDropDown);
+
+        const emptyOption = document.createElement("option");
+        emptyOption.text = "";
+        emptyOption.value = "";
+        toCurrencyDropDown.add(emptyOption);
 
         currencies.sort();
         currencies.forEach(function (currency) {
