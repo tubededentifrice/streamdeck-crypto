@@ -688,10 +688,10 @@ const tickerAction = {
 
             const changePercent = values.changeDailyPercent * 100;
             let digitsPercent = 2;
-            if (Math.abs(changePercent) >= 10) {
-                digitsPercent = 1;
-            } else if (Math.abs(changePercent) >= 10) {
+            if (Math.abs(changePercent) >= 100) {
                 digitsPercent = 0;
+            } else if (Math.abs(changePercent) >= 10) {
+                digitsPercent = 1;
             }
             let changePercentDisplay = this.getRoundedValue(changePercent, digitsPercent, 1, "plain");
             if (changePercent > 0) {
@@ -731,7 +731,8 @@ const tickerAction = {
             const padding = 5 * sizeMultiplier;
             const lineWidth = 6 * sizeMultiplier;
 
-            const percent = (values.last - values.low) / (values.high - values.low);
+            const range = values.high - values.low;
+            const percent = range > 0 ? (values.last - values.low) / range : 0.5;
             const lineLength = canvasWidth - padding * 2;
             const cursorPositionX = padding + Math.round(lineLength * percent);
 

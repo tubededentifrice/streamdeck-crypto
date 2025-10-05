@@ -483,6 +483,7 @@
                         close: toNumber(item[2]),
                         high: toNumber(item[3]),
                         low: toNumber(item[4]),
+                        volume: toNumber(item[5]),
                         volumeQuote: toNumber(item[5])
                     };
                 });

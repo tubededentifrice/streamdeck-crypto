@@ -132,26 +132,129 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ---
 
-### 1.5 Stabilize Daily Change Rendering
+### 1.5 Stabilize Daily Change Rendering ✅ FIXED
 
-**Why?**
-- **Incorrect precision**: Duplicate `Math.abs(changePercent) >= 10` checks in `updateCanvasTicker` prevent the code from ever rendering whole numbers for large moves
-- **NaN exposure**: When providers omit `changeDailyPercent`, the multiplication yields `NaN`, propagating to the canvas and producing unreadable output
-- **Visual regressions**: Color switching logic still runs even when no valid change is available
+**Status:** Fixed in direct_provider branch
 
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 689-713: Daily change block inside `updateCanvasTicker`
+**What was wrong:**
+- **Incorrect precision**: Duplicate `Math.abs(changePercent) >= 10` checks prevented proper rendering of percentage changes ≥100%
+- **Second condition never executed**: The `else if` with same condition as the first `if` made it unreachable
 
-**Implementation**:
-1. Default `const changePercentRaw = Number(values.changeDailyPercent)` and bail out unless `Number.isFinite(changePercentRaw)`
-2. Fix the precision thresholds (e.g., `< 1` → 2 digits, `< 10` → 1 digit, `>= 10` → 0 digits) instead of repeating the same condition twice
-3. Only adjust fill colors and render the text when a valid numeric change is available
+**What was changed:**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:691-694`
+- Fixed the precision thresholds: `>= 100` → 0 digits, `>= 10` → 1 digit, `< 10` → 2 digits
+
+**Still TODO:**
+1. Add validation: `const changePercentRaw = Number(values.changeDailyPercent)` and bail out unless `Number.isFinite(changePercentRaw)`
+2. Only adjust fill colors and render text when valid numeric change is available (prevent NaN rendering)
+3. Add unit tests for positive, negative, zero, and missing change scenarios
 
 **Risks & Considerations**:
 - **Backward compatibility**: Confirm existing presets rely on the intended precision behavior
-- **Testing**: Add unit tests for positive, negative, zero, and missing change scenarios to prevent regressions
+- **Testing**: Add unit tests to prevent regressions
 - **Localization**: Ensure formatting still works with locales that use different decimal separators
+
+---
+
+### 1.6 Prevent Division by Zero in High/Low Bar ✅ FIXED
+
+**Status:** Fixed in direct_provider branch
+
+**What was wrong:**
+- When `values.high === values.low` (low volatility or data issues), division by zero produced `NaN`
+- This broke canvas rendering of the high/low indicator bar
+
+**What was changed:**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:734-735`
+- Added range check: `const range = values.high - values.low;`
+- Safe calculation: `const percent = range > 0 ? (values.last - values.low) / range : 0.5;`
+- Fallback positions cursor at center (50%) when range is zero
+
+**Impact:** Canvas rendering no longer crashes with NaN values
+
+---
+
+### 1.7 Add Missing Volume Field in Bitfinex Candles ✅ FIXED
+
+**Status:** Fixed in direct_provider branch
+
+**What was wrong:**
+- Bitfinex candles only included `volumeQuote` but lacked `volume` field
+- Inconsistent with Binance provider which includes both fields
+- Could cause issues if code expects `volume` to exist
+
+**What was changed:**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/bitfinex-provider.js:486-487`
+- Added: `volume: toNumber(item[5])`
+- Kept: `volumeQuote: toNumber(item[5])`
+
+**Impact:** Ensures consistent candle data structure across all providers
+
+---
+
+### 1.8 Improve Missing Data Handling
+
+**Why?**
+- **Current behavior**: Missing ticker values default to 0, making button display "0.00"
+- **User confusion**: "BTC/USD: 0.00" looks like price crash, not missing data
+- **Better UX**: Show clear indication of missing/unavailable data
+
+**What needs to be changed?**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
+  - Lines 560-773: `updateCanvasTicker` function
+- **Implementation**:
+  1. Check if critical values are missing/invalid: `!values || !Number.isFinite(values.last)`
+  2. Display "N/A", "---", or "LOADING..." when data missing
+  3. Consider showing last known valid value with "STALE" indicator
+  4. Add visual indicator (color, icon) for degraded state
+
+**Example scenarios:**
+- Exchange API temporary glitch returns incomplete data
+- New trading pair with no historical data yet
+- Network timeout returns partial response
+
+**Risks & Considerations**:
+- **UX decision**: What to show? Options: blank, "N/A", stale data with indicator
+- **Performance**: Validation checks on every render
+- **State management**: Need to track "last known good" values
+
+---
+
+### 1.9 Fix Currency Conversion Fallback Behavior
+
+**Why?**
+- **Current behavior**: When currency conversion fails, code defaults to rate = 1.0 (ticker.js:422)
+- **Problem**: If EUR→USD conversion fails, displays EUR prices as if they were USD
+- **User impact**: Misleading prices with no error indication
+
+**Example:**
+- User requests EUR display for BTC/USD
+- Conversion API fails
+- BTC shows as €60,000 when it should be ~€54,000 (1.0 fallback applied)
+- User has no idea conversion failed
+
+**What needs to be changed:**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:415-423`
+- **Implementation options**:
+  1. Show error state/indicator when conversion unavailable
+  2. Clearly label as original currency (e.g., "USD") when conversion fails
+  3. Add "CONVERSION ERROR" text on button
+  4. Use connection state icon to show BROKEN state
+
+**Current code:**
+```javascript
+} catch (err) {
+    if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0) {
+        return cacheEntry.rate;  // Use cached rate
+    }
+    return 1;  // ⚠️ Silent 1:1 fallback
+}
+```
+
+**Risks & Considerations**:
+- **Error visibility**: Must be obvious to user without being intrusive
+- **Cached rates**: Current code uses cached rate first (good), only 1.0 as last resort
+- **Button space**: Limited room for error messages on small buttons
 
 ---
 
@@ -220,6 +323,8 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ### 2.3 Implement Bounded Cache with Eviction
 
+**Priority:** 🟡 Medium (memory leak risk)
+
 **Why?**
 - **Memory leaks**: `candlesCache` and `conversionRatesCache` grow indefinitely
 - **Long-running sessions**: Users with many buttons over days/weeks will accumulate GB of cached data
@@ -244,6 +349,121 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Configuration**: Determine appropriate cache sizes based on typical usage
 - **Testing**: Test cache behavior under heavy load and long sessions
 - **Metrics**: Log cache statistics to understand actual usage patterns
+
+---
+
+### 2.4 Implement WebSocket Connection Pooling
+
+**Priority:** 🟢 Low (optimization, not critical)
+
+**Why?**
+- **Resource efficiency**: Currently each ticker instance creates its own WebSocket connection
+- **Scalability**: User with 10 BTC/USD buttons = 10 separate connections to Binance
+- **Rate limits**: Multiple connections increase risk of hitting exchange limits
+- **Browser limits**: Most browsers limit concurrent WebSocket connections
+
+**Current behavior:**
+- Each call to `subscribeTicker()` → separate WebSocket
+- 20 buttons tracking same pair → 20 identical WebSocket connections
+- Each connection subscribes to same stream
+
+**Proposed architecture:**
+- **Connection pool manager** per exchange
+- **Single shared WebSocket** per exchange for all subscriptions
+- **Multiplexed subscriptions**: Track all symbol subscriptions on one connection
+- **Demultiplex messages**: Route incoming data to correct subscribers
+
+**What needs to be changed:**
+- **Files**:
+  - `js/providers/binance-provider.js:268-320`
+  - `js/providers/bitfinex-provider.js:272-333`
+  - New file: `js/providers/websocket-connection-pool.js`
+
+**Implementation**:
+1. Create `ConnectionPool` class managing one WebSocket per exchange
+2. Update providers to request connection from pool instead of creating new
+3. Add subscription tracking: `{ symbol: "BTCUSDT", subscribers: [context1, context2] }`
+4. Implement message routing to all subscribers of a symbol
+5. Lazy connection creation (only when first subscriber added)
+6. Auto-close connection when last subscriber unsubscribes
+
+**Benefits:**
+- ✅ 10x-20x reduction in WebSocket connections
+- ✅ Lower bandwidth usage (single stream per symbol, not per button)
+- ✅ Reduced risk of rate limiting
+- ✅ Better for mobile/low-power devices
+
+**Trade-offs:**
+- ⚠️ Increased complexity
+- ⚠️ Single point of failure (one bad connection affects all buttons)
+- ⚠️ More complex error handling and recovery
+
+**Risks & Considerations**:
+- **Migration**: Requires careful testing to ensure no regressions
+- **Error isolation**: Need robust reconnection for shared connection
+- **Message volume**: Single connection handles all symbols (higher throughput)
+- **Backward compatibility**: Should be transparent to existing code
+
+---
+
+### 2.5 Implement Exponential Backoff for Reconnections
+
+**Priority:** 🟡 Medium (prevents API hammering)
+
+**Why?**
+- **Fixed delay problem**: Current 5-second reconnection delay hammers exchange during outages
+- **Example**: 10-minute outage = 120 reconnection attempts per ticker
+- **Respectful behavior**: Exponential backoff reduces load on exchange infrastructure
+- **Better success rate**: Gives transient issues time to resolve
+
+**Current behavior:**
+- Fixed 5-second delay: `DEFAULT_WS_RECONNECT_DELAY_MS = 5000`
+- Used in: binance-provider.js:30, bitfinex-provider.js:30, generic-provider.js:31
+- Reconnects indefinitely every 5 seconds
+
+**Proposed behavior:**
+```javascript
+// Example exponential backoff
+const attemptDelay = Math.min(
+    initialDelay * Math.pow(2, attemptCount),
+    maxDelay
+);
+
+// Attempt 1: 5 seconds
+// Attempt 2: 10 seconds
+// Attempt 3: 20 seconds
+// Attempt 4: 40 seconds
+// Attempt 5+: 60 seconds (capped)
+```
+
+**What needs to be changed:**
+- **Files**:
+  - `js/providers/binance-provider.js:322-340` (scheduleReconnect)
+  - `js/providers/bitfinex-provider.js:410-428` (scheduleReconnect)
+  - `js/providers/generic-provider.js:98-109` (onclose handler)
+
+**Implementation**:
+1. Add `reconnectAttempts` counter to provider metadata
+2. Calculate delay: `Math.min(baseDelay * Math.pow(2, attempts), maxDelay)`
+3. Reset counter to 0 on successful connection
+4. Optional: Add jitter to prevent thundering herd (±20% random variation)
+
+**Configuration:**
+```javascript
+{
+    reconnectBaseDelayMs: 5000,     // Start at 5 seconds
+    reconnectMaxDelayMs: 60000,     // Cap at 60 seconds
+    reconnectMaxAttempts: null,     // null = infinite
+    reconnectJitter: true           // Add randomness
+}
+```
+
+**Risks & Considerations**:
+- **Slower recovery**: Takes longer to reconnect after short outage
+  - Mitigation: Start with aggressive 5s, back off only after multiple failures
+- **User perception**: Users might think plugin is "stuck"
+  - Mitigation: Show retry countdown in connection status
+- **Testing**: Need to simulate various outage scenarios
 
 ---
 
@@ -770,7 +990,407 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ---
 
-## 10. ADVANCED FEATURES (FUTURE)
+### 9.3 Adjust Polling and Timeout Defaults
+
+**Priority:** 🟡 Medium (affects user experience)
+
+**Why?**
+- **Current values may not be optimal for crypto**:
+  - `fallbackPollIntervalMs`: 60 seconds (ticker.js:6)
+  - `staleTickerTimeoutMs`: 6 minutes (ticker.js:7)
+- **Crypto moves fast**: 60-second updates feel very slow for volatile markets
+- **Stale data danger**: 6 minutes without updates before fallback triggers is too long
+
+**Issues with current settings:**
+
+**Fallback Polling (60 seconds):**
+- When WebSocket fails, updates only every minute
+- Crypto can move 5-10% in 60 seconds during volatile periods
+- Users expecting "real-time" see outdated data
+- Competitors update every 5-15 seconds
+
+**Stale Timeout (6 minutes):**
+- Users see "LIVE" status but data is actually stale for up to 6 minutes
+- Could lead to bad trading decisions based on outdated prices
+- By the time BROKEN state shows, opportunity/danger has passed
+
+**Proposed changes:**
+```javascript
+const defaultConfig = {
+    "fallbackPollIntervalMs": 10000,      // 10 sec instead of 60 sec
+    "staleTickerTimeoutMs": 90000         // 90 sec instead of 6 min
+};
+```
+
+**Rationale:**
+- **10-second polling**: Balance between freshness and API load
+  - Still slower than WebSocket (sub-second)
+  - Fast enough for most trading decisions
+  - Respects exchange rate limits (6 requests/min)
+
+- **90-second stale timeout**: Faster failover to backup
+  - If no WebSocket update in 90 sec, something is wrong
+  - Triggers fallback polling quickly
+  - Users see BACKUP state sooner
+
+**Trade-offs:**
+- ⚠️ More API requests (6x increase: 60s → 10s)
+- ⚠️ More frequent fallback triggers (might be noisy)
+- ✅ Better user experience during degraded service
+- ✅ More accurate connection state reporting
+
+**Configuration:**
+- Make these configurable in advanced settings
+- Allow users to tune for their needs:
+  - Day traders: 5-second polling
+  - Long-term holders: 60-second polling fine
+
+**What needs to be changed:**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:4-8`
+- Update default values
+- Consider adding UI controls in property inspector
+- Document impact on API rate limits
+
+---
+
+### 9.4 Document Symbol Transformation Rules
+
+**Priority:** 🟢 Low (documentation)
+
+**Why?**
+- **Hidden behavior**: Binance provider auto-converts USD pairs to USDT
+- **Example**: User enters "BTC/USD" → actually gets "BTC/USDT" data
+- **User confusion**: Prices might not match expectations
+- **Debugging difficulty**: Users searching logs for "BTCUSD" won't find "BTCUSDT"
+
+**Current transformation logic:**
+- **Binance** (binance-provider.js:251-252):
+  ```javascript
+  if (original.endsWith("USD")) {
+      return original.slice(0, -3) + "USDT";
+  }
+  ```
+
+- **Bitfinex** (bitfinex-provider.js:257-264):
+  ```javascript
+  const sanitized = original.replace(/[:/]/g, "");
+  const upper = sanitized.toUpperCase();
+  const withoutLeadingT = upper.startsWith("T") ? upper.substring(1) : upper;
+  return "t" + withoutLeadingT;
+  ```
+
+**Issues:**
+- No user-facing documentation of these rules
+- No indication in UI that symbol was transformed
+- No way for user to see what symbol is actually being used
+- Could lead to price confusion (USDT ≠ USD, usually within 1% but not always)
+
+**Proposed solutions:**
+
+**Option 1: Show transformed symbol in UI**
+- Property inspector shows: "Symbol: BTCUSD → BTCUSDT (Binance)"
+- Connection status tooltip shows actual symbol used
+- Helps users understand what they're actually tracking
+
+**Option 2: Documentation + Troubleshooting**
+- Add help text in property inspector
+- "Note: Binance converts USD pairs to USDT automatically"
+- Link to documentation explaining why
+
+**Option 3: User control**
+- Add "Override Symbol" advanced setting
+- Let users specify exact symbol if auto-detection wrong
+- Use `binanceSymbolOverrides` / `bitfinexSymbolOverrides` config
+
+**What needs to be changed:**
+- **Documentation**:
+  - Add section to README explaining symbol resolution
+  - Document transformation rules per exchange
+  - Provide troubleshooting guide for "wrong symbol" issues
+
+- **UI Enhancement** (optional):
+  - Show transformed symbol in property inspector
+  - Add tooltip explaining transformation
+  - Log transformation in debug mode
+
+---
+
+### 9.5 Clarify Alert Re-Arming Logic
+
+**Priority:** 🟡 Medium (affects alerts feature)
+
+**Why?**
+- **Unclear behavior**: Alert arming logic may have edge cases
+- **Current code** (ticker.js:609-626):
+  ```javascript
+  if (eval(settings["alertRule"])) {
+      alertStatuses[context] = "on";
+      if (alertArmed[context] != "off") {
+          alertMode = true;
+          // Show alert (swap colors)
+      }
+  } else {
+      alertStatuses[context] = "off";
+      alertArmed[context] = "on";  // Re-arm
+  }
+  ```
+
+**Questions that need answering:**
+1. When does alert initially arm? (First time condition becomes false?)
+2. What happens on reconnection? (Does armed state persist?)
+3. What if alert condition is true at plugin start? (Shows alert or waits?)
+4. How does user "acknowledge" alert? (By clicking button? Automatic?)
+5. Can alert fire multiple times in same session?
+
+**Potential issues:**
+
+**Scenario 1: Plugin starts while alert active**
+- User sets alert: "BTC > $70,000"
+- Plugin starts when BTC = $71,000
+- Alert condition TRUE immediately
+- Is `alertArmed[context]` undefined? (not "off")
+- Does alert fire immediately or wait for price to drop first?
+
+**Scenario 2: Reconnection during alert**
+- Alert fires, user doesn't notice
+- WebSocket disconnects and reconnects
+- Alert state persists in memory
+- Does alert show again on reconnection?
+
+**Scenario 3: Rapid oscillation**
+- Price hovers around alert threshold: $69,999 ↔ $70,001
+- Alert fires, then immediately re-arms, then fires again
+- Could cause alert spam or missed alerts
+
+**Proposed improvements:**
+
+**1. Initialize alert state on startup:**
+```javascript
+// On plugin start or settings change
+if (alertArmed[context] === undefined) {
+    alertArmed[context] = "on";  // Default to armed
+}
+```
+
+**2. Add alert cooldown:**
+```javascript
+const ALERT_COOLDOWN_MS = 60000;  // 1 minute
+const alertLastFired = {};
+
+if (eval(settings["alertRule"])) {
+    const now = Date.now();
+    const lastFired = alertLastFired[context] || 0;
+    if (now - lastFired > ALERT_COOLDOWN_MS && alertArmed[context] !== "off") {
+        alertMode = true;
+        alertLastFired[context] = now;
+        // Optionally: auto-disarm until user clicks button
+    }
+}
+```
+
+**3. Add user acknowledgement:**
+- On `onKeyDown`, if alert is showing: `alertArmed[context] = "off"`
+- This lets user "dismiss" alert by clicking button
+- Alert won't fire again until condition becomes false then true again
+
+**4. Document alert lifecycle clearly:**
+```
+1. Alert starts ARMED
+2. When condition TRUE + ARMED → fire alert
+3. After firing → stays ARMED (shows alert until condition FALSE)
+4. When condition FALSE → RE-ARM
+5. Cycle repeats
+```
+
+**What needs to be changed:**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:609-626`
+- Initialize alert state on startup
+- Add optional cooldown mechanism
+- Consider user acknowledgement feature
+- Document alert behavior clearly in help/docs
+
+---
+
+## 10. CONNECTION & PROVIDER IMPROVEMENTS
+
+### 10.1 Add Rate Limiting Protection
+
+**Priority:** 🟡 Medium (prevents API bans)
+
+**Why?**
+- **Risk of rate limits**: Direct API calls have no rate limit protection
+- **Exchange limits**: Binance = 1200 req/min, Bitfinex = 90 req/min (per IP)
+- **Corporate networks**: Multiple users behind same NAT IP share limits
+- **Consequences**: IP ban, degraded service, broken plugin
+
+**Current behavior:**
+- No request throttling or queuing
+- Multiple ticker instances = multiple parallel requests
+- Rapid reconnection attempts during outages
+- No handling of 429 (Too Many Requests) responses
+
+**Proposed implementation:**
+
+**1. Request Queue per Exchange:**
+```javascript
+class RateLimiter {
+    constructor(maxRequests, timeWindowMs) {
+        this.maxRequests = maxRequests;
+        this.timeWindowMs = timeWindowMs;
+        this.queue = [];
+        this.inFlight = 0;
+    }
+
+    async execute(fn) {
+        // Wait if limit reached
+        while (this.inFlight >= this.maxRequests) {
+            await this.sleep(100);
+        }
+
+        this.inFlight++;
+        try {
+            return await fn();
+        } finally {
+            this.inFlight--;
+        }
+    }
+}
+```
+
+**2. Detect and Handle 429 Responses:**
+```javascript
+async function fetchWithRateLimit(url) {
+    const response = await fetch(url);
+
+    if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const delayMs = retryAfter ? parseInt(retryAfter) * 1000 : 60000;
+
+        this.log(`Rate limited, waiting ${delayMs}ms`);
+        await this.sleep(delayMs);
+        return fetchWithRateLimit(url);  // Retry
+    }
+
+    return response;
+}
+```
+
+**3. Per-Provider Rate Limits:**
+```javascript
+const RATE_LIMITS = {
+    BINANCE: { requests: 20, windowMs: 60000 },      // 20/min (conservative)
+    BITFINEX: { requests: 15, windowMs: 60000 },     // 15/min (conservative)
+    GENERIC: { requests: 10, windowMs: 60000 }       // 10/min for proxy
+};
+```
+
+**What needs to be changed:**
+- **New file**: `js/providers/rate-limiter.js`
+- **Files to update**:
+  - `js/providers/binance-provider.js`: Wrap REST calls
+  - `js/providers/bitfinex-provider.js`: Wrap REST calls
+  - `js/providers/generic-provider.js`: Wrap REST calls
+
+**Implementation:**
+1. Create RateLimiter class with configurable limits
+2. Wrap all `fetch()` calls with rate limiter
+3. Add retry logic for 429 responses with exponential backoff
+4. Log rate limit events for monitoring
+5. Show warning in UI when rate limit hit
+6. Consider adding rate limit stats to connection status
+
+**Risks & Considerations**:
+- **Queuing delay**: Users might see slower initial load
+- **Complexity**: Adds overhead to every request
+- **Configuration**: Limits might need tuning based on actual usage
+- **Testing**: Need to simulate rate limit scenarios
+
+---
+
+### 10.2 Improve Connection Status Communication
+
+**Priority:** 🔴 High (user experience critical)
+
+**Why?**
+- **Users need to know**: When connection degrades from LIVE → BACKUP
+- **Trading implications**: Backup provider may have higher latency or stale data
+- **Current limitation**: Only small icon shows state (if enabled)
+- **User confusion**: No notification when failover occurs
+
+**Current status display:**
+- Small icon in corner of button (if `displayConnectionStatusIcon` enabled)
+- States: LIVE, DETACHED, BACKUP, BROKEN
+- No notifications or state change alerts
+- Icon might be hard to see on small displays
+
+**Proposed enhancements:**
+
+**1. Transient State Change Notification:**
+```javascript
+function onConnectionStateChange(context, oldState, newState) {
+    if (oldState === "live" && newState === "backup") {
+        // Flash button briefly
+        flashButton(context, "#FFA500", 2000);  // Orange flash for 2 sec
+
+        // Optional: system notification
+        if (settings.notifyOnDegradation) {
+            showSystemNotification("Connection degraded to backup provider");
+        }
+    }
+}
+```
+
+**2. Enhanced Visual Indicators:**
+- **Color pulse**: Button border pulses when state changes
+- **Temporary overlay**: Show "BACKUP MODE" text for 3 seconds
+- **Icon animation**: Icon grows/shrinks briefly on state change
+- **Background color**: Subtle background tint based on state
+  - LIVE: no tint (normal)
+  - BACKUP: very subtle yellow tint
+  - BROKEN: subtle red tint
+
+**3. Connection Status Details:**
+- Add tooltip/hover info in property inspector
+- Show: "Connected via Binance WebSocket (LIVE)" or "Using backup proxy (BACKUP)"
+- Display last successful update timestamp
+- Show retry countdown when BROKEN
+
+**4. User Preferences:**
+```javascript
+// Add to settings
+{
+    "connectionStatusDisplay": "icon",  // Options: "icon", "text", "color", "all", "none"
+    "notifyOnDegradation": false,       // System notification
+    "flashOnStateChange": true          // Brief visual flash
+}
+```
+
+**What needs to be changed:**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
+  - Add state change detection
+  - Implement visual feedback mechanisms
+  - Add notification system
+
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
+  - Add connection status display settings
+  - Show current connection details in UI
+
+- **Implementation**:
+  1. Track previous connection state per context
+  2. Detect state transitions (LIVE → BACKUP, BACKUP → BROKEN, etc.)
+  3. Trigger appropriate visual feedback
+  4. Add configurable notification preferences
+  5. Consider temporary text overlay on button
+
+**Risks & Considerations**:
+- **Distraction**: Too much visual feedback might be annoying
+- **Button space**: Limited room for additional indicators
+- **Performance**: Animations might impact canvas rendering
+- **User preference**: Make notifications opt-in to avoid surprises
+
+---
+
+## 11. ADVANCED FEATURES (FUTURE)
 
 ### 10.1 Multi-Currency Portfolio Tracking
 
