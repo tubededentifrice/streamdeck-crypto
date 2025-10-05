@@ -377,8 +377,8 @@
     canvasContext.fillStyle = textColor;
 
     const interval = settings["candlesInterval"] || "1h";
-    canvasContext.textAlign = "left";
-    canvasContext.fillText(interval, 10 * sizeMultiplier, canvasHeight - (5 * sizeMultiplier));
+    canvasContext.textAlign = "right";
+    canvasContext.fillText(interval, canvasWidth - (10 * sizeMultiplier), canvasHeight - (5 * sizeMultiplier));
 
     candlesToDisplay.forEach(function (candleNormalized) {
         const xPosition = Math.round(padding + Math.round(candleNormalized.timePercent * paddingWidth));
