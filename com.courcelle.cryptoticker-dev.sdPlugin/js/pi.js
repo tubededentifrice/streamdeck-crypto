@@ -17,7 +17,7 @@ const settingsConfig = {
         "value": document.getElementById("input-title")
     },
     "exchange": {
-        "default": "BITFINEX",
+        "default": "BINANCE",
         "value": document.getElementById("select-provider")
     },
     "pair": {
@@ -51,6 +51,10 @@ const settingsConfig = {
         "default": 2,
         "value": document.getElementById("digits")
     },
+    "highLowDigits": {
+        "default": "",
+        "value": document.getElementById("highLowDigits")
+    },
     "priceFormat": {
         "default": "compact",
         "value": document.getElementById("priceFormat")
@@ -66,6 +70,10 @@ const settingsConfig = {
     "fontSizePrice": {
         "default": 35,
         "value": document.getElementById("fontSizePrice")
+    },
+    "fontSizeHighLow": {
+        "default": "",
+        "value": document.getElementById("fontSizeHighLow")
     },
     "fontSizeChange": {
         "default": 19,
@@ -107,6 +115,16 @@ const settingsConfig = {
         },
         "setValue": function(val) {
             this.value.checked = (val!="off");
+        }
+    },
+    "displayConnectionStatusIcon": {
+        "default": "OFF",
+        "value": document.getElementById("displayConnectionStatusIcon"),
+        "getValue": function() {
+            return (this.value.value || "OFF").toUpperCase();
+        },
+        "setValue": function(val) {
+            this.value.value = (val || "OFF").toUpperCase();
         }
     },
     "alertRule": {
@@ -169,19 +187,22 @@ const pi = {
                 option.value = provider;
                 exchangeDropdown.add(option);
             });
-            exchangeDropdown.value = currentSettings["exchange"];
+            exchangeDropdown.value = currentSettings["exchange"] || settingsConfig["exchange"]["default"];
         }
 
         const thisTmp = this;
         const updatePairs = async function() {
             // Whenever the exchange changes, we need to update supported pairs
             // Remove existing options
-            thisTmp.removeAllOptions(selectPairDropdown);
-
             const provider = exchangeDropdown.value;
             const pairs = await thisTmp.getPairs(provider);
+            if ((exchangeDropdown.value || "").toUpperCase() !== (provider || "").toUpperCase()) {
+                return;
+            }
+            thisTmp.removeAllOptions(selectPairDropdown);
             pairs.sort(function(a,b) {
-                const aP = a["symbol"], bP = b["symbol"];
+                const aP = a["display"] || a["symbol"];
+                const bP = b["display"] || b["symbol"];
                 if (aP > bP) {
                     return 1;
                 } else if (aP < bP) {
@@ -199,23 +220,30 @@ const pi = {
 
             pairs.forEach(function (pair) {
                 const option = document.createElement("option");
-                option.text = pair["symbol"];
-                option.value = pair["symbol"];
+                const value = pair["value"];
+                const display = pair["display"] || value;
+                option.text = display;
+                option.value = value;
                 selectPairDropdown.add(option);
             });
-            selectPairDropdown.value = currentSettings["pair"];
-
-            const pairsDropdownGroup = document.getElementById("select-pair-dropdown-group");
-            const pairsInputGroup = document.getElementById("select-pair-input-group");
-            if (pairs.length>0) {
-                pairsDropdownGroup.style.display = "";
-                pairsInputGroup.style.display = "none";
-            } else {
-                pairsDropdownGroup.style.display = "none";
-                pairsInputGroup.style.display = "";
+            const savedPair = (currentSettings["pair"] || "").toUpperCase();
+            selectPairDropdown.value = savedPair;
+            if (selectPairDropdown.value !== savedPair) {
+                const match = pairs.find(function (pair) {
+                    return (pair["value"] || "").toUpperCase() === savedPair || (pair["symbol"] || "").toUpperCase() === savedPair;
+                });
+                if (match) {
+                    selectPairDropdown.value = (match["value"] || match["symbol"] || "");
+                }
             }
 
-            selectPairDropdown.value = currentSettings["pair"];
+            selectPairDropdown.value = selectPairDropdown.value || savedPair;
+
+            const hasPairs = pairs.length > 0;
+            const dropdownGroup = document.getElementById("select-pair-dropdown-group");
+            if (dropdownGroup) {
+                dropdownGroup.style.display = hasPairs ? "" : "none";
+            }
         };
 
         const originalCallback = exchangeDropdown.onchange;
@@ -231,8 +259,10 @@ const pi = {
             pairInput.onchange();
         };
 
-        lastDisplayedExchange = currentSettings["exchange"];
-        updatePairs();
+        const initialExchange = currentSettings["exchange"] || exchangeDropdown.value || settingsConfig["exchange"]["default"];
+        exchangeDropdown.value = initialExchange;
+        lastDisplayedExchange = initialExchange;
+        await updatePairs();
         this.refreshValues();
     },
     getProviders: async function() {
@@ -249,17 +279,80 @@ const pi = {
         return responseJson;
     },
     getPairs: async function (provider) {
-        const cacheKey = "getPairs_"+provider;
+        const cacheKey = "getPairs_" + provider;
         if (cache[cacheKey]) {
             return cache[cacheKey];
         }
 
-        const response = await fetch(tProxyBase + "/api/Ticker/json/symbols?provider="+provider);
-        const responseJson = await response.json();
-        this.log("getPairs", responseJson);
+        let pairs = null;
 
-        cache[cacheKey] = responseJson;
-        return responseJson;
+        const providerModule = this.resolveProviderModule(provider);
+
+        if (providerModule && typeof providerModule.getPairs === "function") {
+            try {
+                pairs = await providerModule.getPairs();
+            } catch (err) {
+                this.log("Error fetching direct pairs", err);
+                pairs = null;
+            }
+        }
+
+        if (!Array.isArray(pairs) || pairs.length === 0) {
+            try {
+                const response = await fetch(tProxyBase + "/api/Ticker/json/symbols?provider=" + provider);
+                const responseJson = await response.json();
+                pairs = responseJson;
+            } catch (err) {
+                this.log("Error fetching pairs from proxy", err);
+                pairs = [];
+            }
+        }
+
+        const normalized = (pairs || []).map(function (item) {
+            if (!item) {
+                return null;
+            }
+
+            if (typeof item === "string") {
+                const value = item.toUpperCase();
+                return {
+                    value: value,
+                    symbol: value.replace(/[:/]/g, ""),
+                    display: value
+                };
+            }
+
+            const rawValue = item.value !== undefined ? item.value : (item.display || item.symbol || "");
+            const value = (rawValue || "").toUpperCase();
+            if (!value) {
+                return null;
+            }
+
+            const normalizedSymbol = (item.symbol || value.replace(/[:/]/g, "")).toUpperCase();
+            const display = (item.display || value).toUpperCase();
+
+            return {
+                value: value,
+                symbol: normalizedSymbol,
+                display: display
+            };
+        }).filter(function (item) {
+            return item !== null;
+        });
+
+        cache[cacheKey] = normalized;
+        return normalized;
+    },
+    resolveProviderModule: function(provider) {
+        if (typeof provider !== "string") {
+            return null;
+        }
+
+        if (typeof CryptoTickerPIProviders !== "undefined" && CryptoTickerPIProviders.getProvider) {
+            return CryptoTickerPIProviders.getProvider(provider);
+        }
+
+        return null;
     },
     initCurrenciesDropDown: async function () {
         const currencies = await this.getCurrencies();
@@ -267,6 +360,13 @@ const pi = {
 
         // const fromCurrencyDropDown = settingsConfig["fromCurrency"]["value"];
         const toCurrencyDropDown = settingsConfig["currency"]["value"];
+
+        this.removeAllOptions(toCurrencyDropDown);
+
+        const emptyOption = document.createElement("option");
+        emptyOption.text = "";
+        emptyOption.value = "";
+        toCurrencyDropDown.add(emptyOption);
 
         currencies.sort();
         currencies.forEach(function (currency) {
@@ -312,7 +412,11 @@ const pi = {
         //
 
         for (const k in settingsConfig) {
-            currentSettings[k] = settings[k] || settingsConfig[k]["default"];
+            if (settings.hasOwnProperty(k) && settings[k] !== undefined && settings[k] !== null && settings[k] !== "") {
+                currentSettings[k] = settings[k];
+            } else if (!currentSettings.hasOwnProperty(k)) {
+                currentSettings[k] = settingsConfig[k]["default"];
+            }
         }
 
         this.refreshValues();

@@ -42,6 +42,7 @@ rsync -avh --delete ./com.courcelle.cryptoticker-dev.sdPlugin/ ./com.courcelle.c
 cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
 rm -f com.courcelle.cryptoticker.streamDeckPlugin
 streamdeck pack com.courcelle.cryptoticker.sdPlugin
+rm -rf com.courcelle.cryptoticker.sdPlugin
 ```
 
 

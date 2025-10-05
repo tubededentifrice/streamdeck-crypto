@@ -21,8 +21,14 @@ test("rounded value pads digits", () => {
 });
 
 test("rounded value adjusts for large numbers", () => {
-    expect(ticker.getRoundedValue(150.123, 2, 1)).toBe("150");
-    expect(ticker.getRoundedValue(150000, 2, 1)).toBe("150.00k");
+    expect(ticker.getRoundedValue(150.123, 2, 1)).toBe("150.12");
+    expect(ticker.getRoundedValue(150000, 2, 1)).toBe("150.00K");
+});
+
+test("rounded value preserves configured digits across formats", () => {
+    expect(ticker.getRoundedValue(122.8, 2, 1)).toBe("122.80");
+    expect(ticker.getRoundedValue(122800, 2, 1)).toBe("122.80K");
+    expect(ticker.getRoundedValue(122800, 2, 1, "compact")).toBe("122.80K");
 });
 
 test("normalize value", () => {
@@ -53,4 +59,54 @@ test("getCandlesNormalized spans full width for prepared candles", () => {
 
     expect(normalized[0].timePercent).toBeCloseTo(0);
     expect(normalized[normalized.length - 1].timePercent).toBeCloseTo(1);
+});
+
+test("convertTickerValues applies conversion without mutating original", async () => {
+    const originalGetConversionRate = ticker.getConversionRate;
+    ticker.getConversionRate = jest.fn().mockResolvedValue(0.5);
+
+    const sourceTicker = {
+        last: 100,
+        high: 120,
+        low: 80,
+        open: 90,
+        close: 95,
+        changeDaily: 10,
+        volume: 5
+    };
+
+    const converted = await ticker.convertTickerValues(sourceTicker, "USD", "EUR");
+
+    expect(converted).not.toBe(sourceTicker);
+    expect(converted.last).toBeCloseTo(50);
+    expect(converted.high).toBeCloseTo(60);
+    expect(converted.low).toBeCloseTo(40);
+    expect(converted.open).toBeCloseTo(45);
+    expect(converted.close).toBeCloseTo(47.5);
+    expect(converted.changeDaily).toBeCloseTo(5);
+    expect(converted.conversionRate).toBe(0.5);
+    expect(converted.conversionToCurrency).toBe("EUR");
+    expect(sourceTicker.last).toBe(100);
+
+    ticker.getConversionRate = originalGetConversionRate;
+});
+
+test("getConversionRate caches results for an hour", async () => {
+    const originalFetch = global.fetch;
+    const mockResponse = {
+        ok: true,
+        json: async () => ({ rate: 1.25 })
+    };
+    global.fetch = jest.fn().mockResolvedValue(mockResponse);
+
+    try {
+        const first = await ticker.getConversionRate("USD", "EUR");
+        expect(first).toBeCloseTo(1.25);
+
+        const second = await ticker.getConversionRate("usd", "eur");
+        expect(second).toBeCloseTo(1.25);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+    } finally {
+        global.fetch = originalFetch;
+    }
 });
