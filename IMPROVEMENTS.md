@@ -260,163 +260,7 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
 
-### 2.1 Single Source of Truth for Default Settings ✅ COMPLETED
-
-**Status:** Completed in improvements1 branch
-
-**What was done:**
-- **New file**: `js/default-settings.js` (335 lines)
-  - Centralized settings schema with types and defaults
-  - Built-in validation and normalization
-  - Range clamping (e.g., digits: 0-10, fontSize: 1-200)
-  - Enum validation (e.g., mode: "ticker" or "candles")
-  - Type coercion (strings to uppercase, numbers clamped)
-  - Deep cloning to prevent mutation
-
-**Impact:**
-- No more scattered hardcoded defaults
-- Invalid settings automatically corrected
-- Consistent settings behavior across plugin
-- Foundation for better error messages
-
-**Files changed:**
-- Created: `js/default-settings.js`
-- Updated: `js/ticker.js`, `js/pi.js` to use centralized defaults
-- Tests: `__tests__/settings-manager.test.js`
-
----
-
-### 2.2 Refactor Monolithic ticker.js ✅ COMPLETED
-
-**Status:** Completed in improvements1 branch (commit: 5d6e3af)
-
-**What was wrong:**
-- Single 1,430-line file with multiple responsibilities
-- Hard to test, maintain, and understand
-- Mixed concerns: state management, rendering, alerts, formatting
-
-**What was done:**
-- **Reduced ticker.js from 1,430 to 931 lines (-35%)**
-- **Created focused modules:**
-
-1. **`js/ticker-state.js`** (134 lines)
-   - Centralized state management
-   - Context details, subscriptions, connection states
-   - Conversion rates cache, candles cache
-   - Clean reset functionality
-
-2. **`js/alert-manager.js`** (98 lines)
-   - Alert rule evaluation
-   - Armed state management
-   - Color swapping logic
-   - Re-arming on condition change
-
-3. **`js/canvas-renderer.js`** (431 lines)
-   - All canvas drawing functions
-   - Connection status icon rendering
-   - Ticker and candles mode rendering
-   - Modular, testable rendering logic
-
-4. **`js/settings-manager.js`** (88 lines)
-   - Settings refresh and application
-   - Integration with default-settings module
-   - Works in browser and Node.js (for tests)
-
-5. **`js/formatters.js`** (115 lines)
-   - Number formatting (full, compact, plain, auto)
-   - Locale-aware formatting
-   - Unit suffixes (K, M, B, T)
-   - Value normalization
-
-6. **`js/default-settings.js`** (335 lines)
-   - See §2.1 above
-
-**Benefits:**
-- Single Responsibility Principle
-- Independently testable modules
-- Clear dependency graph
-- Easier to onboard new contributors
-- Foundation for TypeScript migration
-
-**Files changed:**
-- Created: 6 new modules (1,201 lines)
-- Reduced: ticker.js by 499 lines
-- Updated: index.html, index_pi.html, dev/preview.html to load modules
-- Tests: Created __tests__ for each module
-
----
-
-## 3. TESTING & BUILD INFRASTRUCTURE ✅ COMPLETED
-
-### 3.1 Add Linting and Code Formatting ✅ COMPLETED
-
-**Status:** Completed in improvements1 branch (commit: e2585d5)
-
-**What was done:**
-- **ESLint configuration** (`.eslintrc.json`)
-  - Extends recommended rules
-  - ES2022 syntax support
-  - Browser + Node environment
-  - StreamDeck globals defined
-
-- **Prettier configuration** (`.prettierrc`)
-  - 4-space indentation
-  - Single quotes, trailing commas
-  - 120-character line width
-  - Unix line endings (LF)
-
-- **Git pre-commit hook** (`.husky/pre-commit`)
-  - Automatic linting before commit
-  - Prevents committing code with errors
-
-- **Package.json scripts:**
-  - `npm run lint` - Run ESLint
-  - `npm run format` - Run Prettier
-
-**Impact:**
-- Consistent code style across team
-- Catches common bugs before commit
-- Reduced code review friction
-- Professional development workflow
-
-**Files changed:**
-- Created: `.eslintrc.json`, `.prettierrc`, `.prettierignore`, `.husky/pre-commit`
-- Updated: `package.json` with new scripts and dev dependencies
-
----
-
-### 3.2 Expand Test Coverage (Ongoing)
-
-**Status:** Foundation completed, expansion in progress
-
-**What was done:**
-- Created test files for all new modules:
-  - `__tests__/alert-manager.test.js`
-  - `__tests__/canvas-renderer.test.js`
-  - `__tests__/formatters.test.js`
-  - `__tests__/settings-manager.test.js`
-  - `__tests__/ticker-state.test.js`
-  - Expanded `__tests__/ticker.test.js`
-
-- Configured Jest testing framework
-- Added `npm test` script
-
-**Current coverage:** ~10-15% (estimated)
-**Target coverage:** >80%
-
-**Next steps:**
-- Add integration tests for full workflows
-- Test WebSocket reconnection logic
-- Test provider failover scenarios
-- Test conversion rate caching
-- Test canvas rendering variations
-- Mock StreamDeck SDK, WebSocket, fetch, canvas
-
----
-
-## 4. CODE ARCHITECTURE & MAINTAINABILITY
-
-### 4.1 Implement Exponential Backoff for Reconnections
+### 2.5 Implement Exponential Backoff for Reconnections
 
 **Priority:** 🟡 Medium (prevents API hammering)
 
@@ -474,6 +318,45 @@ const attemptDelay = Math.min(
 - **User perception**: Users might think plugin is "stuck"
   - Mitigation: Show retry countdown in connection status
 - **Testing**: Need to simulate various outage scenarios
+
+---
+
+## 4. Testing
+
+### 4.1 Expand Test Coverage
+
+**Why?**
+- **Current state**: Only 57 lines of tests in `__tests__/ticker.test.js` (~5% coverage)
+- **Risk**: Refactoring and new features break existing functionality
+- **Confidence**: Can't confidently make changes without tests
+- **Regressions**: Bugs like the preview volume issue could have been caught
+
+**What needs to be changed?**
+- **File**: `__tests__/ticker.test.js` (expand significantly)
+- **New test files to create**:
+  1. `__tests__/canvas-renderer.test.js`: Test canvas drawing functions
+  2. `__tests__/providers/binance-provider.test.js`: Test Binance WebSocket handling
+  3. `__tests__/providers/bitfinex-provider.test.js`: Test Bitfinex WebSocket handling
+  4. `__tests__/providers/provider-registry.test.js`: Test failover logic
+  5. `__tests__/subscription-manager.test.js`: Test cache expiration
+  6. `__tests__/pi-helpers.test.js`: Test property inspector utilities
+  7. `__tests__/formatters.test.js`: Test price/number formatting
+  8. Others as you deem appropriate
+- **Coverage areas**:
+  - WebSocket reconnection logic
+  - Provider failover when primary fails
+  - Conversion rate caching and expiration
+  - Alert rule evaluation (post-eval replacement)
+  - Canvas rendering with various settings combinations
+  - Settings validation and defaults
+- **Target**: >80% code coverage
+
+**Risks & Considerations**:
+- **Effort**: Significant time investment to write comprehensive tests
+- **Mocking**: Need to mock WebSocket, fetch, StreamDeck SDK, canvas
+- **Test infrastructure**: May need to add testing utilities and helpers
+- **CI/CD**: Tests should run automatically on every commit
+- **Maintenance**: Tests need updates when code changes
 
 ---
 
@@ -571,9 +454,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 6. PERFORMANCE OPTIMIZATION
+## 5. PERFORMANCE OPTIMIZATION
 
-### 6.1 Optimize Canvas Rendering
+### 5.1 Optimize Canvas Rendering
 
 **Why?**
 - **CPU usage**: Canvas redraws on every ticker update, even when values unchanged

@@ -11,17 +11,49 @@ const tProxyBase = "https://tproxyv8.opendle.com";
 
 const loggingEnabled = false;
 const selectPairDropdown = document.getElementById("select-pair-dropdown");
+const defaultSettingsModule = typeof CryptoTickerDefaults !== "undefined" ? CryptoTickerDefaults : null;
+
+function ensureDefaultSettingsModule() {
+    if (!defaultSettingsModule) {
+        throw new Error("Default settings module is not available");
+    }
+    return defaultSettingsModule;
+}
+
+function applyDefaultSettings(partialSettings) {
+    const moduleRef = ensureDefaultSettingsModule();
+    if (typeof moduleRef.applyDefaults === "function") {
+        return moduleRef.applyDefaults(partialSettings);
+    }
+    if (moduleRef.defaultSettings) {
+        return Object.assign({}, moduleRef.defaultSettings, partialSettings || {});
+    }
+    return Object.assign({}, partialSettings || {});
+}
+
+function getDefaultSettingsSnapshot() {
+    const moduleRef = ensureDefaultSettingsModule();
+    if (typeof moduleRef.getDefaultSettings === "function") {
+        return moduleRef.getDefaultSettings();
+    }
+    if (moduleRef.defaultSettings) {
+        return JSON.parse(JSON.stringify(moduleRef.defaultSettings));
+    }
+    return {};
+}
+
+const defaultSettings = getDefaultSettingsSnapshot();
 const settingsConfig = {
     "title": {
-        "default": "",
+        "default": defaultSettings.title,
         "value": document.getElementById("input-title")
     },
     "exchange": {
-        "default": "BINANCE",
+        "default": defaultSettings.exchange,
         "value": document.getElementById("select-provider")
     },
     "pair": {
-        "default": "BTCUSD",
+        "default": defaultSettings.pair,
         "value": document.getElementById("select-pair"),
         "setValue": function(val) {
             this.value.value = val;
@@ -29,126 +61,138 @@ const settingsConfig = {
         }
     },
     "fromCurrency": {
-        "default": "USD"
+        "default": defaultSettings.fromCurrency
     },
     "currency": {
-        "default": "",
+        "default": defaultSettings.currency,
         "value": document.getElementById("select-currency")
     },
     "candlesInterval": {
-        "default": "1h",
+        "default": defaultSettings.candlesInterval,
         "value": document.getElementById("candlesInterval")
     },
     "candlesDisplayed": {
-        "default": 20,
+        "default": defaultSettings.candlesDisplayed,
         "value": document.getElementById("candlesDisplayed")
     },
     "multiplier": {
-        "default": 1,
+        "default": defaultSettings.multiplier,
         "value": document.getElementById("multiplier")
     },
     "digits": {
-        "default": 2,
+        "default": defaultSettings.digits,
         "value": document.getElementById("digits")
     },
     "highLowDigits": {
-        "default": "",
+        "default": defaultSettings.highLowDigits,
         "value": document.getElementById("highLowDigits")
     },
     "priceFormat": {
-        "default": "compact",
+        "default": defaultSettings.priceFormat,
         "value": document.getElementById("priceFormat")
     },
     "font": {
-        "default": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
+        "default": defaultSettings.font,
         "value": document.getElementById("font")
     },
     "fontSizeBase": {
-        "default": 25,
+        "default": defaultSettings.fontSizeBase,
         "value": document.getElementById("fontSizeBase")
     },
     "fontSizePrice": {
-        "default": 35,
+        "default": defaultSettings.fontSizePrice,
         "value": document.getElementById("fontSizePrice")
     },
     "fontSizeHighLow": {
-        "default": "",
+        "default": defaultSettings.fontSizeHighLow,
         "value": document.getElementById("fontSizeHighLow")
     },
     "fontSizeChange": {
-        "default": 19,
+        "default": defaultSettings.fontSizeChange,
         "value": document.getElementById("fontSizeChange")
     },
     "backgroundColor": {
-        "default": "#000000",
+        "default": defaultSettings.backgroundColor,
         "value": document.getElementById("backgroundColor")
     },
     "textColor": {
-        "default": "#ffffff",
+        "default": defaultSettings.textColor,
         "value": document.getElementById("textColor")
     },
     "displayHighLow": {
-        "default": "on",
+        "default": defaultSettings.displayHighLow,
         "value": document.getElementById("displayHighLow"),
         "getValue": function() {
-            return this.value.checked?"on":"off";
+            return this.value.checked ? "on" : "off";
         },
         "setValue": function(val) {
-            this.value.checked = (val!="off");
+            this.value.checked = (val !== "off");
         }
     },
     "displayHighLowBar": {
-        "default": "on",
+        "default": defaultSettings.displayHighLowBar,
         "value": document.getElementById("displayHighLowBar"),
         "getValue": function() {
-            return this.value.checked?"on":"off";
+            return this.value.checked ? "on" : "off";
         },
         "setValue": function(val) {
-            this.value.checked = (val!="off");
+            this.value.checked = (val !== "off");
         }
     },
     "displayDailyChange": {
-        "default": "on",
+        "default": defaultSettings.displayDailyChange,
         "value": document.getElementById("displayDailyChange"),
         "getValue": function() {
-            return this.value.checked?"on":"off";
+            return this.value.checked ? "on" : "off";
         },
         "setValue": function(val) {
-            this.value.checked = (val!="off");
+            this.value.checked = (val !== "off");
         }
     },
     "displayConnectionStatusIcon": {
-        "default": "OFF",
+        "default": defaultSettings.displayConnectionStatusIcon,
         "value": document.getElementById("displayConnectionStatusIcon"),
         "getValue": function() {
-            return (this.value.value || "OFF").toUpperCase();
+            return (this.value.value || defaultSettings.displayConnectionStatusIcon).toUpperCase();
         },
         "setValue": function(val) {
-            this.value.value = (val || "OFF").toUpperCase();
+            const normalized = (val || defaultSettings.displayConnectionStatusIcon).toUpperCase();
+            this.value.value = normalized;
         }
     },
     "alertRule": {
-        "default": "",
+        "default": defaultSettings.alertRule,
         "value": document.getElementById("alertRule")
     },
     "backgroundColorRule": {
-        "default": "",
+        "default": defaultSettings.backgroundColorRule,
         "value": document.getElementById("backgroundColorRule")
     },
     "textColorRule": {
-        "default": "",
+        "default": defaultSettings.textColorRule,
         "value": document.getElementById("textColorRule")
     },
     "mode": {
-        "default": "ticker"
-    },
+        "default": defaultSettings.mode
+    }
 };
 
-const currentSettings = {};
+const currentSettings = applyDefaultSettings({});
 const cache = {};
 let lastDisplayedExchange = null;
 
 const currencyRelatedElements = document.getElementsByClassName("currencyRelated");
+
+function setCurrentSettings(values) {
+    const sanitized = applyDefaultSettings(values || {});
+    for (const key in currentSettings) {
+        if (Object.prototype.hasOwnProperty.call(currentSettings, key)) {
+            delete currentSettings[key];
+        }
+    }
+    Object.assign(currentSettings, sanitized);
+    return currentSettings;
+}
 
 const pi = {
     log: function(...data) {
@@ -402,23 +446,20 @@ const pi = {
     extractSettings: function(settings) {
         this.log("extractSettings", settings);
 
+        const incoming = settings ? Object.assign({}, settings) : {};
+
         // Backward compatibility, to remove at some point
-        const pairElements = this.splitPairValue(settings["pair"]);
+        const pairElements = this.splitPairValue(incoming["pair"]);
         if (pairElements) {
-            for (k in pairElements) {
-                settings[k] = pairElements[k];
+            for (const k in pairElements) {
+                if (Object.prototype.hasOwnProperty.call(pairElements, k)) {
+                    incoming[k] = pairElements[k];
+                }
             }
         }
         //
 
-        for (const k in settingsConfig) {
-            if (settings.hasOwnProperty(k) && settings[k] !== undefined && settings[k] !== null && settings[k] !== "") {
-                currentSettings[k] = settings[k];
-            } else if (!currentSettings.hasOwnProperty(k)) {
-                currentSettings[k] = settingsConfig[k]["default"];
-            }
-        }
-
+        setCurrentSettings(incoming);
         this.refreshValues();
     },
     checkNewSettings: function() {
@@ -434,6 +475,7 @@ const pi = {
             }
         }
 
+        setCurrentSettings(currentSettings);
         this.saveSettings();
     },
     refreshValues: function() {
@@ -483,6 +525,8 @@ const pi = {
     },
     saveSettings: function() {
         this.log("saveSettings", currentSettings);
+
+        setCurrentSettings(currentSettings);
 
         if (websocket && (websocket.readyState === 1)) {
             const jsonSetSettings = {

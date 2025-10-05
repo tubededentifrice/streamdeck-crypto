@@ -14,6 +14,15 @@
 - Can customize fonts, colors, which info to display, etc.
 - Fully open source!
 
+## Code Structure
+- `js/ticker.js` orchestrates Stream Deck lifecycle events and delegates to helper modules
+- `js/canvas-renderer.js` encapsulates ticker and candle canvas drawing logic
+- `js/settings-manager.js` normalizes defaults and drives subscription refresh
+- `js/alert-manager.js` evaluates alert rules and tracks arm/disarm state
+- `js/formatters.js` provides shared number/price formatting helpers
+- `js/ticker-state.js` owns context metadata, subscriptions, and cache storage
+- Jest specs cover each helper module alongside the existing ticker/provider tests
+
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot1.png" width="277" />
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
 

@@ -1,4 +1,5 @@
 const ticker = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js");
+const defaultSettingsModule = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js");
 
 test("subscription key builds with conversion", () => {
     const key = ticker.getSubscriptionContextKey("BITFINEX", "BTCUSD", "USD", "EUR");
@@ -109,4 +110,18 @@ test("getConversionRate caches results for an hour", async () => {
     } finally {
         global.fetch = originalFetch;
     }
+});
+
+test("default settings validation normalizes values", () => {
+    const normalized = defaultSettingsModule.applyDefaults({
+        exchange: "bitfinex",
+        displayHighLow: "OFF",
+        digits: "7",
+        mode: "invalid"
+    });
+
+    expect(normalized.exchange).toBe("BITFINEX");
+    expect(normalized.displayHighLow).toBe("off");
+    expect(normalized.digits).toBe(7);
+    expect(normalized.mode).toBe("ticker");
 });

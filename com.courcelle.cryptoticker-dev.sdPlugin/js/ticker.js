@@ -74,50 +74,35 @@ const connectionStates = connectionStatesModule || (typeof CryptoTickerConnectio
     BROKEN: "broken"
 });
 
+const canvasRendererModule = requireOrNull("./canvas-renderer");
+const alertManagerModule = requireOrNull("./alert-manager");
+const formattersModule = requireOrNull("./formatters");
+const tickerStateModule = requireOrNull("./ticker-state");
+const settingsManagerModule = requireOrNull("./settings-manager");
+
+const canvasRenderer = canvasRendererModule || (typeof CryptoTickerCanvasRenderer !== "undefined" ? CryptoTickerCanvasRenderer : null);
+const alertManager = alertManagerModule || (typeof CryptoTickerAlertManager !== "undefined" ? CryptoTickerAlertManager : null);
+const formatters = formattersModule || (typeof CryptoTickerFormatters !== "undefined" ? CryptoTickerFormatters : null);
+const tickerState = tickerStateModule || (typeof CryptoTickerState !== "undefined" ? CryptoTickerState : null);
+const settingsManager = settingsManagerModule || (typeof CryptoTickerSettingsManager !== "undefined" ? CryptoTickerSettingsManager : null);
+
+if (!canvasRenderer || !alertManager || !formatters || !tickerState || !settingsManager) {
+    throw new Error("CryptoTicker dependencies are not available");
+}
+
 let loggingEnabled = false;
 let websocket = null;
 let canvas;
 let canvasContext;
-const contextDetails = {};  // context => settings, ensure a single subscription per context
-const contextSubscriptions = {}; // context => provider subscription handle
-const contextConnectionStates = {};
 const screenshotMode = false; // Allows rendering the canvas in an external preview
 
-const alertStatuses = {};
-const alertArmed = {};
 const CONVERSION_CACHE_TTL_MS = 60 * 60 * 1000;
-const conversionRatesCache = {};
-const candlesCache = {};
 let providerRegistrySingleton = null;
 
-const defaultSettings = {
-    "title": null,
-    "exchange": "BITFINEX",
-    "pair": "BTCUSD",
-    "fromCurrency": "USD",
-    "currency": "USD",
-    "candlesInterval": "1h",
-    "candlesDisplayed": 20,
-    "multiplier": 1,
-    "digits": 2,
-    "highLowDigits": "",
-    "font": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
-    "fontSizeBase": 25,
-    "fontSizePrice": 35,
-    "fontSizeHighLow": "",
-    "fontSizeChange": 19,
-    "priceFormat": "compact",
-    "backgroundColor": "#000000",
-    "textColor": "#ffffff",
-    "displayHighLow": "on",
-    "displayHighLowBar": "on",
-    "displayDailyChange": "on",
-    "displayConnectionStatusIcon": "OFF",
-    "alertRule": "",
-    "backgroundColorRule": "",
-    "textColorRule": "",
-    "mode": "ticker"
-};
+const applyDefaultSettings = settingsManager.applyDefaultSettings;
+const defaultSettings = settingsManager.defaultSettings;
+const getDefaultSettingsSnapshot = settingsManager.getDefaultSettingsSnapshot;
+const settingsSchema = settingsManager.settingsSchema;
 
 const tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
@@ -128,29 +113,15 @@ const tickerAction = {
     },
 
     setContextConnectionState: function (context, state) {
-        if (!context) {
-            return;
-        }
-
-        if (state) {
-            contextConnectionStates[context] = state;
-        }
+        tickerState.setConnectionState(context, state);
     },
 
     getContextConnectionState: function (context) {
-        if (!context) {
-            return null;
-        }
-
-        return contextConnectionStates[context] || null;
+        return tickerState.getConnectionState(context);
     },
 
     clearContextConnectionState: function (context) {
-        if (!context) {
-            return;
-        }
-
-        delete contextConnectionStates[context];
+        tickerState.clearConnectionState(context);
     },
 
     getProviderRegistry: function () {
@@ -199,9 +170,8 @@ const tickerAction = {
                 break;
             case "ticker":
             default:
-                if (alertArmed[context] != "off" && alertStatuses[context] == "on") {
-                    // Disarm the alert
-                    alertArmed[context] = "off";
+                if (alertManager.shouldDisarmOnKeyPress(context)) {
+                    alertManager.disarmAlert(context);
                 } else {
                     // Switch mode by default
                     settings.mode = "candles";
@@ -229,19 +199,18 @@ const tickerAction = {
     },
     refreshTimers: async function () {
         // Make sure everybody is connected
-        for (let ctx in contextDetails) {
-            const details = contextDetails[ctx];
+        tickerState.forEachContext((details) => {
             this.refreshTimer(
                 details["context"],
                 details["settings"]
             );
-        }
+        });
     },
     refreshTimer: async function (context, settings) {
-        this.refreshSettings(context, settings);
+        const normalizedSettings = this.refreshSettings(context, settings);
 
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
-        this.updateTicker(context, settings);
+        this.updateTicker(context, normalizedSettings);
     },
     connect: function () {
         const registry = this.getProviderRegistry();
@@ -254,7 +223,7 @@ const tickerAction = {
         const pair = settings["pair"];
         const currencies = this.resolveConversionCurrencies(settings["fromCurrency"], settings["currency"]);
         const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, currencies.from, null);
-        const current = contextSubscriptions[context];
+        const current = tickerState.getSubscription(context);
         if (current && current.key === subscriptionKey) {
             return current;
         }
@@ -265,7 +234,7 @@ const tickerAction = {
             } catch (err) {
                 this.log("Error unsubscribing from provider", err);
             }
-            delete contextSubscriptions[context];
+            tickerState.clearSubscription(context);
             this.clearContextConnectionState(context);
         }
 
@@ -282,7 +251,7 @@ const tickerAction = {
         try {
             const handle = provider.subscribeTicker(params, {
                 onData: async function (tickerValues) {
-                    const details = contextDetails[context];
+                    const details = tickerState.getContextDetails(context);
                     if (!details) {
                         return;
                     }
@@ -305,12 +274,12 @@ const tickerAction = {
                 }
             });
 
-            contextSubscriptions[context] = {
+            tickerState.setSubscription(context, {
                 key: subscriptionKey,
                 unsubscribe: handle && typeof handle.unsubscribe === "function" ? handle.unsubscribe : function () {},
                 providerId: provider.getId ? provider.getId() : null
-            };
-            return contextSubscriptions[context];
+            });
+            return tickerState.getSubscription(context);
         } catch (err) {
             this.log("Error subscribing to provider", err);
         }
@@ -318,13 +287,13 @@ const tickerAction = {
         return null;
     },
     refreshSettings: function (context, settings) {
-        contextDetails[context] = {
-            "context": context,
-            "settings": settings
-        };
-
-        // Update the subscription in all cases
-        this.updateSubscription(context, settings);
+        return settingsManager.refreshSettings({
+            context: context,
+            settings: settings,
+            updateSubscription: (normalizedSettings) => {
+                this.updateSubscription(context, normalizedSettings);
+            }
+        });
     },
     getSubscriptionContextKey: function (exchange, pair, fromCurrency, toCurrency) {
         return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
@@ -357,11 +326,7 @@ const tickerAction = {
 
         const key = from + "_" + to;
         const now = Date.now();
-        let cacheEntry = conversionRatesCache[key];
-        if (!cacheEntry) {
-            cacheEntry = {};
-            conversionRatesCache[key] = cacheEntry;
-        }
+        const cacheEntry = tickerState.getOrCreateConversionRateEntry(key);
 
         if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0 && cacheEntry.fetchedAt && (now - cacheEntry.fetchedAt) < CONVERSION_CACHE_TTL_MS) {
             return cacheEntry.rate;
@@ -545,423 +510,37 @@ const tickerAction = {
         }
     },
     getCanvasSizeMultiplier: function(canvasWidth, canvasHeight) {
-        // New High resolution devices: the canvas was originally 144x144, but we want it 288x288 now
-        // Using a multiplier allows to simply change the canvas size and everything will adjust automatically
-        return Math.max(canvasWidth / 144, canvasHeight / 144);
+        return canvasRenderer.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
     },
     getCandlesDisplayCount: function (settings) {
-        const parsed = parseInt(settings["candlesDisplayed"]);
-        if (isNaN(parsed)) {
-            return 20;
-        }
-
-        return Math.min(60, Math.max(5, parsed));
+        return canvasRenderer.getCandlesDisplayCount(settings);
     },
     updateCanvasTicker: function (context, settings, values, connectionState) {
         this.log("updateCanvasTicker", context, settings, values);
 
-        const canvasWidth = canvas.width;
-        const canvasHeight = canvas.height;
-        const sizeMultiplier = this.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
-
-        const textPadding = 10 * sizeMultiplier;
-
-        const pair = settings["pair"];
-        const exchange = settings["exchange"];
-        const pairDisplay = settings["title"] || (values["pairDisplay"] || pair);
-        const currency = settings["currency"];
-        const multiplier = settings["multiplier"] || 1;
-        const priceFormat = settings["priceFormat"] || "compact";
-        const parseNumberSetting = function(value, fallback) {
-            const parsed = parseFloat(value);
-            if (isNaN(parsed) || parsed <= 0) {
-                return fallback;
-            }
-
-            return parsed;
-        };
-        const parseDigitsSetting = function (value, fallback) {
-            const parsed = parseInt(value, 10);
-            if (isNaN(parsed) || parsed < 0) {
-                return fallback;
-            }
-
-            return parsed;
-        };
-        const digits = parseDigitsSetting(settings["digits"], 2);
-        const highLowDigits = parseDigitsSetting(settings["highLowDigits"], digits);
-        const baseFontSize = parseNumberSetting(settings["fontSizeBase"], 25);
-        const priceFontSize = parseNumberSetting(settings["fontSizePrice"], baseFontSize * 35 / 25);
-        const highLowFontSize = parseNumberSetting(settings["fontSizeHighLow"], baseFontSize);
-        const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
-        let backgroundColor = settings["backgroundColor"] || "#000000";
-        let textColor = settings["textColor"] || "#ffffff";
-        const effectiveConnectionState = connectionState || (values && values.connectionState) || null;
-
-        let alertMode = false;
-        const changeDaily = values["changeDaily"];
-        const changeDailyPercent = values["changeDailyPercent"];
-        const value = values["last"];
-        const valueDisplay = value * multiplier;
-        const volume = values["volume"];
-        const high = values["high"];
-        const low = values["low"];
-        if (settings["alertRule"]) {
-            try {
-                if (eval(settings["alertRule"])) {
-                    alertStatuses[context] = "on";
-
-                    // Only display the alert mode if we're armed
-                    if (alertArmed[context] != "off") {
-                        alertMode = true;
-                        const tmp = backgroundColor;
-                        backgroundColor = textColor;
-                        textColor = tmp;
-                    }
-                } else {
-                    alertStatuses[context] = "off";
-
-                    // Re-arm the alert since we're out of the alert
-                    alertArmed[context] = "on";
-                }
-            }
-            catch (err) {
-                console.error("Error evaluating alertRule", context, settings, values, err);
-            }
-        }
-
-        if (settings["backgroundColorRule"]) {
-            const alert = alertMode;
-            try {
-                backgroundColor = eval(settings["backgroundColorRule"]) || backgroundColor;
-            }
-            catch (err) {
-                console.error("Error evaluating backgroundColorRule", context, settings, values, err);
-            }
-        }
-        if (settings["textColorRule"]) {
-            const alert = alertMode;
-            try {
-                textColor = eval(settings["textColorRule"]) || textColor;
-            }
-            catch (err) {
-                console.error("Error evaluating textColorRule", context, settings, values, err);
-            }
-        }
-
-        canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
-        canvasContext.fillStyle = backgroundColor;
-        canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
-
-        var font = settings["font"] || "Lato";
-        canvasContext.font = (baseFontSize * sizeMultiplier) + "px " + font;
-        canvasContext.fillStyle = textColor;
-
-        canvasContext.textAlign = "left";
-        canvasContext.fillText(pairDisplay, 10 * sizeMultiplier, 25 * sizeMultiplier);
-
-        canvasContext.font = "bold " + (priceFontSize * sizeMultiplier) + "px " + font;
-        canvasContext.fillText(
-            this.getRoundedValue(values["last"], digits, multiplier, priceFormat),
-            textPadding,
-            60 * sizeMultiplier
-        );
-
-        if (settings["displayHighLow"] != "off") {
-            canvasContext.font = (highLowFontSize * sizeMultiplier) + "px " + font;
-            canvasContext.fillText(
-                this.getRoundedValue(values["low"], highLowDigits, multiplier, priceFormat),
-                textPadding,
-                90 * sizeMultiplier
-            );
-
-            canvasContext.textAlign = "right";
-            canvasContext.fillText(
-                this.getRoundedValue(values["high"], highLowDigits, multiplier, priceFormat),
-                canvasWidth - textPadding,
-                135 * sizeMultiplier
-            );
-        }
-
-        if (settings["displayDailyChange"] != "off") {
-            const originalFillColor = canvasContext.fillStyle;
-
-            const changePercent = values.changeDailyPercent * 100;
-            let digitsPercent = 2;
-            if (Math.abs(changePercent) >= 100) {
-                digitsPercent = 0;
-            } else if (Math.abs(changePercent) >= 10) {
-                digitsPercent = 1;
-            }
-            let changePercentDisplay = this.getRoundedValue(changePercent, digitsPercent, 1, "plain");
-            if (changePercent > 0) {
-                changePercentDisplay = "+" + changePercentDisplay;
-                canvasContext.fillStyle = "green";
-                /*canvasContext.font = "bold " + (40 * sizeMultiplier) + "px "+font;
-                canvasContext.fillText(
-                    "^",
-                    canvasWidth-textPadding,
-                    37
-                );*/
-            } else {
-                canvasContext.fillStyle = "red";
-                /*canvasContext.font = "bold " + (30 * sizeMultiplier) + "px "+font;
-                canvasContext.fillText(
-                    "v",
-                    canvasWidth-textPadding,
-                    25
-                );*/
-            }
-
-            canvasContext.font = (changeFontSize * sizeMultiplier) + "px " + font;
-            canvasContext.textAlign = "right";
-            // canvasContext.rotate(Math.PI);
-            canvasContext.fillText(
-                changePercentDisplay,
-                canvasWidth - textPadding,
-                90 * sizeMultiplier
-            );
-
-            // Restore orignal value, though it shouldn't be used
-            canvasContext.fillStyle = originalFillColor;
-        }
-
-        if (settings["displayHighLowBar"] != "off") {
-            const lineY = 104 * sizeMultiplier;
-            const padding = 5 * sizeMultiplier;
-            const lineWidth = 6 * sizeMultiplier;
-
-            const range = values.high - values.low;
-            const percent = range > 0 ? (values.last - values.low) / range : 0.5;
-            const lineLength = canvasWidth - padding * 2;
-            const cursorPositionX = padding + Math.round(lineLength * percent);
-
-            const triangleSide = 12 * sizeMultiplier;
-            const triangleHeight = Math.sqrt(3 / 4 * Math.pow(triangleSide, 2));
-
-            canvasContext.beginPath();
-            canvasContext.moveTo(padding, lineY);
-            canvasContext.lineTo(cursorPositionX, lineY);
-            canvasContext.lineWidth = lineWidth;
-            canvasContext.strokeStyle = "green";
-            canvasContext.stroke();
-
-            canvasContext.beginPath();
-            canvasContext.moveTo(cursorPositionX, lineY);
-            canvasContext.lineTo(canvasWidth - padding, lineY);
-            canvasContext.lineWidth = lineWidth;
-            canvasContext.strokeStyle = "red";
-            canvasContext.stroke();
-
-            canvasContext.beginPath();
-            canvasContext.moveTo(cursorPositionX - triangleSide / 2, lineY - triangleHeight / 3);
-            canvasContext.lineTo(cursorPositionX + triangleSide / 2, lineY - triangleHeight / 3);
-            canvasContext.lineTo(cursorPositionX, lineY + triangleHeight * 2 / 3);
-            canvasContext.fillStyle = textColor;
-            canvasContext.fill();
-        }
-
-        const connectionIconSetting = (settings["displayConnectionStatusIcon"] || "OFF").toUpperCase();
-        if (connectionIconSetting !== "OFF") {
-            this.renderConnectionStatusIcon(
-                effectiveConnectionState,
-                textColor,
-                sizeMultiplier,
-                connectionIconSetting
-            );
-        }
+        canvasRenderer.renderTickerCanvas({
+            canvas: canvas,
+            canvasContext: canvasContext,
+            settings: settings,
+            values: values,
+            context: context,
+            connectionStates: connectionStates,
+            connectionState: connectionState || (values && values.connectionState) || null
+        });
 
         this.sendCanvas(context);
     },
-
-    renderConnectionStatusIcon: function (state, color, sizeMultiplier, position) {
-        if (!state) {
-            return;
-        }
-
-        const pos = (position || "OFF").toUpperCase();
-        if (pos === "OFF") {
-            return;
-        }
-
-        const iconState = String(state).toLowerCase();
-        const iconSize = 20 * sizeMultiplier;
-        const margin = 4 * sizeMultiplier;
-
-        let x = canvas.width - iconSize - margin;
-        let y = margin;
-        if (pos === "BOTTOM_LEFT") {
-            x = margin;
-            y = canvas.height - iconSize - margin;
-        }
-
-        canvasContext.save();
-        canvasContext.translate(x, y);
-        canvasContext.lineWidth = Math.max(1.5 * sizeMultiplier, 1);
-        canvasContext.strokeStyle = color;
-        canvasContext.fillStyle = color;
-
-        const drawPolygon = (points) => {
-            if (!Array.isArray(points) || points.length === 0) {
-                return;
-            }
-            canvasContext.beginPath();
-            for (let i = 0; i < points.length; i++) {
-                const pt = points[i];
-                const px = pt[0] * iconSize;
-                const py = pt[1] * iconSize;
-                if (i === 0) {
-                    canvasContext.moveTo(px, py);
-                } else {
-                    canvasContext.lineTo(px, py);
-                }
-            }
-            canvasContext.closePath();
-            canvasContext.fill();
-        };
-
-        if (iconState === connectionStates.LIVE) {
-            drawPolygon([
-                [0.7545784909869392, 0],
-                [0.18263591551829597, 0.5685964091677761],
-                [0.3947756629367107, 0.5685964091677761],
-                [0.23171302126434715, 1],
-                [0.8173281041988991, 0.43136761054941897],
-                [0.6051523764976793, 0.43136761054941897]
-            ]);
-        } else if (iconState === connectionStates.DETACHED) {
-            drawPolygon([
-                [0.0, 0.45], [0.4, 0.45], [0.4, 0.6], [0.0, 0.6]
-            ]);
-            drawPolygon([
-                [0.6, 0.45], [1.0, 0.45], [1.0, 0.6], [0.6, 0.6]
-            ]);
-        } else if (iconState === connectionStates.BACKUP) {
-            drawPolygon([
-                [0.0, 0.3], [0.4, 0.3], [0.4, 0.38], [0.0, 0.38]
-            ]);
-            drawPolygon([
-                [0.6, 0.3], [1.0, 0.3], [1.0, 0.38], [0.6, 0.38]
-            ]);
-
-            drawPolygon([
-                [0.0, 0.62], [0.4, 0.62], [0.4, 0.7], [0.0, 0.7]
-            ]);
-            drawPolygon([
-                [0.6, 0.62], [1.0, 0.62], [1.0, 0.7], [0.6, 0.7]
-            ]);
-        } else if (iconState === connectionStates.BROKEN) {
-            const drawRoundedRect = (width, height, radius) => {
-                const r = Math.min(radius, Math.min(width, height) / 2);
-                canvasContext.beginPath();
-                canvasContext.moveTo(r, 0);
-                canvasContext.lineTo(width - r, 0);
-                canvasContext.quadraticCurveTo(width, 0, width, r);
-                canvasContext.lineTo(width, height - r);
-                canvasContext.quadraticCurveTo(width, height, width - r, height);
-                canvasContext.lineTo(r, height);
-                canvasContext.quadraticCurveTo(0, height, 0, height - r);
-                canvasContext.lineTo(0, r);
-                canvasContext.quadraticCurveTo(0, 0, r, 0);
-                canvasContext.closePath();
-                canvasContext.fill();
-            };
-
-            const linkWidth = iconSize * 0.55;
-            const linkHeight = iconSize * 0.28;
-            const linkRadius = iconSize * 0.12;
-            const rotation = -Math.PI / 6;
-
-            canvasContext.save();
-            canvasContext.translate(iconSize * 0.08, iconSize * 0.4);
-            canvasContext.rotate(rotation);
-            drawRoundedRect(linkWidth, linkHeight, linkRadius);
-            canvasContext.restore();
-
-            canvasContext.save();
-            canvasContext.translate(iconSize * 0.45, iconSize * 0.05);
-            canvasContext.rotate(rotation);
-            drawRoundedRect(linkWidth, linkHeight, linkRadius);
-            canvasContext.restore();
-
-            drawPolygon([
-                [0.38, 0.32], [0.55, 0.22], [0.62, 0.38], [0.5, 0.48], [0.56, 0.62], [0.4, 0.58]
-            ]);
-        }
-
-        canvasContext.restore();
-    },
-
     updateCanvasCandles: function (context, settings, candlesNormalized, connectionState) {
-        candlesNormalized = candlesNormalized || [];
-        const canvasWidth = canvas.width;
-        const canvasHeight = canvas.height;
-        const sizeMultiplier = this.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
+        this.log("updateCanvasCandles", context, settings, candlesNormalized);
 
-        const padding = 10 * sizeMultiplier;
-        let backgroundColor = settings["backgroundColor"];
-        let textColor = settings["textColor"];
-        const effectiveConnectionState = connectionState || this.getContextConnectionState(context);
-
-        const pairDisplay = settings["title"] || settings["pair"];
-        const interval = settings["candlesInterval"] || "1h";
-
-        const candlesToDisplay = candlesNormalized.slice(-this.getCandlesDisplayCount(settings));
-        const candleCount = candlesToDisplay.length;
-        const paddingWidth = canvasWidth - (2 * padding);
-        const paddingHeight = canvasHeight - (2 * padding);
-        const candleWidth = candleCount > 0 ? paddingWidth / candleCount : paddingWidth;
-        const wickWidth = Math.max(2 * sizeMultiplier, candleWidth * 0.15);
-        const bodyWidth = Math.max(4 * sizeMultiplier, candleWidth * 0.6);
-
-
-        canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
-        canvasContext.fillStyle = backgroundColor;
-        canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
-
-        var font = settings["font"] || "Lato";
-        canvasContext.font = (15 * sizeMultiplier) + "px " + font;
-        canvasContext.fillStyle = textColor;
-
-        canvasContext.textAlign = "left";
-        canvasContext.fillText(interval, 10 * sizeMultiplier, canvasHeight - (5 * sizeMultiplier));
-
-        //this.log("updateCanvasCandles", candlesNormalized);
-        candlesToDisplay.forEach(function (candleNormalized) {
-            const xPosition = Math.round(padding + Math.round(candleNormalized.timePercent * paddingWidth));
-
-            // Choose open/close color
-            let candleColor = "green";
-            if (candleNormalized.closePercent < candleNormalized.openPercent) {
-                candleColor = "red";
-            }
-
-            // Draw the high/low bar
-            canvasContext.beginPath();
-            canvasContext.moveTo(xPosition, Math.round(padding + (1 - candleNormalized.highPercent) * paddingHeight));
-            canvasContext.lineTo(xPosition, Math.round(padding + (1 - candleNormalized.lowPercent) * paddingHeight));
-            canvasContext.lineWidth = wickWidth;
-            canvasContext.strokeStyle = textColor;
-            canvasContext.stroke();
-
-            // Draw the open/close bar
-            canvasContext.beginPath();
-            canvasContext.moveTo(xPosition, Math.round(padding + (1 - candleNormalized.closePercent) * paddingHeight));
-            canvasContext.lineTo(xPosition, Math.round(padding + (1 - candleNormalized.openPercent) * paddingHeight));
-            canvasContext.lineWidth = bodyWidth;
-            canvasContext.strokeStyle = candleColor;
-            canvasContext.stroke();
+        canvasRenderer.renderCandlesCanvas({
+            canvas: canvas,
+            canvasContext: canvasContext,
+            settings: settings,
+            candlesNormalized: candlesNormalized,
+            connectionStates: connectionStates,
+            connectionState: connectionState || this.getContextConnectionState(context)
         });
-
-        const connectionIconSettingCandles = (settings["displayConnectionStatusIcon"] || "OFF").toUpperCase();
-        if (connectionIconSettingCandles !== "OFF") {
-            this.renderConnectionStatusIcon(
-                effectiveConnectionState,
-                textColor,
-                sizeMultiplier,
-                connectionIconSettingCandles
-            );
-        }
 
         this.sendCanvas(context);
     },
@@ -978,92 +557,7 @@ const tickerAction = {
         this.websocketSend(JSON.stringify(json));
     },
     getRoundedValue: function (value, digits, multiplier, format) {
-        const formatOption = format || "auto";
-        let precision = parseInt(digits);
-        if (isNaN(precision) || precision < 0) {
-            precision = 2;
-        }
-
-        const scaledValue = value * multiplier;
-        const absoluteValue = Math.abs(scaledValue);
-        const sign = scaledValue < 0 ? "-" : "";
-        const roundWithPrecision = function (val, localPrecision) {
-            const pow = Math.pow(10, localPrecision);
-            return Math.round(val * pow) / pow;
-        };
-
-        const toLocale = function (val, options) {
-            try {
-                return val.toLocaleString(undefined, options);
-            } catch (err) {
-                // Some environments might not support the options argument
-                return val.toString();
-            }
-        };
-
-        let formattedValue = "";
-        const fixedDigits = Math.max(0, precision);
-
-        switch (formatOption) {
-            case "full":
-                const roundedFull = roundWithPrecision(absoluteValue, fixedDigits);
-                formattedValue = toLocale(roundedFull, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: true
-                });
-                break;
-            case "compact":
-                const units = [
-                    { value: 1000000000000, suffix: "T" },
-                    { value: 1000000000, suffix: "B" },
-                    { value: 1000000, suffix: "M" },
-                    { value: 1000, suffix: "K" }
-                ];
-                let suffix = "";
-                let compactValue = absoluteValue;
-                for (const unit of units) {
-                    if (absoluteValue >= unit.value) {
-                        suffix = unit.suffix;
-                        compactValue = absoluteValue / unit.value;
-                        break;
-                    }
-                }
-
-                const roundedCompact = roundWithPrecision(compactValue, fixedDigits);
-                formattedValue = toLocale(roundedCompact, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: !suffix
-                }) + suffix;
-                break;
-            case "plain":
-                const roundedPlain = roundWithPrecision(absoluteValue, fixedDigits);
-                formattedValue = toLocale(roundedPlain, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: false
-                });
-                break;
-            case "auto":
-            default:
-                let autoSuffix = "";
-                let autoValue = absoluteValue;
-                if (absoluteValue > 100000) {
-                    autoSuffix = "K";
-                    autoValue = absoluteValue / 1000;
-                }
-
-                const roundedAuto = roundWithPrecision(autoValue, fixedDigits);
-                formattedValue = toLocale(roundedAuto, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: false
-                }) + autoSuffix;
-                break;
-        }
-
-        return sign + formattedValue;
+        return formatters.getRoundedValue(value, digits, multiplier, format);
     },
 
     getTickerValue: async function (pair, toCurrency, exchange, fromCurrency) {
@@ -1123,7 +617,11 @@ const tickerAction = {
         const currencies = this.resolveConversionCurrencies(settings["fromCurrency"], settings["currency"]);
         const cacheCurrencyKey = currencies.to || currencies.from || "";
         const cacheKey = exchange + "_" + pair + "_" + interval + "_" + candlesCount + "_" + cacheCurrencyKey;
-        const cache = candlesCache[cacheKey] || {};
+        let cache = tickerState.getCandlesCacheEntry(cacheKey);
+        if (!cache) {
+            cache = {};
+            tickerState.setCandlesCacheEntry(cacheKey, cache);
+        }
         const now = new Date().getTime();
         const t = "time";
         const c = "candles";
@@ -1198,7 +696,6 @@ const tickerAction = {
         const val = this.getCandlesNormalized(candlesForDisplay);
         cache[t] = now;
         cache[c] = val;
-        candlesCache[cacheKey] = cache;
         return cache[c];
     },
     convertCandlesInterval: function (interval) {
@@ -1316,13 +813,16 @@ const tickerAction = {
         return candlesNormalized;
     },
     normalizeValue: function (value, min, max) {
-        if (max - min === 0) {
-            return 0.5;
-        }
-
-        return (value - min) / (max - min);
+        return formatters.normalizeValue(value, min, max);
     },
 };
+
+tickerAction.defaultSettings = defaultSettings;
+tickerAction.applyDefaultSettings = applyDefaultSettings;
+tickerAction.getDefaultSettings = function () {
+    return getDefaultSettingsSnapshot();
+};
+tickerAction.settingsSchema = settingsSchema;
 
 function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inApplicationInfo, inActionInfo) {
     // Open the web socket
@@ -1352,7 +852,12 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         const context = jsonObj["context"];
 
         const jsonPayload = jsonObj["payload"] || {};
-        const settings = jsonPayload["settings"];
+        let settingsPayload = jsonPayload["settings"];
+        if (!settingsPayload && event === "sendToPlugin") {
+            settingsPayload = jsonPayload;
+        }
+
+        let settings = settingsPayload;
         const coordinates = jsonPayload["coordinates"];
         const userDesiredState = jsonPayload["userDesiredState"];
         // const title = jsonPayload["title"];
@@ -1368,12 +873,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         }
 
         if (settings != null) {
-            //this.log("Received settings", settings);
-            for (const k in defaultSettings) {
-                if (!settings[k]) {
-                    settings[k] = defaultSettings[k];
-                }
-            }
+            settings = applyDefaultSettings(settings);
         }
 
         if (event == "keyDown") {
@@ -1403,10 +903,11 @@ if (screenshotMode) {
     loggingEnabled = true;
     tickerAction.connect();
 
-    const settings = defaultSettings;
-    settings["digits"] = 0;
-    settings["pair"] = "LTCUSD";
-    settings["mode"] = "ticker";    // or candles
+    const settings = applyDefaultSettings({
+        digits: 0,
+        pair: "LTCUSD",
+        mode: "ticker"
+    });
 
     const context = "test";
     const coordinates = {
