@@ -10,10 +10,13 @@ This project is a Stream Deck plugin; The docs for the SDK are located at https:
 ## Build, Test, and Development Commands
 - `npm test`: runs Jest unit tests.
 - `npm run preview`: starts a local static server and opens `dev/preview.html` to iterate on UI/logic without installing the plugin in Stream Deck.
+- `npm run lint`: check JavaScript sources for issues; run after any code change.
+- `npm run lint:fix`: auto-fix lint issues when possible; run if `npm run lint` reports violations.
+- `npm run format`: format sources with Prettier; run before committing changes that touch code or markup.
 - No build step required for development; Stream Deck reads files directly from the `.sdPlugin` folder.
 
 ## Coding Style & Naming Conventions
-- Indentation: 4 spaces. Quotes: double quotes in JavaScript and HTML.
+- Formatting is enforced by Prettier: 2-space indentation, single quotes for JavaScript, double quotes remain acceptable in HTML where appropriate.
 - JavaScript: prefer small, focused modules; functions and variables in `lowerCamelCase`.
 - Files: keep existing naming (e.g., `ticker.js`, `pi.js`); assets under `images/`, styles under `css/`.
 - Keep code and DOM IDs readable and descriptive; avoid abbreviations.

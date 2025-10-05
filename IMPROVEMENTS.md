@@ -435,6 +435,7 @@ const attemptDelay = Math.min(
   5. `__tests__/subscription-manager.test.js`: Test cache expiration
   6. `__tests__/pi-helpers.test.js`: Test property inspector utilities
   7. `__tests__/formatters.test.js`: Test price/number formatting
+  8. Others as you deem appropriate
 - **Coverage areas**:
   - WebSocket reconnection logic
   - Provider failover when primary fails
@@ -450,36 +451,6 @@ const attemptDelay = Math.min(
 - **Test infrastructure**: May need to add testing utilities and helpers
 - **CI/CD**: Tests should run automatically on every commit
 - **Maintenance**: Tests need updates when code changes
-
----
-
-### 4.2 Add Linting and Code Formatting
-
-**Why?**
-- **Consistency**: Code style is inconsistent across files (spacing, quotes, semicolons)
-- **Quality**: Catch common mistakes (unused variables, missing semicolons, etc.)
-- **Collaboration**: Easier for multiple developers to work on code
-- **Automation**: Enforce standards without manual review
-
-**What needs to be changed?**
-- **New files to create**:
-  - `.eslintrc.json`: ESLint configuration
-  - `.prettierrc`: Prettier configuration
-  - `.prettierignore`: Exclude generated files
-- **Package.json additions**:
-  - `eslint`, `prettier`, `eslint-config-prettier`, `husky`, `lint-staged`
-- **Configuration**:
-  - ESLint rules for StreamDeck plugin environment
-  - Prettier rules for code formatting (2 spaces, single quotes, etc.)
-  - Pre-commit hooks to auto-format and lint changed files
-  - Git hooks with husky to prevent committing unlinted code
-- **Scripts**: Add and document `npm run lint`, `npm run format`, `npm run lint:fix` (remember in AGENTS.md to always run them after corresponding code changes)
-
-**Risks & Considerations**:
-- **Initial effort**: Fixing existing violations will be time-consuming
-- **Breaking changes**: Auto-formatting might make git history messy (can be mitigated)
-- **Team alignment**: Team needs to agree on code style preferences
-- **Editor integration**: Developers need to configure editors for consistency
 
 ---
 
