@@ -90,34 +90,38 @@ const conversionRatesCache = {};
 const candlesCache = {};
 let providerRegistrySingleton = null;
 
-const defaultSettings = {
-    "title": null,
-    "exchange": "BITFINEX",
-    "pair": "BTCUSD",
-    "fromCurrency": "USD",
-    "currency": "USD",
-    "candlesInterval": "1h",
-    "candlesDisplayed": 20,
-    "multiplier": 1,
-    "digits": 2,
-    "highLowDigits": "",
-    "font": "Lato,'Roboto Condensed',Helvetica,Calibri,sans-serif",
-    "fontSizeBase": 25,
-    "fontSizePrice": 35,
-    "fontSizeHighLow": "",
-    "fontSizeChange": 19,
-    "priceFormat": "compact",
-    "backgroundColor": "#000000",
-    "textColor": "#ffffff",
-    "displayHighLow": "on",
-    "displayHighLowBar": "on",
-    "displayDailyChange": "on",
-    "displayConnectionStatusIcon": "OFF",
-    "alertRule": "",
-    "backgroundColorRule": "",
-    "textColorRule": "",
-    "mode": "ticker"
-};
+const defaultSettingsModule = requireOrNull("./default-settings") || (typeof CryptoTickerDefaults !== "undefined" ? CryptoTickerDefaults : null);
+
+function ensureDefaultSettingsModule() {
+    if (!defaultSettingsModule) {
+        throw new Error("Default settings module is not available");
+    }
+    return defaultSettingsModule;
+}
+
+function applyDefaultSettings(partial) {
+    const moduleRef = ensureDefaultSettingsModule();
+    if (typeof moduleRef.applyDefaults === "function") {
+        return moduleRef.applyDefaults(partial);
+    }
+    if (moduleRef.defaultSettings) {
+        return Object.assign({}, moduleRef.defaultSettings, partial || {});
+    }
+    return Object.assign({}, partial || {});
+}
+
+function getDefaultSettingsSnapshot() {
+    const moduleRef = ensureDefaultSettingsModule();
+    if (typeof moduleRef.getDefaultSettings === "function") {
+        return moduleRef.getDefaultSettings();
+    }
+    if (moduleRef.defaultSettings) {
+        return JSON.parse(JSON.stringify(moduleRef.defaultSettings));
+    }
+    return {};
+}
+
+const defaultSettings = getDefaultSettingsSnapshot();
 
 const tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
@@ -238,10 +242,10 @@ const tickerAction = {
         }
     },
     refreshTimer: async function (context, settings) {
-        this.refreshSettings(context, settings);
+        const normalizedSettings = this.refreshSettings(context, settings);
 
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
-        this.updateTicker(context, settings);
+        this.updateTicker(context, normalizedSettings);
     },
     connect: function () {
         const registry = this.getProviderRegistry();
@@ -318,13 +322,16 @@ const tickerAction = {
         return null;
     },
     refreshSettings: function (context, settings) {
+        const normalizedSettings = applyDefaultSettings(settings);
+
         contextDetails[context] = {
             "context": context,
-            "settings": settings
+            "settings": normalizedSettings
         };
 
         // Update the subscription in all cases
-        this.updateSubscription(context, settings);
+        this.updateSubscription(context, normalizedSettings);
+        return normalizedSettings;
     },
     getSubscriptionContextKey: function (exchange, pair, fromCurrency, toCurrency) {
         return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
@@ -1324,6 +1331,13 @@ const tickerAction = {
     },
 };
 
+tickerAction.defaultSettings = defaultSettings;
+tickerAction.applyDefaultSettings = applyDefaultSettings;
+tickerAction.getDefaultSettings = function () {
+    return getDefaultSettingsSnapshot();
+};
+tickerAction.settingsSchema = defaultSettingsModule && defaultSettingsModule.settingsSchema ? defaultSettingsModule.settingsSchema : null;
+
 function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inApplicationInfo, inActionInfo) {
     // Open the web socket
     websocket = new WebSocket("ws://127.0.0.1:" + inPort);
@@ -1352,7 +1366,12 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         const context = jsonObj["context"];
 
         const jsonPayload = jsonObj["payload"] || {};
-        const settings = jsonPayload["settings"];
+        let settingsPayload = jsonPayload["settings"];
+        if (!settingsPayload && event === "sendToPlugin") {
+            settingsPayload = jsonPayload;
+        }
+
+        let settings = settingsPayload;
         const coordinates = jsonPayload["coordinates"];
         const userDesiredState = jsonPayload["userDesiredState"];
         // const title = jsonPayload["title"];
@@ -1368,12 +1387,7 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         }
 
         if (settings != null) {
-            //this.log("Received settings", settings);
-            for (const k in defaultSettings) {
-                if (!settings[k]) {
-                    settings[k] = defaultSettings[k];
-                }
-            }
+            settings = applyDefaultSettings(settings);
         }
 
         if (event == "keyDown") {
@@ -1403,10 +1417,11 @@ if (screenshotMode) {
     loggingEnabled = true;
     tickerAction.connect();
 
-    const settings = defaultSettings;
-    settings["digits"] = 0;
-    settings["pair"] = "LTCUSD";
-    settings["mode"] = "ticker";    // or candles
+    const settings = applyDefaultSettings({
+        digits: 0,
+        pair: "LTCUSD",
+        mode: "ticker"
+    });
 
     const context = "test";
     const coordinates = {

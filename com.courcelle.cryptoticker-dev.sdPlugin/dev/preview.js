@@ -2,6 +2,21 @@ const DEFAULT_RANGE = 1;
 const SAMPLE_CANDLE_COUNT = 20;
 const CANDLE_MARGIN_FACTOR = 0.05;
 
+const defaultsModule = typeof CryptoTickerDefaults !== "undefined" ? CryptoTickerDefaults : null;
+const previewBaseDefaults = defaultsModule && typeof defaultsModule.getDefaultSettings === "function"
+    ? defaultsModule.getDefaultSettings()
+    : (typeof tickerAction !== "undefined" && typeof tickerAction.getDefaultSettings === "function"
+        ? tickerAction.getDefaultSettings()
+        : {});
+
+const applyPreviewDefaults = typeof defaultsModule !== "undefined" && defaultsModule && typeof defaultsModule.applyDefaults === "function"
+    ? function (partial) {
+        return defaultsModule.applyDefaults(partial || {});
+    }
+    : function (partial) {
+        return Object.assign({}, previewBaseDefaults, partial || {});
+    };
+
 tickerAction.sendCanvas = function () {};
 
 function generateSampleCandles(values) {
@@ -53,7 +68,7 @@ async function loadPreviews() {
         label.className = "label";
         label.textContent = opt.name || "Option " + (index + 1);
         group.appendChild(label);
-        const settings = Object.assign({}, defaultSettings, opt.settings);
+        const settings = applyPreviewDefaults(opt.settings);
         const settingsDiv = document.createElement("pre");
         settingsDiv.className = "settings";
         settingsDiv.textContent = JSON.stringify(settings, null, 4);
