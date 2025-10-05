@@ -20,19 +20,19 @@
             throw new Error("Provider must implement getId()");
         }
 
-        subscribeTicker(params, handlers) {
+        subscribeTicker(_params, _handlers) {
             throw new Error("Provider must implement subscribeTicker()");
         }
 
-        async fetchTicker(params) {
+        async fetchTicker(_params) {
             throw new Error("Provider must implement fetchTicker()");
         }
 
-        getCachedTicker(key) {
+        getCachedTicker(_key) {
             return null;
         }
 
-        async fetchCandles(params) {
+        async fetchCandles(_params) {
             throw new Error("Provider must implement fetchCandles()");
         }
 

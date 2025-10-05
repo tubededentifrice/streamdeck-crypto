@@ -1,11 +1,11 @@
 // this is our global websocket, used to communicate from/to Stream Deck software
 // and some info about our plugin, as sent by Stream Deck software
 /* global CryptoTickerExpressionEvaluator */
+/* exported connectElgatoStreamDeckSocket */
 
 var websocket = null,
     uuid = null,
-    actionInfo = {},
-    inInfo = {};
+    actionInfo = {};
 
 
 const expressionEvaluatorModule = typeof CryptoTickerExpressionEvaluator !== "undefined" ? CryptoTickerExpressionEvaluator : null;
@@ -674,9 +674,13 @@ const pi = {
         }
     },
     applyDisplay: function(elements, display) {
-        for(i in Object.keys(elements)) {
-            elements[i].style.display = display;
-         }
+        if (!elements) {
+            return;
+        }
+
+        for (let index = 0; index < elements.length; index++) {
+            elements[index].style.display = display;
+        }
     },
     splitPairValue: function(value) {
         if (value && value.indexOf("|")>=0) {
@@ -716,12 +720,12 @@ const pi = {
 
 pi.initDom();
 
-function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, infoJson, actionInfoJson) {
     uuid = inUUID;
     // please note: the incoming arguments are of type STRING, so
     // in case of the inActionInfo, we must parse it into JSON first
-    actionInfo = JSON.parse(inActionInfo); // cache the info
-    inInfo = JSON.parse(inInfo);
+    actionInfo = JSON.parse(actionInfoJson); // cache the info
+    const parsedInfo = JSON.parse(infoJson);
     websocket = new WebSocket('ws://127.0.0.1:' + inPort);
 
     /** let's see, if we have some settings */
@@ -731,9 +735,10 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, 
     // if connection was established, the websocket sends
     // an 'onopen' event, where we need to register our PI
     websocket.onopen = function () {
-        var json = {
+        const json = {
             event: inRegisterEvent,
-            uuid: inUUID
+            uuid: inUUID,
+            info: parsedInfo
         };
         // register property inspector to Stream Deck
         websocket.send(JSON.stringify(json));
@@ -741,8 +746,11 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, 
 
     websocket.onmessage = function (evt) {
         // Received message from Stream Deck
-        var jsonObj = JSON.parse(evt.data);
-        var event = jsonObj['event'];
+        JSON.parse(evt.data);
         // console.log("Received message", jsonObj);
     };
+}
+
+if (typeof window !== "undefined") {
+    window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
 }

@@ -135,7 +135,7 @@
             [0.6, 0.62], [1.0, 0.62], [1.0, 0.7], [0.6, 0.7]
         ]);
     } else if (iconState === connectionStates.BROKEN) {
-        function drawRoundedRect(width, height, radius) {
+        const drawRoundedRect = function (width, height, radius) {
             const r = Math.min(radius, Math.min(width, height) / 2);
             canvasContext.beginPath();
             canvasContext.moveTo(r, 0);
@@ -149,7 +149,7 @@
             canvasContext.quadraticCurveTo(0, 0, r, 0);
             canvasContext.closePath();
             canvasContext.fill();
-        }
+        };
 
         const linkWidth = iconSize * 0.55;
         const linkHeight = iconSize * 0.28;

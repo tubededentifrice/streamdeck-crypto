@@ -1,5 +1,3 @@
-const path = require("path");
-
 const { BinanceProvider } = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/providers/binance-provider.js");
 
 function createProvider() {
