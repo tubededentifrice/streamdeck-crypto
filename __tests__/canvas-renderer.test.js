@@ -9,4 +9,8 @@ describe("canvas-renderer helpers", () => {
         expect(canvasRenderer.getCandlesDisplayCount({ candlesDisplayed: "100" })).toBe(60);
         expect(canvasRenderer.getCandlesDisplayCount({ candlesDisplayed: "3" })).toBe(5);
     });
+
+    test("exposes message renderer", () => {
+        expect(typeof canvasRenderer.renderMessageCanvas).toBe("function");
+    });
 });

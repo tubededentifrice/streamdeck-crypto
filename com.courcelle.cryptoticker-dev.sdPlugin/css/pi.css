@@ -1616,3 +1616,15 @@ input[type="range"].colortemperature::-webkit-slider-thumb {
     opacity: 1;
     transition: opacity 0.25s ease-out;
 }
+
+.pi-input-error {
+    display: none;
+    color: #ff6b6b;
+    font-size: 11px;
+    line-height: 1.3;
+    margin-top: 4px;
+}
+
+.pi-input-error.is-visible {
+    display: block;
+}

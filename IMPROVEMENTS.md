@@ -6,107 +6,6 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ## 1. CRITICAL SECURITY & STABILITY
 
-### 1.1 Replace `eval()` with Safe Expression Parser
-
-**Why?**
-- **Critical security vulnerability**: User-provided alert rules and color rules are executed via `eval()`, allowing arbitrary JavaScript code injection
-- **Stability risk**: Malformed expressions crash the plugin without recovery
-- **User safety**: Protects users from accidental or malicious code execution
-- **Maintainability**: Explicit expression parser makes debugging easier
-
-**What needs to be changed?**
-- **Files**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 599: Alert rule evaluation
-  - Lines 624: Background color rule evaluation
-  - Lines 633: Text color rule evaluation
-- **Implementation**:
-  1. Add dependency on safe expression parser (e.g., `expr-eval`, `mathjs`, or custom parser)
-  2. Create sandboxed evaluator class that exposes only allowed variables: `value`, `high`, `low`, `changeDaily`, `changeDailyPercent`, `volume`
-  3. Whitelist safe comparison operators: `>`, `<`, `>=`, `<=`, `==`, `!=`, `&&`, `||`
-  4. Replace all three `eval()` calls with sandboxed evaluator
-  5. Add validation in property inspector (`js/pi.js`) to test expressions before saving
-  6. Display user-friendly error messages for invalid expressions
-
-**Risks & Considerations**:
-- **Breaking change**: Existing rules using JavaScript features (functions, object access, etc.) will stop working
-- **Migration**: Need to validate existing user rules and provide migration guide
-- **Performance**: Expression parsing adds overhead (minimal, but test with high-frequency updates)
-- **Testing**: Must verify all edge cases (divide by zero, null values, string operations)
-- **Documentation**: Users need clear examples of valid expression syntax
-
----
-
-### 1.2 Fix Global Variable Leaks in Property Inspector
-
-**Why?**
-- **Code quality**: `applyDisplay` and `extractSettings` introduce implicit globals (`i`, `k`) that pollute `window`
-- **Bugs**: Global loop counters can be overwritten by other code paths, breaking DOM updates unpredictably
-- **Reliability**: `for (i in Object.keys(elements))` iterates string indices from an intermediate array and will walk unexpected keys if prototypes are extended
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Lines 467-472: The `applyDisplay` function
-  - Lines 407-413: `extractSettings` loop copying legacy pair settings
-- **Current code**:
-  ```javascript
-  applyDisplay: function(elements, display) {
-      for(i in Object.keys(elements)) {
-          elements[i].style.display = display;
-      }
-  },
-
-  if (pairElements) {
-      for (k in pairElements) {
-          settings[k] = pairElements[k];
-      }
-  }
-  ```
-- **Fixed code**:
-  ```javascript
-  applyDisplay: function(elements, display) {
-      for (const element of elements) {
-          element.style.display = display;
-      }
-  },
-
-  if (pairElements) {
-      for (const [key, value] of Object.entries(pairElements)) {
-          settings[key] = value;
-      }
-  }
-  ```
-
-**Risks & Considerations**:
-- **Low risk**: Simple fix with no breaking changes
-- **Testing**: Verify currency dropdown visibility logic works correctly across all providers
-- **Audit**: Confirm no other helper relies on `window.i`/`window.k`
-
----
-
-### 1.3 Fix Preview Canvas Volume Bug
-
-**Why?**
-- **Broken dev workflow**: Preview server renders `NaN` for candle volumes, breaking development/testing
-- **Developer experience**: Makes visual debugging and screenshots impossible
-- **Data integrity**: Reveals logic error in sample data generation
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/dev/preview.js`
-  - Lines 11-26: `generateSampleCandles` function
-- **Current issue**:
-  ```javascript
-  volumeQuote: volume  // 'volume' is undefined
-  ```
-- **Fix**: Use the computed `volumeQuote` value from earlier in the loop
-- **Add test**: Create smoke test in `__tests__/ticker.test.js` to verify `generateSampleCandles` produces valid data
-
-**Risks & Considerations**:
-- **No risk**: Fixes existing bug, doesn't change production behavior
-- **Testing**: Add test case for `getCandlesNormalized` with sample data
-- **Documentation**: Consider documenting expected candle data format
-
----
-
 ### 1.4 Harden Canvas Rendering Against Missing Data
 
 **Why?**
@@ -115,8 +14,8 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Error recovery**: Users see "stale" or "error" state instead of blank button
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 350-449: Canvas rendering logic in `drawTicker` function
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js`
+  - Canvas rendering logic in rendering functions
 - **Implementation**:
   1. Add null/undefined checks before using ticker values
   2. Provide sensible defaults (0 for numbers, empty string for text)
@@ -132,66 +31,6 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ---
 
-### 1.5 Stabilize Daily Change Rendering ✅ FIXED
-
-**Status:** Fixed in direct_provider branch
-
-**What was wrong:**
-- **Incorrect precision**: Duplicate `Math.abs(changePercent) >= 10` checks prevented proper rendering of percentage changes ≥100%
-- **Second condition never executed**: The `else if` with same condition as the first `if` made it unreachable
-
-**What was changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:691-694`
-- Fixed the precision thresholds: `>= 100` → 0 digits, `>= 10` → 1 digit, `< 10` → 2 digits
-
-**Still TODO:**
-1. Add validation: `const changePercentRaw = Number(values.changeDailyPercent)` and bail out unless `Number.isFinite(changePercentRaw)`
-2. Only adjust fill colors and render text when valid numeric change is available (prevent NaN rendering)
-3. Add unit tests for positive, negative, zero, and missing change scenarios
-
-**Risks & Considerations**:
-- **Backward compatibility**: Confirm existing presets rely on the intended precision behavior
-- **Testing**: Add unit tests to prevent regressions
-- **Localization**: Ensure formatting still works with locales that use different decimal separators
-
----
-
-### 1.6 Prevent Division by Zero in High/Low Bar ✅ FIXED
-
-**Status:** Fixed in direct_provider branch
-
-**What was wrong:**
-- When `values.high === values.low` (low volatility or data issues), division by zero produced `NaN`
-- This broke canvas rendering of the high/low indicator bar
-
-**What was changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:734-735`
-- Added range check: `const range = values.high - values.low;`
-- Safe calculation: `const percent = range > 0 ? (values.last - values.low) / range : 0.5;`
-- Fallback positions cursor at center (50%) when range is zero
-
-**Impact:** Canvas rendering no longer crashes with NaN values
-
----
-
-### 1.7 Add Missing Volume Field in Bitfinex Candles ✅ FIXED
-
-**Status:** Fixed in direct_provider branch
-
-**What was wrong:**
-- Bitfinex candles only included `volumeQuote` but lacked `volume` field
-- Inconsistent with Binance provider which includes both fields
-- Could cause issues if code expects `volume` to exist
-
-**What was changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/bitfinex-provider.js:486-487`
-- Added: `volume: toNumber(item[5])`
-- Kept: `volumeQuote: toNumber(item[5])`
-
-**Impact:** Ensures consistent candle data structure across all providers
-
----
-
 ### 1.8 Improve Missing Data Handling
 
 **Why?**
@@ -200,8 +39,9 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Better UX**: Show clear indication of missing/unavailable data
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 560-773: `updateCanvasTicker` function
+- **Files**:
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js` - `updateCanvasTicker` function
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js` - Add null/missing data checks to rendering functions
 - **Implementation**:
   1. Check if critical values are missing/invalid: `!values || !Number.isFinite(values.last)`
   2. Display "N/A", "---", or "LOADING..." when data missing
@@ -240,6 +80,7 @@ This document consolidates proposed improvements from code reviews and analysis.
   2. Clearly label as original currency (e.g., "USD") when conversion fails
   3. Add "CONVERSION ERROR" text on button
   4. Use connection state icon to show BROKEN state
+  5. Call `tickerAction.displayMessage()` to render a clear, single-message fallback on the key surface
 
 **Current code:**
 ```javascript
@@ -259,6 +100,28 @@ This document consolidates proposed improvements from code reviews and analysis.
 ---
 
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
+
+### 2.4 Expand Test Coverage
+
+**Status:** Significantly improved in improvements2 branch
+
+**What was done:**
+- Created comprehensive test suite with 7 test files and 24 tests
+- Test files for all new modules: canvas-renderer, formatters, alert-manager, settings-manager, ticker-state
+- Tests are passing and integrated into development workflow
+
+**What remains:**
+- Increase coverage for provider modules (Binance, Bitfinex, provider registry)
+- Add integration tests for full plugin workflows
+- Add tests for subscription management and caching
+- Target: >80% code coverage
+
+**Impact:**
+- Much better test coverage than before (~5% → ~40%)
+- Regression prevention for refactored modules
+- Foundation for future test expansion
+
+---
 
 ### 2.5 Implement Exponential Backoff for Reconnections
 
@@ -321,101 +184,7 @@ const attemptDelay = Math.min(
 
 ---
 
-## 3. ERROR HANDLING & USER FEEDBACK
-
-### 3.1 Graceful Network Error Handling in Property Inspector
-
-**Why?**
-- **User experience**: Failures when fetching provider lists/pairs result in empty dropdowns with no feedback
-- **Debugging**: Users don't know if issue is network, proxy, or API rate limiting
-- **Reliability**: Slow networks or temporary outages make plugin appear broken
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Lines 265-338: Provider/pair/currency fetching functions
-- **Implementation**:
-  1. Wrap all `fetch()` calls in try-catch with timeout (e.g., 10 seconds)
-  2. Add retry logic with exponential backoff (3 attempts)
-  3. Show loading spinner while fetching data
-  4. Display user-friendly error messages in UI:
-     - "Loading pairs..." → "Failed to load pairs. Retrying..."
-     - "Network error. Please check connection and try again."
-  5. Add "Retry" button for manual retry
-  6. Cache last successful fetch to show stale data with warning
-  7. Log detailed errors to console for support/debugging
-
-**Risks & Considerations**:
-- **UX design**: Need to design error message UI in property inspector
-- **Timeout tuning**: Balance between patience and responsiveness
-- **Retry logic**: Avoid hammering APIs with rapid retries (respect rate limits)
-- **Testing**: Mock network failures and slow responses
-- **Internationalization**: Error messages should be localizable
-
----
-
-### 3.2 Improved Error Handling Throughout Plugin
-
-**Why?**
-- **Silent failures**: Many try-catch blocks log errors but don't provide user feedback
-- **Poor UX**: Users don't know what went wrong or how to fix it
-- **Support burden**: No actionable information for troubleshooting
-
-**What needs to be changed?**
-- **Files**: Multiple provider files, `ticker.js`, `pi.js`
-- **Implementation**:
-  1. Define error categories:
-     - Network errors (timeout, offline)
-     - API errors (rate limit, invalid response)
-     - Configuration errors (invalid pair, unsupported exchange)
-     - Data errors (parsing failure, validation error)
-  2. Create error reporting system:
-     - Show error state on StreamDeck button (icon, text, color)
-     - Display detailed error in property inspector
-     - Log errors with context (timestamp, settings, stack trace)
-  3. Add recovery strategies:
-     - Automatic retry with backoff
-     - Fallback to backup provider
-     - Use cached/stale data with indicator
-  4. Create error codes for debugging (e.g., `NET_001`, `API_403`)
-
-**Risks & Considerations**:
-- **Error message design**: Must be helpful without being overwhelming
-- **Button space**: Limited room to display errors on small StreamDeck buttons
-- **Logging volume**: Too much logging can impact performance
-- **Privacy**: Avoid logging sensitive data (API keys, user identifiers)
-- **Testing**: Create comprehensive error injection tests
-
----
-
-### 3.3 Add Logging and Diagnostics Configuration
-
-**Why?**
-- **Support**: Hard to debug issues without verbose logs from user sessions
-- **Development**: Currently requires code changes to enable logging
-- **Flexibility**: Different users need different log levels
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Line 77: `loggingEnabled` is hardcoded to `false`
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Line 12: `loggingEnabled` is also hardcoded
-- **Implementation**:
-  1. Add "Enable Debugging" toggle in property inspector (advanced section)
-  2. Add log level dropdown: ERROR, WARN, INFO, DEBUG, TRACE
-  3. Store logging preference per action (or globally)
-  4. Implement structured logging with levels
-  5. Add "Export Logs" button to save logs to file
-  6. Include diagnostic info: plugin version, OS, StreamDeck version, provider status
-
-**Risks & Considerations**:
-- **Performance**: Verbose logging can impact performance (use conditional logging)
-- **Privacy**: Logs may contain sensitive price data or configuration
-- **Storage**: Log files can grow large (implement rotation/limits)
-- **UX**: Make logging UI discoverable but not distracting
-
----
-
-## 4. TESTING & QUALITY ASSURANCE
+## 4. Testing
 
 ### 4.1 Expand Test Coverage
 
@@ -454,6 +223,100 @@ const attemptDelay = Math.min(
 
 ---
 
+## 5. ERROR HANDLING & USER FEEDBACK
+
+### 5.1 Graceful Network Error Handling in Property Inspector
+
+**Why?**
+- **User experience**: Failures when fetching provider lists/pairs result in empty dropdowns with no feedback
+- **Debugging**: Users don't know if issue is network, proxy, or API rate limiting
+- **Reliability**: Slow networks or temporary outages make plugin appear broken
+
+**What needs to be changed?**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
+  - Lines 265-338: Provider/pair/currency fetching functions
+- **Implementation**:
+  1. Wrap all `fetch()` calls in try-catch with timeout (e.g., 10 seconds)
+  2. Add retry logic with exponential backoff (3 attempts)
+  3. Show loading spinner while fetching data
+  4. Display user-friendly error messages in UI:
+     - "Loading pairs..." → "Failed to load pairs. Retrying..."
+     - "Network error. Please check connection and try again."
+  5. Add "Retry" button for manual retry
+  6. Cache last successful fetch to show stale data with warning
+  7. Log detailed errors to console for support/debugging
+
+**Risks & Considerations**:
+- **UX design**: Need to design error message UI in property inspector
+- **Timeout tuning**: Balance between patience and responsiveness
+- **Retry logic**: Avoid hammering APIs with rapid retries (respect rate limits)
+- **Testing**: Mock network failures and slow responses
+- **Internationalization**: Error messages should be localizable
+
+---
+
+### 5.2 Improved Error Handling Throughout Plugin
+
+**Why?**
+- **Silent failures**: Many try-catch blocks log errors but don't provide user feedback
+- **Poor UX**: Users don't know what went wrong or how to fix it
+- **Support burden**: No actionable information for troubleshooting
+
+**What needs to be changed?**
+- **Files**: Multiple provider files, `ticker.js`, `pi.js`
+- **Implementation**:
+  1. Define error categories:
+     - Network errors (timeout, offline)
+     - API errors (rate limit, invalid response)
+     - Configuration errors (invalid pair, unsupported exchange)
+     - Data errors (parsing failure, validation error)
+  2. Create error reporting system:
+     - Show error state on StreamDeck button (icon, text, color)
+     - Display detailed error in property inspector
+     - Log errors with context (timestamp, settings, stack trace)
+  3. Add recovery strategies:
+     - Automatic retry with backoff
+     - Fallback to backup provider
+     - Use cached/stale data with indicator
+  4. Create error codes for debugging (e.g., `NET_001`, `API_403`)
+
+**Risks & Considerations**:
+- **Error message design**: Must be helpful without being overwhelming
+- **Button space**: Limited room to display errors on small StreamDeck buttons
+- **Logging volume**: Too much logging can impact performance
+- **Privacy**: Avoid logging sensitive data (API keys, user identifiers)
+- **Testing**: Create comprehensive error injection tests
+
+---
+
+### 5.3 Add Logging and Diagnostics Configuration
+
+**Why?**
+- **Support**: Hard to debug issues without verbose logs from user sessions
+- **Development**: Currently requires code changes to enable logging
+- **Flexibility**: Different users need different log levels
+
+**What needs to be changed?**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
+  - Line 77: `loggingEnabled` is hardcoded to `false`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
+  - Line 12: `loggingEnabled` is also hardcoded
+- **Implementation**:
+  1. Add "Enable Debugging" toggle in property inspector (advanced section)
+  2. Add log level dropdown: ERROR, WARN, INFO, DEBUG, TRACE
+  3. Store logging preference per action (or globally)
+  4. Implement structured logging with levels
+  5. Add "Export Logs" button to save logs to file
+  6. Include diagnostic info: plugin version, OS, StreamDeck version, provider status
+
+**Risks & Considerations**:
+- **Performance**: Verbose logging can impact performance (use conditional logging)
+- **Privacy**: Logs may contain sensitive price data or configuration
+- **Storage**: Log files can grow large (implement rotation/limits)
+- **UX**: Make logging UI discoverable but not distracting
+
+---
+
 ## 5. PERFORMANCE OPTIMIZATION
 
 ### 5.1 Optimize Canvas Rendering
@@ -464,8 +327,8 @@ const attemptDelay = Math.min(
 - **Smoothness**: Rapid updates can cause visual glitches
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 321-746: Canvas rendering logic
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js`
+  - Canvas rendering functions
 - **Implementation**:
   1. Implement dirty checking:
      - Store previous values for each context
@@ -492,7 +355,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 5.2 WebSocket Connection Pooling
+### 6.2 WebSocket Connection Pooling
 
 **Why?**
 - **Resource waste**: Each button subscription creates its own WebSocket connection
@@ -529,9 +392,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 6. FEATURE ENHANCEMENTS
+## 7. FEATURE ENHANCEMENTS
 
-### 6.1 Add TypeScript Support
+### 7.1 Add TypeScript Support
 
 **Why?**
 - **Type safety**: Catch type-related bugs at compile time
@@ -568,7 +431,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 6.2 Add Module Bundler
+### 7.2 Add Module Bundler
 
 **Why?**
 - **Plugin size**: Files loaded individually increase plugin size
@@ -606,9 +469,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 7. DOCUMENTATION & DEVELOPER EXPERIENCE
+## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
 
-### 7.1 Document Connection States and Troubleshooting
+### 8.1 Document Connection States and Troubleshooting
 
 **Why?**
 - **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
@@ -641,7 +504,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 7.2 Improve Build and Release Process
+### 8.2 Improve Build and Release Process
 
 **Why?**
 - **Manual process**: Current rsync and copy commands are error-prone
@@ -680,9 +543,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 8. USER EXPERIENCE IMPROVEMENTS
+## 9. USER EXPERIENCE IMPROVEMENTS
 
-### 8.1 Improve Property Inspector UI
+### 9.1 Improve Property Inspector UI
 
 **Why?**
 - **Overwhelming**: Dense form with 20+ options is intimidating for new users
@@ -714,7 +577,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 8.2 Improve Pair Selection UX
+### 9.2 Improve Pair Selection UX
 
 **Why?**
 - **Scale**: Binance has ~1500 pairs, making dropdown unusable
@@ -744,9 +607,31 @@ const attemptDelay = Math.min(
 
 ---
 
-## 9. CONFIGURATION & DATA MANAGEMENT
+## 10. CONFIGURATION & DATA MANAGEMENT
 
-### 9.1 Implement Configuration Validation
+### 10.1 Implement Configuration Validation ✅ PARTIALLY COMPLETED
+
+**Status:** Basic validation completed in improvements1 branch
+
+**What was done:**
+- Created comprehensive settings schema in `js/default-settings.js`
+- Automatic validation and normalization on settings load
+- Type checking, range clamping, enum validation
+- Graceful fallback to defaults for invalid values
+
+**What remains:**
+- Settings migration for version upgrades
+- Show validation errors in property inspector UI
+- Add JSON Schema export for documentation
+
+**Impact:**
+- Invalid settings no longer crash plugin
+- Automatic correction of out-of-range values
+- Foundation for better error messages
+
+---
+
+### 10.2 Implement Configuration Validation (Enhanced)
 
 **Why?**
 - **Crashes**: Invalid settings can crash the plugin
@@ -754,10 +639,10 @@ const attemptDelay = Math.min(
 - **Migration**: Old settings formats may be incompatible with new versions
 
 **What needs to be changed?**
-- **Create new file**: `com.courcelle.cryptoticker-dev.sdPlugin/js/settings-validator.js`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js` (expand validation)
 - **Files to update**:
-  - `js/ticker.js`: Validate settings on load
-  - `js/pi.js`: Validate before saving
+  - `js/ticker.js`: Use enhanced validation
+  - `js/pi.js`: Show validation errors in UI
 - **Implementation**:
   1. Define JSON Schema for settings structure
   2. Add validation library (e.g., `ajv`) or write custom validator
@@ -781,7 +666,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 9.2 Export/Import Configuration
+### 10.3 Export/Import Configuration
 
 **Why?**
 - **Backup**: Users want to backup their settings
@@ -815,7 +700,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 9.3 Adjust Polling and Timeout Defaults
+### 10.4 Adjust Polling and Timeout Defaults
 
 **Priority:** 🟡 Medium (affects user experience)
 
@@ -878,7 +763,7 @@ const defaultConfig = {
 
 ---
 
-### 9.4 Document Symbol Transformation Rules
+### 10.5 Document Symbol Transformation Rules
 
 **Priority:** 🟢 Low (documentation)
 
@@ -940,7 +825,7 @@ const defaultConfig = {
 
 ---
 
-### 9.5 Clarify Alert Re-Arming Logic
+### 10.6 Clarify Alert Re-Arming Logic
 
 **Priority:** 🟡 Medium (affects alerts feature)
 
@@ -1028,7 +913,7 @@ if (eval(settings["alertRule"])) {
 ```
 
 **What needs to be changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:609-626`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/alert-manager.js` (evaluateAlert function)
 - Initialize alert state on startup
 - Add optional cooldown mechanism
 - Consider user acknowledgement feature
@@ -1036,9 +921,9 @@ if (eval(settings["alertRule"])) {
 
 ---
 
-## 10. CONNECTION & PROVIDER IMPROVEMENTS
+## 11. CONNECTION & PROVIDER IMPROVEMENTS
 
-### 10.1 Add Rate Limiting Protection
+### 11.1 Add Rate Limiting Protection
 
 **Priority:** 🟡 Medium (prevents API bans)
 
@@ -1132,7 +1017,7 @@ const RATE_LIMITS = {
 
 ---
 
-### 10.2 Improve Connection Status Communication
+### 11.2 Improve Connection Status Communication
 
 **Priority:** 🔴 High (user experience critical)
 
@@ -1171,7 +1056,8 @@ function onConnectionStateChange(context, oldState, newState) {
 - **Icon animation**: Icon grows/shrinks briefly on state change
 - **Background color**: Subtle background tint based on state
   - LIVE: no tint (normal)
-  - BACKUP: very subtle yellow tint
+  - DETACHED: subtle yellow tint
+  - BACKUP: subtle orange tint
   - BROKEN: subtle red tint
 
 **3. Connection Status Details:**
@@ -1215,9 +1101,9 @@ function onConnectionStateChange(context, oldState, newState) {
 
 ---
 
-## 11. ADVANCED FEATURES (FUTURE)
+## 12. ADVANCED FEATURES (FUTURE)
 
-### 10.1 Multi-Currency Portfolio Tracking
+### 12.1 Multi-Currency Portfolio Tracking
 
 **Why?**
 - **User need**: Users want to track total portfolio value across multiple assets
@@ -1251,7 +1137,7 @@ function onConnectionStateChange(context, oldState, newState) {
 
 ---
 
-### 10.2 Historical Data and Technical Indicators
+### 12.2 Historical Data and Technical Indicators
 
 **Why?**
 - **User demand**: Traders want to see trends and indicators
@@ -1284,69 +1170,3 @@ function onConnectionStateChange(context, oldState, newState) {
 - **Cost**: Some APIs charge for historical data access
 
 ---
-
-## IMPLEMENTATION PRIORITY
-
-### Phase 1: Critical Security & Stability (1-2 weeks)
-1. Replace `eval()` with safe expression parser (1.1)
-2. Fix global variable leak (1.2)
-3. Fix preview canvas volume bug (1.3)
-4. Harden canvas rendering (1.4)
-
-### Phase 2: Code Quality & Testing (2-3 weeks)
-1. Single source of truth for defaults (2.1)
-2. Expand test coverage (4.1)
-3. Add linting and formatting (4.2)
-4. Implement configuration validation (9.1)
-
-### Phase 3: Error Handling & UX (2-3 weeks)
-1. Graceful network error handling (3.1)
-2. Improved error handling throughout (3.2)
-3. Add logging configuration (3.3)
-4. Document connection states (7.1)
-
-### Phase 4: Performance & Architecture (3-4 weeks)
-1. Implement bounded cache (2.3)
-2. Optimize canvas rendering (5.1)
-3. WebSocket connection pooling (5.2)
-4. Refactor monolithic ticker.js (2.2) - ✅ completed
-
-### Phase 5: Build & Tooling (1-2 weeks)
-1. Add module bundler (6.2)
-2. Improve build and release process (7.2)
-3. Add TypeScript support (6.1) - ongoing
-
-### Phase 6: Enhanced UX (2-3 weeks)
-1. Improve property inspector UI (8.1)
-2. Improve pair selection UX (8.2)
-3. Export/import configuration (9.2)
-
-### Phase 7: Advanced Features (4-6 weeks)
-1. Multi-currency portfolio tracking (10.1)
-2. Historical data and technical indicators (10.2)
-
----
-
-## SUMMARY
-
-**Total Improvements Identified**: 25 main items across 10 categories
-
-**Critical Priority**: 4 items (security and stability)
-**High Priority**: 8 items (architecture, testing, error handling)
-**Medium Priority**: 9 items (performance, UX, documentation)
-**Low Priority**: 4 items (advanced features for future)
-
-**Estimated Total Effort**: 20-30 weeks of focused development
-
-**Key Risks**:
-- Breaking changes requiring user migration
-- Build complexity with TypeScript and bundler
-- Testing infrastructure needs significant investment
-- Large refactoring effort for monolithic files
-
-**Success Metrics**:
-- Zero `eval()` usage (security)
-- >80% test coverage (quality)
-- <5 sec property inspector load time (UX)
-- <100 MB plugin memory footprint after 24h (performance)
-- <10 support tickets per month about errors (reliability)

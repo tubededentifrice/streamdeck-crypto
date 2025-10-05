@@ -1,15 +1,24 @@
+/* global tickerAction */
+
 const DEFAULT_RANGE = 1;
 const SAMPLE_CANDLE_COUNT = 20;
 const CANDLE_MARGIN_FACTOR = 0.05;
 
+const globalScope = typeof window !== "undefined" ? window : globalThis;
 const defaultsModule = typeof CryptoTickerDefaults !== "undefined" ? CryptoTickerDefaults : null;
+const previewTickerAction = typeof tickerAction !== "undefined" ? tickerAction : null;
+
+if (!previewTickerAction) {
+    throw new Error("Ticker action dependency is missing for the preview page");
+}
+
 const previewBaseDefaults = defaultsModule && typeof defaultsModule.getDefaultSettings === "function"
     ? defaultsModule.getDefaultSettings()
-    : (typeof tickerAction !== "undefined" && typeof tickerAction.getDefaultSettings === "function"
-        ? tickerAction.getDefaultSettings()
+    : (typeof previewTickerAction.getDefaultSettings === "function"
+        ? previewTickerAction.getDefaultSettings()
         : {});
 
-const applyPreviewDefaults = typeof defaultsModule !== "undefined" && defaultsModule && typeof defaultsModule.applyDefaults === "function"
+const applyPreviewDefaults = defaultsModule && typeof defaultsModule.applyDefaults === "function"
     ? function (partial) {
         return defaultsModule.applyDefaults(partial || {});
     }
@@ -17,13 +26,18 @@ const applyPreviewDefaults = typeof defaultsModule !== "undefined" && defaultsMo
         return Object.assign({}, previewBaseDefaults, partial || {});
     };
 
-tickerAction.sendCanvas = function () {};
+previewTickerAction.sendCanvas = function () {};
+
+function assignCanvasGlobals(canvasElement) {
+    globalScope.canvas = canvasElement;
+    globalScope.canvasContext = canvasElement.getContext("2d");
+}
 
 function generateSampleCandles(values) {
     const candles = [];
     const high = values.high || 0;
     const low = values.low || 0;
-    const volumeQuote = values.volume || 0;
+    const volume = values.volume || 0;
     const range = high - low || DEFAULT_RANGE;
     const count = SAMPLE_CANDLE_COUNT;
     for (let i = 0; i < count; i++) {
@@ -40,7 +54,7 @@ function generateSampleCandles(values) {
             volumeQuote: volume
         });
     }
-    return tickerAction.getCandlesNormalized(candles);
+    return previewTickerAction.getCandlesNormalized(candles);
 }
 
 async function loadPreviews() {
@@ -75,29 +89,27 @@ async function loadPreviews() {
         group.appendChild(settingsDiv);
         container.appendChild(group);
 
-        canvas = tickerCanvas;
-        canvasContext = tickerCanvas.getContext("2d");
+        assignCanvasGlobals(tickerCanvas);
         let tickerValues;
         if (usePrecomputed && opt.values) {
             tickerValues = opt.values;
         } else {
-            tickerValues = await tickerAction.getTickerValue(
+            tickerValues = await previewTickerAction.getTickerValue(
                 settings.pair,
                 settings.currency,
                 settings.exchange
             );
         }
-        tickerAction.updateCanvasTicker(index + "-ticker", settings, tickerValues, tickerValues && tickerValues.connectionState);
+        previewTickerAction.updateCanvasTicker(index + "-ticker", settings, tickerValues, tickerValues && tickerValues.connectionState);
 
-        canvas = candleCanvas;
-        canvasContext = candleCanvas.getContext("2d");
+        assignCanvasGlobals(candleCanvas);
         let candleValues;
         if (usePrecomputed && opt.values) {
             candleValues = generateSampleCandles(opt.values);
         } else {
-            candleValues = await tickerAction.getCandles(settings);
+            candleValues = await previewTickerAction.getCandles(settings);
         }
-        tickerAction.updateCanvasCandles(index + "-candles", settings, candleValues, tickerValues && tickerValues.connectionState);
+        previewTickerAction.updateCanvasCandles(index + "-candles", settings, candleValues, tickerValues && tickerValues.connectionState);
     }
 }
 

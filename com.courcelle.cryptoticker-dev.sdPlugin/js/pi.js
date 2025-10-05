@@ -1,9 +1,98 @@
 // this is our global websocket, used to communicate from/to Stream Deck software
 // and some info about our plugin, as sent by Stream Deck software
+/* global CryptoTickerExpressionEvaluator */
+/* exported connectElgatoStreamDeckSocket */
+
 var websocket = null,
     uuid = null,
-    actionInfo = {},
-    inInfo = {};
+    actionInfo = {};
+
+
+const expressionEvaluatorModule = typeof CryptoTickerExpressionEvaluator !== "undefined" ? CryptoTickerExpressionEvaluator : null;
+
+const expressionEvaluatorInstances = (function() {
+    if (!expressionEvaluatorModule) {
+        return {
+            alert: null,
+            color: null
+        };
+    }
+
+    const baseAllowed = expressionEvaluatorModule.allowedVariables ? expressionEvaluatorModule.allowedVariables.slice(0) : [];
+    const colorAllowed = baseAllowed.slice(0);
+    const extraColorVariables = [
+        "alert",
+        "backgroundColor",
+        "textColor",
+        "defaultBackgroundColor",
+        "defaultTextColor"
+    ];
+
+    for (let i = 0; i < extraColorVariables.length; i++) {
+        if (colorAllowed.indexOf(extraColorVariables[i]) === -1) {
+            colorAllowed.push(extraColorVariables[i]);
+        }
+    }
+
+    return {
+        alert: expressionEvaluatorModule.createEvaluator(),
+        color: expressionEvaluatorModule.createEvaluator({
+            allowedVariables: colorAllowed
+        })
+    };
+}());
+
+const EXPRESSION_SAMPLE_VALUES = {
+    last: 100,
+    high: 120,
+    low: 80,
+    changeDaily: 2,
+    changeDailyPercent: 0.02,
+    volume: 100000
+};
+
+const EXPRESSION_SAMPLE_COLOR_OVERRIDES = {
+    alert: false,
+    backgroundColor: "#000000",
+    textColor: "#ffffff",
+    defaultBackgroundColor: "#000000",
+    defaultTextColor: "#ffffff"
+};
+
+function buildSampleAlertContext() {
+    if (!expressionEvaluatorModule) {
+        return {};
+    }
+    return expressionEvaluatorModule.buildBaseContext(EXPRESSION_SAMPLE_VALUES);
+}
+
+function buildSampleColorContext() {
+    if (!expressionEvaluatorModule) {
+        return {};
+    }
+    return expressionEvaluatorModule.buildContext(
+        EXPRESSION_SAMPLE_VALUES,
+        Object.assign({}, EXPRESSION_SAMPLE_COLOR_OVERRIDES)
+    );
+}
+
+const expressionValidationTargets = [
+    {
+        key: "alertRule",
+        evaluator: expressionEvaluatorInstances.alert,
+        contextBuilder: buildSampleAlertContext
+    },
+    {
+        key: "backgroundColorRule",
+        evaluator: expressionEvaluatorInstances.color,
+        contextBuilder: buildSampleColorContext
+    },
+    {
+        key: "textColorRule",
+        evaluator: expressionEvaluatorInstances.color,
+        contextBuilder: buildSampleColorContext
+    }
+];
 
 
 const tProxyBase = "https://tproxyv8.opendle.com";
@@ -162,15 +251,18 @@ const settingsConfig = {
     },
     "alertRule": {
         "default": defaultSettings.alertRule,
-        "value": document.getElementById("alertRule")
+        "value": document.getElementById("alertRule"),
+        "errorElement": document.getElementById("alertRuleError")
     },
     "backgroundColorRule": {
         "default": defaultSettings.backgroundColorRule,
-        "value": document.getElementById("backgroundColorRule")
+        "value": document.getElementById("backgroundColorRule"),
+        "errorElement": document.getElementById("backgroundColorRuleError")
     },
     "textColorRule": {
         "default": defaultSettings.textColorRule,
-        "value": document.getElementById("textColorRule")
+        "value": document.getElementById("textColorRule"),
+        "errorElement": document.getElementById("textColorRuleError")
     },
     "mode": {
         "default": defaultSettings.mode
@@ -199,6 +291,73 @@ const pi = {
         if (loggingEnabled) {
             console.log(...data);
         }
+    },
+
+    displayExpressionErrors: function(errors) {
+        const map = errors || {};
+        for (let i = 0; i < expressionValidationTargets.length; i++) {
+            const target = expressionValidationTargets[i];
+            const config = settingsConfig[target.key];
+            if (!config || !config.errorElement) {
+                continue;
+            }
+            const message = map[target.key] || "";
+            config.errorElement.textContent = message;
+            if (message) {
+                config.errorElement.classList.add("is-visible");
+            } else {
+                config.errorElement.classList.remove("is-visible");
+            }
+        }
+    },
+
+    validateRuleExpressions: function(settings) {
+        const result = {
+            hasErrors: false,
+            errors: {}
+        };
+
+        for (let i = 0; i < expressionValidationTargets.length; i++) {
+            const target = expressionValidationTargets[i];
+            const expressionValue = (settings[target.key] || "").trim();
+
+            if (!expressionValue) {
+                result.errors[target.key] = "";
+                continue;
+            }
+
+            if (!target.evaluator || typeof target.contextBuilder !== "function") {
+                result.errors[target.key] = "";
+                continue;
+            }
+
+            const validation = target.evaluator.validate(expressionValue);
+            if (!validation.ok) {
+                result.errors[target.key] = validation.error;
+                result.hasErrors = true;
+                continue;
+            }
+
+            try {
+                const evaluationContext = target.contextBuilder() || {};
+                const evaluationResult = target.evaluator.evaluate(expressionValue, evaluationContext);
+                if (typeof evaluationResult === "number" && !isFinite(evaluationResult)) {
+                    result.errors[target.key] = "Expression resulted in an invalid number. Check for division by zero.";
+                    result.hasErrors = true;
+                } else if (typeof evaluationResult === "number" && isNaN(evaluationResult)) {
+                    result.errors[target.key] = "Expression resulted in NaN. Verify the operators and inputs.";
+                    result.hasErrors = true;
+                } else {
+                    result.errors[target.key] = "";
+                }
+            } catch (err) {
+                const message = err && err.message ? err.message : "Invalid expression";
+                result.errors[target.key] = message;
+                result.hasErrors = true;
+            }
+        }
+
+        return result;
     },
 
     initDom: function() {
@@ -461,6 +620,7 @@ const pi = {
 
         setCurrentSettings(incoming);
         this.refreshValues();
+        this.displayExpressionErrors({});
     },
     checkNewSettings: function() {
         this.log("checkNewSettings");
@@ -475,7 +635,14 @@ const pi = {
             }
         }
 
-        setCurrentSettings(currentSettings);
+        const sanitizedSettings = setCurrentSettings(currentSettings);
+        const validation = this.validateRuleExpressions(sanitizedSettings);
+        this.displayExpressionErrors(validation.errors);
+        if (validation.hasErrors) {
+            this.log("Expression validation failed", validation.errors);
+            return;
+        }
+
         this.saveSettings();
     },
     refreshValues: function() {
@@ -507,9 +674,13 @@ const pi = {
         }
     },
     applyDisplay: function(elements, display) {
-        for(i in Object.keys(elements)) {
-            elements[i].style.display = display;
-         }
+        if (!elements) {
+            return;
+        }
+
+        for (let index = 0; index < elements.length; index++) {
+            elements[index].style.display = display;
+        }
     },
     splitPairValue: function(value) {
         if (value && value.indexOf("|")>=0) {
@@ -549,12 +720,12 @@ const pi = {
 
 pi.initDom();
 
-function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, infoJson, actionInfoJson) {
     uuid = inUUID;
     // please note: the incoming arguments are of type STRING, so
     // in case of the inActionInfo, we must parse it into JSON first
-    actionInfo = JSON.parse(inActionInfo); // cache the info
-    inInfo = JSON.parse(inInfo);
+    actionInfo = JSON.parse(actionInfoJson); // cache the info
+    const parsedInfo = JSON.parse(infoJson);
     websocket = new WebSocket('ws://127.0.0.1:' + inPort);
 
     /** let's see, if we have some settings */
@@ -564,9 +735,10 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, 
     // if connection was established, the websocket sends
     // an 'onopen' event, where we need to register our PI
     websocket.onopen = function () {
-        var json = {
+        const json = {
             event: inRegisterEvent,
-            uuid: inUUID
+            uuid: inUUID,
+            info: parsedInfo
         };
         // register property inspector to Stream Deck
         websocket.send(JSON.stringify(json));
@@ -574,8 +746,11 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, 
 
     websocket.onmessage = function (evt) {
         // Received message from Stream Deck
-        var jsonObj = JSON.parse(evt.data);
-        var event = jsonObj['event'];
+        JSON.parse(evt.data);
         // console.log("Received message", jsonObj);
     };
+}
+
+if (typeof window !== "undefined") {
+    window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
 }

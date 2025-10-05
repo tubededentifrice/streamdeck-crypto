@@ -1,6 +1,8 @@
 /// <reference path="../libs/js/action.js" />
 /// <reference path="../libs/js/stream-deck.js" />
 
+/* global DestinationEnum */
+
 const defaultConfig = {
     "tProxyBase": "https://tproxyv8.opendle.com",
     "fallbackPollIntervalMs": 60000,
@@ -162,7 +164,7 @@ const tickerAction = {
         }
     },
 
-    onKeyDown: async function (context, settings, coordinates, userDesiredState) {
+    onKeyDown: async function (context, settings, _coordinates, _userDesiredState) {
         // State machine between modes
         switch (settings.mode) {
             case "candles":
@@ -189,9 +191,9 @@ const tickerAction = {
         this.refreshTimer(context, settings);
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
-    onKeyUp: function (context, settings, coordinates, userDesiredState) {
+    onKeyUp: function (_context, _settings, _coordinates, _userDesiredState) {
     },
-    onWillAppear: async function (context, settings, coordinates) {
+    onWillAppear: async function (context, settings, _coordinates) {
         this.initCanvas();
 
         this.refreshTimer(context, settings);
@@ -499,15 +501,47 @@ const tickerAction = {
         const connectionState = (tickerValues && tickerValues.connectionState) || this.getContextConnectionState(context);
 
         switch (settings.mode) {
-            case "candles":
+            case "candles": {
                 const candleValues = await this.getCandles(settings);
                 this.updateCanvasCandles(context, settings, candleValues, connectionState);
                 break;
+            }
             case "ticker":
             default:
                 this.updateCanvasTicker(context, settings, tickerValues, connectionState);
                 break;
         }
+    },
+    displayMessage: function (context, message, options) {
+        this.initCanvas();
+
+        const opts = options || {};
+        const normalizedSettings = applyDefaultSettings(opts.settings || {});
+        const backgroundColor = opts.backgroundColor || normalizedSettings.backgroundColor || "#000000";
+        const textColor = opts.textColor || normalizedSettings.textColor || "#ffffff";
+        const font = opts.font || normalizedSettings.font || "Lato";
+        const fontSize = opts.fontSize || null;
+        const desiredConnectionState = opts.connectionState || null;
+        const displayConnectionIcon = opts.displayConnectionStatusIcon || normalizedSettings.displayConnectionStatusIcon || "OFF";
+
+        if (desiredConnectionState) {
+            this.setContextConnectionState(context, desiredConnectionState);
+        }
+
+        canvasRenderer.renderMessageCanvas({
+            canvas: canvas,
+            canvasContext: canvasContext,
+            message: message,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            font: font,
+            fontSize: fontSize,
+            connectionStates: connectionStates,
+            connectionState: desiredConnectionState || this.getContextConnectionState(context),
+            displayConnectionStatusIcon: displayConnectionIcon
+        });
+
+        this.sendCanvas(context);
     },
     getCanvasSizeMultiplier: function(canvasWidth, canvasHeight) {
         return canvasRenderer.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
@@ -776,7 +810,12 @@ const tickerAction = {
         return sanitized;
     },
     getCandlesNormalized: function (candles) {
-        let min = 999999999, max = 0, volumeMin = 999999999, volumeMax = 0, timeMin = 99999999999999999, timeMax = 0;
+        let min = Number.POSITIVE_INFINITY;
+        let max = 0;
+        let volumeMin = Number.POSITIVE_INFINITY;
+        let volumeMax = 0;
+        let timeMin = Number.POSITIVE_INFINITY;
+        let timeMax = 0;
         (candles || []).forEach(function (candle) {
             timeMin = Math.min(timeMin, candle["ts"]);
             timeMax = Math.max(timeMax, candle["ts"]);
@@ -824,7 +863,7 @@ tickerAction.getDefaultSettings = function () {
 };
 tickerAction.settingsSchema = settingsSchema;
 
-function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inApplicationInfo, inActionInfo) {
+function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, _inApplicationInfo, _inActionInfo) {
     // Open the web socket
     websocket = new WebSocket("ws://127.0.0.1:" + inPort);
 
@@ -848,7 +887,6 @@ function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, inAp
         // Received message from Stream Deck
         var jsonObj = JSON.parse(evt.data);
         const event = jsonObj["event"];
-        const action = jsonObj["action"];
         const context = jsonObj["context"];
 
         const jsonPayload = jsonObj["payload"] || {};
@@ -928,4 +966,8 @@ if (screenshotMode) {
 
 if (typeof module !== "undefined") {
     module.exports = tickerAction;
+}
+
+if (typeof window !== "undefined") {
+    window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
 }
