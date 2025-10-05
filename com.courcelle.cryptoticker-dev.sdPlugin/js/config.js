@@ -20,7 +20,8 @@
             loading: "LOADING...",
             stale: "STALE",
             noData: "NO DATA",
-            misconfigured: "INVALID PAIR"
+            misconfigured: "INVALID PAIR",
+            conversionError: "CONVERSION ERROR"
         }
     };
 }));

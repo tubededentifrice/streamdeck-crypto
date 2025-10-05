@@ -11,7 +11,8 @@ const defaultConfig = {
         "loading": "LOADING...",
         "stale": "STALE",
         "noData": "NO DATA",
-        "misconfigured": "CHECK PAIR"
+        "misconfigured": "INVALID PAIR",
+        "conversionError": "CONVERSION ERROR"
     }
 };
 
@@ -397,7 +398,7 @@ const tickerAction = {
                 return cacheEntry.rate;
             }
 
-            return 1;
+            throw err;
         }
     },
 
@@ -417,12 +418,44 @@ const tickerAction = {
             return tickerValues;
         }
 
-        const rate = await this.getConversionRate(currencies.from, currencies.to);
+        let rate = null;
+        try {
+            rate = await this.getConversionRate(currencies.from, currencies.to);
+        } catch (err) {
+            this.log("Conversion rate error", err);
+            return this.createConversionErrorValues(tickerValues);
+        }
+
         if (!rate || !isFinite(rate) || rate <= 0) {
-            return tickerValues;
+            return this.createConversionErrorValues(tickerValues);
         }
 
         return this.applyTickerConversion(tickerValues, rate, currencies.from, currencies.to);
+    },
+
+    createConversionErrorValues: function (tickerValues) {
+        const errorValues = Object.assign({}, tickerValues);
+        const numericKeys = [
+            "last",
+            "high",
+            "low",
+            "open",
+            "close",
+            "changeDaily",
+            "changeDailyPercent",
+            "volume"
+        ];
+
+        for (let i = 0; i < numericKeys.length; i++) {
+            const key = numericKeys[i];
+            if (Object.prototype.hasOwnProperty.call(errorValues, key)) {
+                delete errorValues[key];
+            }
+        }
+
+        errorValues.conversionRate = null;
+        errorValues.conversionError = true;
+        return errorValues;
     },
 
     applyTickerConversion: function (tickerValues, rate, fromCurrency, toCurrency) {
@@ -633,6 +666,26 @@ const tickerAction = {
             && (!Number.isFinite(sanitizedValues.volume) || sanitizedValues.volume === 0)
             && sanitizedResult.timestamp === null;
         const treatAsMisconfigured = sanitizedResult.hasCritical && (!isConnectionLiveLike || isBroken) && looksLikeEmptyTicker;
+        const hasConversionError = !!sanitizedValues.conversionError;
+
+        if (hasConversionError) {
+            dataState = "missing";
+            renderValues = Object.assign({}, sanitizedValues);
+            const fallbackPair = settings["title"] || sanitizedValues["pairDisplay"] || sanitizedValues["pair"] || settings["pair"] || "";
+            if (!renderValues.pairDisplay && fallbackPair) {
+                renderValues.pairDisplay = fallbackPair;
+            }
+            infoMessage = messageConfig.conversionError || "CONVERSION ERROR";
+            degradedReason = "conversion_error";
+
+            return {
+                values: renderValues,
+                dataState: dataState,
+                infoMessage: infoMessage,
+                lastValidTimestamp: lastValidTimestamp,
+                degradedReason: degradedReason
+            };
+        }
 
         if (sanitizedResult.hasCritical && !isBroken && !treatAsMisconfigured) {
             const recordedAt = sanitizedResult.timestamp || now;
@@ -900,9 +953,13 @@ const tickerAction = {
 
         let candlesForDisplay = preparedCandles;
         if (currencies.to) {
-            const rate = await this.getConversionRate(currencies.from, currencies.to);
-            if (rate && isFinite(rate) && rate > 0) {
-                candlesForDisplay = this.applyCandlesConversion(preparedCandles, rate);
+            try {
+                const rate = await this.getConversionRate(currencies.from, currencies.to);
+                if (rate && isFinite(rate) && rate > 0) {
+                    candlesForDisplay = this.applyCandlesConversion(preparedCandles, rate);
+                }
+            } catch (err) {
+                this.log("Conversion rate error for candles", err);
             }
         }
 

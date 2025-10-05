@@ -4,47 +4,6 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ---
 
-## 1. CRITICAL SECURITY & STABILITY
-
-### 1.9 Fix Currency Conversion Fallback Behavior
-
-**Why?**
-- **Current behavior**: When currency conversion fails, code defaults to rate = 1.0 (ticker.js:422)
-- **Problem**: If EUR→USD conversion fails, displays EUR prices as if they were USD
-- **User impact**: Misleading prices with no error indication
-
-**Example:**
-- User requests EUR display for BTC/USD
-- Conversion API fails
-- BTC shows as €60,000 when it should be ~€54,000 (1.0 fallback applied)
-- User has no idea conversion failed
-
-**What needs to be changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:415-423`
-- **Implementation options**:
-  1. Show error state/indicator when conversion unavailable
-  2. Clearly label as original currency (e.g., "USD") when conversion fails
-  3. Add "CONVERSION ERROR" text on button
-  4. Use connection state icon to show BROKEN state
-  5. Call `tickerAction.displayMessage()` to render a clear, single-message fallback on the key surface
-
-**Current code:**
-```javascript
-} catch (err) {
-    if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0) {
-        return cacheEntry.rate;  // Use cached rate
-    }
-    return 1;  // ⚠️ Silent 1:1 fallback
-}
-```
-
-**Risks & Considerations**:
-- **Error visibility**: Must be obvious to user without being intrusive
-- **Cached rates**: Current code uses cached rate first (good), only 1.0 as last resort
-- **Button space**: Limited room for error messages on small buttons
-
----
-
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
 
 ### 2.4 Expand Test Coverage
@@ -73,9 +32,8 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Effort**: Significant time investment to write comprehensive tests
 - **Mocking**: Need to mock WebSocket, fetch, StreamDeck SDK, canvas
 - **Test infrastructure**: May need to add testing utilities and helpers
-- **CI/CD**: Tests should run automatically on every commit
-- **Maintenance**: Tests need updates when code changes
-
+- **CI/CD**: Agents should run tests after performing changes -- to be remembered in AGENTS.md
+- **Maintenance**: Tests need updates when code changes -- to be remembered in AGENTS.md
 
 ---
 

@@ -223,4 +223,34 @@ describe("ticker data fallbacks", () => {
         expect(result.infoMessage).toBe(messageConfig.misconfigured || messageConfig.noData);
         expect(result.values.pairDisplay).toBe("DOGE/MOON");
     });
+
+    test("convertTickerValues flags conversion errors when rate fetch fails", async () => {
+        const originalGetConversionRate = ticker.getConversionRate;
+        ticker.getConversionRate = jest.fn().mockRejectedValue(new Error("network down"));
+
+        try {
+            const result = await ticker.convertTickerValues({
+                pair: "BTC/USD",
+                pairDisplay: "BTC/USD",
+                last: 60000
+            }, "USD", "EUR");
+
+            expect(result.conversionError).toBe(true);
+            expect(result.last).toBeUndefined();
+        } finally {
+            ticker.getConversionRate = originalGetConversionRate;
+        }
+    });
+
+    test("buildTickerRenderContext shows conversion error message", () => {
+        const settings = { pair: "BTC/USD" };
+
+        const result = ticker.buildTickerRenderContext("conversionError", settings, {
+            pair: "BTC/USD",
+            conversionError: true
+        }, null);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe(messageConfig.conversionError || "CONVERSION ERROR");
+    });
 });
