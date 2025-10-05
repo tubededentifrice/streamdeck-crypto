@@ -1,5 +1,7 @@
 const ticker = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js");
 const defaultSettingsModule = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js");
+const tickerState = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticker-state.js");
+const connectionStates = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/providers/connection-states.js");
 
 test("subscription key builds with conversion", () => {
     const key = ticker.getSubscriptionContextKey("BITFINEX", "BTCUSD", "USD", "EUR");
@@ -124,4 +126,82 @@ test("default settings validation normalizes values", () => {
     expect(normalized.displayHighLow).toBe("off");
     expect(normalized.digits).toBe(7);
     expect(normalized.mode).toBe("ticker");
+});
+
+describe("ticker data fallbacks", () => {
+    beforeEach(() => {
+        tickerState.resetAllState();
+        jest.restoreAllMocks();
+    });
+
+    afterEach(() => {
+        tickerState.resetAllState();
+        jest.restoreAllMocks();
+    });
+
+    test("sanitizeTickerValues normalizes numeric and timestamp fields", () => {
+        const source = {
+            last: "123.45",
+            high: "130",
+            low: "",
+            changeDailyPercent: "0.123",
+            lastUpdated: 1700000000
+        };
+
+        const result = ticker.sanitizeTickerValues(source);
+
+        expect(result.hasCritical).toBe(true);
+        expect(result.values.last).toBeCloseTo(123.45);
+        expect(result.values.high).toBeCloseTo(130);
+        expect(result.values.low).toBeUndefined();
+        expect(result.values.changeDailyPercent).toBeCloseTo(0.123);
+        expect(result.timestamp).toBe(1700000000 * 1000);
+        expect(result.values.lastUpdated).toBe(1700000000 * 1000);
+    });
+
+    test("buildTickerRenderContext caches last good values and returns stale when data disappears", () => {
+        const settings = { pair: "BTC/USD" };
+        const lastUpdatedSeconds = 1700000000;
+
+        const live = ticker.buildTickerRenderContext("ctx", settings, {
+            pairDisplay: "BTC/USD",
+            last: 27123.45,
+            high: 28000,
+            low: 26000,
+            changeDailyPercent: 0.012,
+            lastUpdated: lastUpdatedSeconds
+        }, null);
+
+        expect(live.dataState).toBe("live");
+        expect(live.lastValidTimestamp).toBe(lastUpdatedSeconds * 1000);
+
+        const cached = tickerState.getLastGoodTicker("ctx");
+        expect(cached).not.toBeNull();
+        expect(cached.values.last).toBeCloseTo(27123.45);
+
+        const fallback = ticker.buildTickerRenderContext("ctx", settings, null, null);
+        expect(fallback.dataState).toBe("stale");
+        expect(fallback.infoMessage).toBe("STALE");
+        expect(fallback.values.last).toBeCloseTo(27123.45);
+        expect(fallback.lastValidTimestamp).toBe(lastUpdatedSeconds * 1000);
+    });
+
+    test("buildTickerRenderContext reports loading when no data has ever arrived", () => {
+        const settings = { pair: "ETH/USD", title: "ETH" };
+
+        const result = ticker.buildTickerRenderContext("empty", settings, {}, null);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe("LOADING...");
+        expect(result.values.pairDisplay).toBe("ETH");
+    });
+
+    test("buildTickerRenderContext reports no data when connection is broken", () => {
+        const settings = { pair: "BTC/USD" };
+
+        const result = ticker.buildTickerRenderContext("broken", settings, {}, connectionStates.BROKEN);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe("NO DATA");
+    });
 });

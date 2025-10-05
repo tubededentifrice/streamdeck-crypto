@@ -12,6 +12,7 @@
     const contextConnectionStates = {};
     const conversionRatesCache = {};
     const candlesCache = {};
+    const lastGoodTickerValues = {};
 
     function setContextDetails(context, settings) {
         contextDetails[context] = {
@@ -32,6 +33,7 @@
 
     function clearContextDetails(context) {
         delete contextDetails[context];
+        delete lastGoodTickerValues[context];
     }
 
     function setSubscription(context, subscription) {
@@ -67,6 +69,7 @@
             return;
         }
         delete contextConnectionStates[context];
+        delete lastGoodTickerValues[context];
     }
 
     function getOrCreateConversionRateEntry(key) {
@@ -112,6 +115,37 @@
         Object.keys(candlesCache).forEach(function (key) {
             delete candlesCache[key];
         });
+        Object.keys(lastGoodTickerValues).forEach(function (key) {
+            delete lastGoodTickerValues[key];
+        });
+    }
+
+    function setLastGoodTicker(context, values, timestamp) {
+        if (!context || !values) {
+            return;
+        }
+
+        const safeTimestamp = typeof timestamp === "number" ? timestamp : Date.now();
+        lastGoodTickerValues[context] = {
+            values: Object.assign({}, values),
+            timestamp: safeTimestamp
+        };
+    }
+
+    function getLastGoodTicker(context) {
+        if (!context) {
+            return null;
+        }
+
+        return lastGoodTickerValues[context] || null;
+    }
+
+    function clearLastGoodTicker(context) {
+        if (!context) {
+            return;
+        }
+
+        delete lastGoodTickerValues[context];
     }
 
     return {
@@ -129,6 +163,9 @@
         setConversionRateEntry,
         getCandlesCacheEntry,
         setCandlesCacheEntry,
-        resetAllState
+        resetAllState,
+        setLastGoodTicker,
+        getLastGoodTicker,
+        clearLastGoodTicker
     };
 }));

@@ -512,6 +512,142 @@ const tickerAction = {
                 break;
         }
     },
+    sanitizeTickerValues: function (values) {
+        if (!values || typeof values !== "object") {
+            return {
+                values: {},
+                hasAny: false,
+                hasCritical: false,
+                timestamp: null
+            };
+        }
+
+        const sanitized = Object.assign({}, values);
+
+        function parseNumeric(value, fallback, roundInteger) {
+            if (typeof value === "number" && Number.isFinite(value)) {
+                return roundInteger ? Math.round(value) : value;
+            }
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                if (trimmed) {
+                    const parsed = roundInteger ? parseInt(trimmed, 10) : parseFloat(trimmed);
+                    if (!isNaN(parsed) && Number.isFinite(parsed)) {
+                        return roundInteger ? Math.round(parsed) : parsed;
+                    }
+                }
+            }
+            return fallback;
+        }
+
+        const last = parseNumeric(values.last, null, false);
+        if (last === null) {
+            delete sanitized.last;
+        } else {
+            sanitized.last = last;
+        }
+
+        const numericDefaults = {
+            high: null,
+            low: null,
+            volume: 0,
+            changeDaily: 0,
+            changeDailyPercent: 0
+        };
+
+        Object.keys(numericDefaults).forEach((key) => {
+            const fallback = numericDefaults[key];
+            const parsed = parseNumeric(values[key], fallback, false);
+            if (parsed === null || parsed === undefined || !Number.isFinite(parsed)) {
+                delete sanitized[key];
+            } else if (parsed === fallback && values[key] === undefined) {
+                if (fallback === null) {
+                    delete sanitized[key];
+                } else {
+                    sanitized[key] = fallback;
+                }
+            } else {
+                sanitized[key] = parsed;
+            }
+        });
+
+        const timestampCandidateKeys = ["lastUpdated", "timestamp", "time", "updatedAt"];
+        let timestamp = null;
+        for (let i = 0; i < timestampCandidateKeys.length; i++) {
+            const key = timestampCandidateKeys[i];
+            if (!Object.prototype.hasOwnProperty.call(values, key)) {
+                continue;
+            }
+            const parsed = parseNumeric(values[key], null, true);
+            if (parsed !== null && parsed !== undefined) {
+                const normalizedTimestamp = parsed > 9999999999 ? parsed : parsed * 1000;
+                timestamp = normalizedTimestamp;
+                sanitized.lastUpdated = normalizedTimestamp;
+                break;
+            }
+        }
+
+        // Ensure we do not keep NaN/undefined strings for textual fields
+        if (typeof sanitized.pairDisplay !== "string") {
+            delete sanitized.pairDisplay;
+        }
+
+        return {
+            values: sanitized,
+            hasAny: Object.keys(values).length > 0,
+            hasCritical: last !== null,
+            timestamp: timestamp
+        };
+    },
+    buildTickerRenderContext: function (context, settings, rawValues, connectionState) {
+        const sanitizedResult = this.sanitizeTickerValues(rawValues);
+        const sanitizedValues = sanitizedResult.values;
+        const now = Date.now();
+        let dataState = "missing";
+        let infoMessage = null;
+        let lastValidTimestamp = null;
+        let renderValues = sanitizedValues;
+        let degradedReason = null;
+
+        if (sanitizedResult.hasCritical) {
+            const recordedAt = sanitizedResult.timestamp || now;
+            sanitizedValues.lastUpdated = recordedAt;
+            tickerState.setLastGoodTicker(context, sanitizedValues, recordedAt);
+            lastValidTimestamp = recordedAt;
+            dataState = "live";
+            renderValues = Object.assign({}, sanitizedValues);
+        } else {
+            const cached = tickerState.getLastGoodTicker(context);
+            if (cached && cached.values && typeof cached.values === "object" && Number.isFinite(cached.values.last)) {
+                dataState = "stale";
+                renderValues = Object.assign({}, cached.values);
+                lastValidTimestamp = cached.timestamp;
+                if (!renderValues.lastUpdated) {
+                    renderValues.lastUpdated = cached.timestamp;
+                }
+                infoMessage = "STALE";
+                degradedReason = sanitizedResult.hasAny ? "partial" : "missing";
+            } else {
+                dataState = "missing";
+                degradedReason = sanitizedResult.hasAny ? "partial" : "none";
+                renderValues = Object.assign({}, sanitizedValues);
+                const fallbackPair = settings["title"] || sanitizedValues["pairDisplay"] || sanitizedValues["pair"] || settings["pair"] || "";
+                if (!renderValues.pairDisplay && fallbackPair) {
+                    renderValues.pairDisplay = fallbackPair;
+                }
+                const broken = connectionState === connectionStates.BROKEN;
+                infoMessage = broken ? "NO DATA" : "LOADING...";
+            }
+        }
+
+        return {
+            values: renderValues,
+            dataState: dataState,
+            infoMessage: infoMessage,
+            lastValidTimestamp: lastValidTimestamp,
+            degradedReason: degradedReason
+        };
+    },
     displayMessage: function (context, message, options) {
         this.initCanvas();
 
@@ -552,14 +688,20 @@ const tickerAction = {
     updateCanvasTicker: function (context, settings, values, connectionState) {
         this.log("updateCanvasTicker", context, settings, values);
 
+        const renderContext = this.buildTickerRenderContext(context, settings, values, connectionState);
+
         canvasRenderer.renderTickerCanvas({
             canvas: canvas,
             canvasContext: canvasContext,
             settings: settings,
-            values: values,
+            values: renderContext.values,
             context: context,
             connectionStates: connectionStates,
-            connectionState: connectionState || (values && values.connectionState) || null
+            connectionState: connectionState || (values && values.connectionState) || null,
+            dataState: renderContext.dataState,
+            infoMessage: renderContext.infoMessage,
+            lastValidTimestamp: renderContext.lastValidTimestamp,
+            degradedReason: renderContext.degradedReason
         });
 
         this.sendCanvas(context);
