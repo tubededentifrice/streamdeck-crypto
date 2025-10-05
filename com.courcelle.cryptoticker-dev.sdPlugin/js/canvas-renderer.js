@@ -505,13 +505,21 @@
         if (!shouldDisplayDetails) {
             const messageText = infoMessage ? infoMessage.toUpperCase() : "NO DATA";
             const messageFontSizePx = Math.max(26, baseFontSize) * sizeMultiplier;
-            canvasContext.font = "bold " + messageFontSizePx + "px " + font;
+            const messageFont = "bold " + messageFontSizePx + "px " + font;
+            canvasContext.font = messageFont;
             canvasContext.fillStyle = degradedColor || textColor;
             const previousAlign = canvasContext.textAlign;
             const previousBaseline = canvasContext.textBaseline;
             canvasContext.textAlign = "center";
             canvasContext.textBaseline = "middle";
-            canvasContext.fillText(messageText, canvasWidth / 2, canvasHeight / 2);
+            const maxWidth = canvasWidth - (textPadding * 2);
+            const messageLines = splitMessageIntoLines(canvasContext, messageText, maxWidth, messageFont);
+            const lineHeight = messageFontSizePx * 1.1;
+            const totalHeight = lineHeight * messageLines.length;
+            let startY = (canvasHeight - totalHeight) / 2 + (lineHeight / 2);
+            for (let i = 0; i < messageLines.length; i++) {
+                canvasContext.fillText(messageLines[i], canvasWidth / 2, startY + (i * lineHeight));
+            }
             canvasContext.textAlign = previousAlign;
             canvasContext.textBaseline = previousBaseline;
             canvasContext.font = baseFont;

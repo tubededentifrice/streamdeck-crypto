@@ -6,7 +6,13 @@
 const defaultConfig = {
     "tProxyBase": "https://tproxyv8.opendle.com",
     "fallbackPollIntervalMs": 60000,
-    "staleTickerTimeoutMs": 6 * 60 * 1000
+    "staleTickerTimeoutMs": 6 * 60 * 1000,
+    "messages": {
+        "loading": "LOADING...",
+        "stale": "STALE",
+        "noData": "NO DATA",
+        "misconfigured": "CHECK PAIR"
+    }
 };
 
 function requireOrNull(modulePath) {
@@ -49,6 +55,8 @@ const moduleConfig = requireOrNull("./config");
 const globalConfig = resolveGlobalConfig();
 const runtimeConfig = Object.assign({}, defaultConfig, moduleConfig || {}, globalConfig || {});
 const tProxyBase = runtimeConfig.tProxyBase;
+const DEFAULT_MESSAGE_CONFIG = defaultConfig.messages;
+const messageConfig = Object.assign({}, DEFAULT_MESSAGE_CONFIG, (runtimeConfig && runtimeConfig.messages) || {});
 
 const subscriptionKeyModule = requireOrNull("./providers/subscription-key");
 const globalProviders = typeof CryptoTickerProviders !== "undefined" ? CryptoTickerProviders : null;
@@ -609,35 +617,61 @@ const tickerAction = {
         let renderValues = sanitizedValues;
         let degradedReason = null;
 
-        if (sanitizedResult.hasCritical) {
+        const effectiveConnectionState = connectionState || sanitizedValues.connectionState || null;
+        const cached = tickerState.getLastGoodTicker(context);
+        const isBroken = effectiveConnectionState === connectionStates.BROKEN;
+        const liveLikeStates = [connectionStates.LIVE, connectionStates.BACKUP, connectionStates.DETACHED];
+        const isConnectionLiveLike = liveLikeStates.indexOf(effectiveConnectionState) !== -1;
+        const looksLikeEmptyTicker = sanitizedResult.hasCritical
+            && Number.isFinite(sanitizedValues.last)
+            && sanitizedValues.last === 0
+            && (!Number.isFinite(sanitizedValues.high) || sanitizedValues.high === 0)
+            && (!Number.isFinite(sanitizedValues.low) || sanitizedValues.low === 0)
+            && (!Number.isFinite(sanitizedValues.volume) || sanitizedValues.volume === 0)
+            && sanitizedResult.timestamp === null;
+        const treatAsMisconfigured = sanitizedResult.hasCritical && (!isConnectionLiveLike || isBroken) && looksLikeEmptyTicker;
+
+        if (sanitizedResult.hasCritical && !isBroken && !treatAsMisconfigured) {
             const recordedAt = sanitizedResult.timestamp || now;
             sanitizedValues.lastUpdated = recordedAt;
             tickerState.setLastGoodTicker(context, sanitizedValues, recordedAt);
             lastValidTimestamp = recordedAt;
             dataState = "live";
             renderValues = Object.assign({}, sanitizedValues);
-        } else {
-            const cached = tickerState.getLastGoodTicker(context);
-            if (cached && cached.values && typeof cached.values === "object" && Number.isFinite(cached.values.last)) {
-                dataState = "stale";
-                renderValues = Object.assign({}, cached.values);
-                lastValidTimestamp = cached.timestamp;
-                if (!renderValues.lastUpdated) {
-                    renderValues.lastUpdated = cached.timestamp;
-                }
-                infoMessage = "STALE";
-                degradedReason = sanitizedResult.hasAny ? "partial" : "missing";
-            } else {
-                dataState = "missing";
-                degradedReason = sanitizedResult.hasAny ? "partial" : "none";
-                renderValues = Object.assign({}, sanitizedValues);
-                const fallbackPair = settings["title"] || sanitizedValues["pairDisplay"] || sanitizedValues["pair"] || settings["pair"] || "";
-                if (!renderValues.pairDisplay && fallbackPair) {
-                    renderValues.pairDisplay = fallbackPair;
-                }
-                const broken = connectionState === connectionStates.BROKEN;
-                infoMessage = broken ? "NO DATA" : "LOADING...";
+        } else if (cached && cached.values && typeof cached.values === "object" && Number.isFinite(cached.values.last)) {
+            dataState = "stale";
+            renderValues = Object.assign({}, cached.values);
+            lastValidTimestamp = cached.timestamp;
+            if (!renderValues.lastUpdated) {
+                renderValues.lastUpdated = cached.timestamp;
             }
+            infoMessage = messageConfig.stale;
+            degradedReason = sanitizedResult.hasAny ? "partial" : "missing";
+        } else {
+            dataState = "missing";
+            renderValues = Object.assign({}, sanitizedValues);
+            const fallbackPair = settings["title"] || sanitizedValues["pairDisplay"] || sanitizedValues["pair"] || settings["pair"] || "";
+            if (!renderValues.pairDisplay && fallbackPair) {
+                renderValues.pairDisplay = fallbackPair;
+            }
+
+            if (treatAsMisconfigured || isBroken) {
+                infoMessage = messageConfig.misconfigured || messageConfig.noData;
+                degradedReason = "misconfigured";
+            } else {
+                infoMessage = messageConfig.loading;
+                degradedReason = sanitizedResult.hasAny ? "partial" : "none";
+            }
+        }
+
+        if (!infoMessage && dataState === "missing") {
+            infoMessage = isBroken ? (messageConfig.misconfigured || messageConfig.noData) : messageConfig.loading;
+        }
+        if (!infoMessage && dataState === "live" && isBroken) {
+            infoMessage = messageConfig.misconfigured || messageConfig.noData;
+        }
+        if (!infoMessage && dataState === "stale" && !messageConfig.stale) {
+            infoMessage = "STALE";
         }
 
         return {

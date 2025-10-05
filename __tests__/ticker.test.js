@@ -2,6 +2,8 @@ const ticker = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js"
 const defaultSettingsModule = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js");
 const tickerState = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticker-state.js");
 const connectionStates = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/providers/connection-states.js");
+const runtimeConfig = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/config.js");
+const messageConfig = runtimeConfig.messages || {};
 
 test("subscription key builds with conversion", () => {
     const key = ticker.getSubscriptionContextKey("BITFINEX", "BTCUSD", "USD", "EUR");
@@ -181,7 +183,7 @@ describe("ticker data fallbacks", () => {
 
         const fallback = ticker.buildTickerRenderContext("ctx", settings, null, null);
         expect(fallback.dataState).toBe("stale");
-        expect(fallback.infoMessage).toBe("STALE");
+        expect(fallback.infoMessage).toBe(messageConfig.stale);
         expect(fallback.values.last).toBeCloseTo(27123.45);
         expect(fallback.lastValidTimestamp).toBe(lastUpdatedSeconds * 1000);
     });
@@ -192,7 +194,7 @@ describe("ticker data fallbacks", () => {
         const result = ticker.buildTickerRenderContext("empty", settings, {}, null);
 
         expect(result.dataState).toBe("missing");
-        expect(result.infoMessage).toBe("LOADING...");
+        expect(result.infoMessage).toBe(messageConfig.loading);
         expect(result.values.pairDisplay).toBe("ETH");
     });
 
@@ -202,6 +204,23 @@ describe("ticker data fallbacks", () => {
         const result = ticker.buildTickerRenderContext("broken", settings, {}, connectionStates.BROKEN);
 
         expect(result.dataState).toBe("missing");
-        expect(result.infoMessage).toBe("NO DATA");
+        expect(result.infoMessage).toBe(messageConfig.misconfigured || messageConfig.noData);
+    });
+
+    test("buildTickerRenderContext flags misconfigured pairs returning zero data", () => {
+        const settings = { pair: "DOGE/MOON" };
+
+        const result = ticker.buildTickerRenderContext("misconfigured", settings, {
+            pair: "DOGE/MOON",
+            pairDisplay: "DOGE/MOON",
+            last: 0,
+            high: 0,
+            low: 0,
+            volume: 0
+        }, connectionStates.BROKEN);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe(messageConfig.misconfigured || messageConfig.noData);
+        expect(result.values.pairDisplay).toBe("DOGE/MOON");
     });
 });
