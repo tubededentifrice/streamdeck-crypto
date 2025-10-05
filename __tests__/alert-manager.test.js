@@ -3,9 +3,13 @@ const alertManager = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/aler
 describe("alert-manager", () => {
     const context = "ctx";
 
-    afterEach(() => {
+    beforeEach(() => {
         alertManager.clearContext(context);
         alertManager.armAlert(context);
+    });
+
+    afterEach(() => {
+        alertManager.clearContext(context);
     });
 
     test("evaluateAlert swaps colors when armed and rule matches", () => {
@@ -51,5 +55,35 @@ describe("alert-manager", () => {
         } finally {
             consoleErrorSpy.mockRestore();
         }
+    });
+
+    test("disarmAlert toggles alert state after a trigger", () => {
+        alertManager.evaluateAlert({
+            context,
+            settings: { alertRule: "value > 1" },
+            values: { last: 5 },
+            backgroundColor: "#111",
+            textColor: "#eee"
+        });
+
+        expect(alertManager.shouldDisarmOnKeyPress(context)).toBe(true);
+        alertManager.disarmAlert(context);
+        expect(alertManager.shouldDisarmOnKeyPress(context)).toBe(false);
+        expect(alertManager.isAlertArmed(context)).toBe(false);
+    });
+
+    test("evaluateAlert arms context for future triggers when rule false", () => {
+        alertManager.disarmAlert(context);
+        const result = alertManager.evaluateAlert({
+            context,
+            settings: { alertRule: "value > 999" },
+            values: { last: 10 },
+            backgroundColor: "#123",
+            textColor: "#456"
+        });
+
+        expect(result.alertMode).toBe(false);
+        expect(alertManager.isAlertArmed(context)).toBe(true);
+        expect(alertManager.getAlertStatus(context)).toBe("off");
     });
 });

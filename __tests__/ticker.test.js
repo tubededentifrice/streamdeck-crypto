@@ -116,6 +116,91 @@ test("getConversionRate caches results for an hour", async () => {
     }
 });
 
+test("getConversionRate coalesces concurrent requests", async () => {
+    tickerState.resetAllState();
+    const originalFetch = global.fetch;
+    const fetchSpy = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({ rate: 1.5 })
+    }));
+    global.fetch = fetchSpy;
+
+    try {
+        const [rateA, rateB] = await Promise.all([
+            ticker.getConversionRate("USD", "JPY"),
+            ticker.getConversionRate("usd", "jpy")
+        ]);
+
+        expect(rateA).toBeCloseTo(1.5);
+        expect(rateB).toBeCloseTo(1.5);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
+test("getConversionRate refreshes after cache expiry", async () => {
+    tickerState.resetAllState();
+    const originalFetch = global.fetch;
+    const responses = [{ rate: 2.0 }, { rate: 3.0 }];
+    global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => responses.shift() || { rate: 3.0 }
+    }));
+
+    try {
+        const first = await ticker.getConversionRate("USD", "JPY");
+        expect(first).toBeCloseTo(2.0);
+
+        const cacheEntry = tickerState.getOrCreateConversionRateEntry("USD_JPY");
+        cacheEntry.fetchedAt = Date.now() - (61 * 60 * 1000);
+
+        const second = await ticker.getConversionRate("USD", "JPY");
+        expect(second).toBeCloseTo(3.0);
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
+test("resolveConversionCurrencies defaults and avoids redundant conversions", () => {
+    const same = ticker.resolveConversionCurrencies("usd", "USD");
+    expect(same.to).toBeNull();
+    expect(same.from).toBe("USD");
+
+    const toOnly = ticker.resolveConversionCurrencies(null, "eur");
+    expect(toOnly.from).toBe("USD");
+    expect(toOnly.to).toBe("EUR");
+});
+
+test("applyCandlesConversion scales price and volume fields", () => {
+    const source = [
+        { open: 1, close: 2, high: 3, low: 0.5, volumeQuote: 10 }
+    ];
+
+    const converted = ticker.applyCandlesConversion(source, 2);
+
+    expect(converted[0].open).toBeCloseTo(2);
+    expect(converted[0].close).toBeCloseTo(4);
+    expect(converted[0].high).toBeCloseTo(6);
+    expect(converted[0].low).toBeCloseTo(1);
+    expect(converted[0].volumeQuote).toBeCloseTo(20);
+    expect(source[0].open).toBe(1);
+});
+
+test("createConversionErrorValues removes numeric fields", () => {
+    const result = ticker.createConversionErrorValues({
+        last: 100,
+        volume: 10,
+        pair: "BTC/USD"
+    });
+
+    expect(result.last).toBeUndefined();
+    expect(result.volume).toBeUndefined();
+    expect(result.conversionError).toBe(true);
+    expect(result.pair).toBe("BTC/USD");
+});
+
 test("default settings validation normalizes values", () => {
     const normalized = defaultSettingsModule.applyDefaults({
         exchange: "bitfinex",

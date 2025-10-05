@@ -6,37 +6,6 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
 
-### 2.4 Expand Test Coverage
-
-**What needs to be changed?**
-- **File**: `__tests__/ticker.test.js` (expand significantly)
-- **New test files to create**:
-  1. `__tests__/canvas-renderer.test.js`: Test canvas drawing functions
-  2. `__tests__/providers/binance-provider.test.js`: Test Binance WebSocket handling
-  3. `__tests__/providers/bitfinex-provider.test.js`: Test Bitfinex WebSocket handling
-  4. `__tests__/providers/provider-registry.test.js`: Test failover logic
-  5. `__tests__/subscription-manager.test.js`: Test cache expiration
-  6. `__tests__/pi-helpers.test.js`: Test property inspector utilities
-  7. `__tests__/formatters.test.js`: Test price/number formatting
-  8. Others as you deem appropriate
-- **Coverage areas**:
-  - WebSocket reconnection logic
-  - Provider failover when primary fails
-  - Conversion rate caching and expiration
-  - Alert rule evaluation (post-eval replacement)
-  - Canvas rendering with various settings combinations
-  - Settings validation and defaults
-- **Target**: >80% code coverage
-
-**Risks & Considerations**:
-- **Effort**: Significant time investment to write comprehensive tests
-- **Mocking**: Need to mock WebSocket, fetch, StreamDeck SDK, canvas
-- **Test infrastructure**: May need to add testing utilities and helpers
-- **CI/CD**: Agents should run tests after performing changes -- to be remembered in AGENTS.md
-- **Maintenance**: Tests need updates when code changes -- to be remembered in AGENTS.md
-
----
-
 ### 2.5 Implement Exponential Backoff for Reconnections
 
 **Priority:** 🟡 Medium (prevents API hammering)
@@ -100,33 +69,32 @@ const attemptDelay = Math.min(
 
 ## 5. ERROR HANDLING & USER FEEDBACK
 
-### 5.1 Graceful Network Error Handling in Property Inspector
+            ### 5.1 Graceful Network Error Handling in Property Inspector
 
-**Why?**
-- **User experience**: Failures when fetching provider lists/pairs result in empty dropdowns with no feedback
-- **Debugging**: Users don't know if issue is network, proxy, or API rate limiting
-- **Reliability**: Slow networks or temporary outages make plugin appear broken
+            **Why?**
+            - **User experience**: Failures when fetching provider lists/pairs result in empty dropdowns with no feedback
+            - **Debugging**: Users don't know if issue is network, proxy, or API rate limiting
+            - **Reliability**: Slow networks or temporary outages make plugin appear broken
 
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Lines 265-338: Provider/pair/currency fetching functions
-- **Implementation**:
-  1. Wrap all `fetch()` calls in try-catch with timeout (e.g., 10 seconds)
-  2. Add retry logic with exponential backoff (3 attempts)
-  3. Show loading spinner while fetching data
-  4. Display user-friendly error messages in UI:
-     - "Loading pairs..." → "Failed to load pairs. Retrying..."
-     - "Network error. Please check connection and try again."
-  5. Add "Retry" button for manual retry
-  6. Cache last successful fetch to show stale data with warning
-  7. Log detailed errors to console for support/debugging
+            **What needs to be changed?**
+            - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
+              - Lines 265-338: Provider/pair/currency fetching functions
+            - **Implementation**:
+              1. Wrap all `fetch()` calls in try-catch with timeout (e.g., 10 seconds)
+              2. Add retry logic with exponential backoff (3 attempts)
+              3. Show loading spinner while fetching data
+              4. Display user-friendly error messages in UI:
+                - "Loading pairs..." → "Failed to load pairs. Retrying..."
+                - "Network error. Please check connection and try again."
+              5. Add "Retry" button for manual retry
+              6. Cache last successful fetch to show stale data with warning
+              7. Log detailed errors to console for support/debugging
 
-**Risks & Considerations**:
-- **UX design**: Need to design error message UI in property inspector
-- **Timeout tuning**: Balance between patience and responsiveness
-- **Retry logic**: Avoid hammering APIs with rapid retries (respect rate limits)
-- **Testing**: Mock network failures and slow responses
-- **Internationalization**: Error messages should be localizable
+            **Risks & Considerations**:
+            - **UX design**: Need to design error message UI in property inspector
+            - **Timeout tuning**: Balance between patience and responsiveness
+            - **Retry logic**: Avoid hammering APIs with rapid retries (respect rate limits)
+            - **Testing**: Mock network failures and slow responses
 
 ---
 
@@ -231,152 +199,145 @@ const attemptDelay = Math.min(
 
 ## 7. FEATURE ENHANCEMENTS
 
-### 7.1 Add TypeScript Support
+            ### 7.1 Add TypeScript Support
 
-**Why?**
-- **Type safety**: Catch type-related bugs at compile time
-- **IDE support**: Better autocomplete, refactoring, and navigation
-- **Documentation**: Types serve as inline documentation
-- **Maintainability**: Easier to understand code and refactor safely
+            **Why?**
+            - **Type safety**: Catch type-related bugs at compile time
+            - **IDE support**: Better autocomplete, refactoring, and navigation
+            - **Documentation**: Types serve as inline documentation
+            - **Maintainability**: Easier to understand code and refactor safely
 
-**What needs to be changed?**
-- **All `.js` files** in `com.courcelle.cryptoticker-dev.sdPlugin/js/`
-- **New files to create**:
-  - `tsconfig.json`: TypeScript configuration
-  - Type definition files for StreamDeck SDK (or use existing @types package)
-- **Implementation approach**:
-  1. Add TypeScript compiler and build tools to `package.json`
-  2. Start with `.d.ts` declaration files for existing code (no conversion yet)
-  3. Incrementally convert modules to TypeScript:
-     - Start with utility modules (formatters, helpers)
-     - Then providers (define provider interface)
-     - Finally main plugin files
-  4. Define key interfaces:
-     - `Settings`: Plugin settings structure
-     - `TickerData`: Ticker data from providers
-     - `CandleData`: Candle data structure
-     - `ProviderInterface`: Provider contract
-  5. Update build process to compile TypeScript to JavaScript
+            **What needs to be changed?**
+            - **All `.js` files** in `com.courcelle.cryptoticker-dev.sdPlugin/js/`
+            - **New files to create**:
+              - `tsconfig.json`: TypeScript configuration
+              - Type definition files for StreamDeck SDK (or use existing @types package)
+            - **Implementation approach**:
+              1. Add TypeScript compiler and build tools to `package.json`
+              2. Start with `.d.ts` declaration files for existing code (no conversion yet)
+              3. Incrementally convert modules to TypeScript:
+                - Start with utility modules (formatters, helpers)
+                - Then providers (define provider interface)
+                - Finally main plugin files
+              4. Define key interfaces:
+                - `Settings`: Plugin settings structure
+                - `TickerData`: Ticker data from providers
+                - `CandleData`: Candle data structure
+                - `ProviderInterface`: Provider contract
+              5. Update build process to compile TypeScript to JavaScript
 
-**Risks & Considerations**:
-- **Learning curve**: Team needs TypeScript knowledge
-- **Build complexity**: Adds compilation step to development workflow
-- **Migration effort**: Converting existing code is time-consuming
-- **Strictness**: Need to decide on strict mode settings (balance safety vs. effort)
-- **Dependencies**: Some libraries may lack type definitions
-- **Incremental approach**: Can use TypeScript's `allowJs` for gradual migration
+            **Risks & Considerations**:
+            - **Learning curve**: Team needs TypeScript knowledge
+            - **Build complexity**: Adds compilation step to development workflow
+            - **Migration effort**: Converting existing code is time-consuming
+            - **Strictness**: Need to decide on strict mode settings (balance safety vs. effort)
+            - **Dependencies**: Some libraries may lack type definitions
+            - **Incremental approach**: Can use TypeScript's `allowJs` for gradual migration
 
 ---
 
-### 7.2 Add Module Bundler
+            ### 7.2 Add Module Bundler
 
-**Why?**
-- **Plugin size**: Files loaded individually increase plugin size
-- **Load performance**: Many small files slower than one bundle
-- **Tree shaking**: Remove unused code to reduce size
-- **Optimization**: Minification and compression
-- **Development**: Enable modern JavaScript features and imports
+            **Why?**
+            - **Plugin size**: Files loaded individually increase plugin size
+            - **Load performance**: Many small files slower than one bundle
+            - **Tree shaking**: Remove unused code to reduce size
+            - **Optimization**: Minification and compression
+            - **Development**: Enable modern JavaScript features and imports
 
-**What needs to be changed?**
-- **New files to create**:
-  - `webpack.config.js` or `rollup.config.js` or `esbuild.config.js`
-  - Update `package.json` with build scripts
-- **Build outputs**:
-  - `plugin.bundle.js`: Main plugin code
-  - `pi.bundle.js`: Property inspector code
-  - `preview.bundle.js`: Preview server code
-- **HTML files to update**:
-  - `index.html`: Load plugin bundle
-  - `index_pi.html`: Load PI bundle
-  - `dev/preview.html`: Load preview bundle
-- **Implementation**:
-  1. Choose bundler (webpack = most features, rollup = smaller bundles, esbuild = fastest)
-  2. Configure entry points for each bundle
-  3. Set up development mode (source maps, watch mode)
-  4. Set up production mode (minification, tree shaking)
-  5. Update deployment process to use bundled files
+            **What needs to be changed?**
+            - **New files to create**:
+              - `webpack.config.js` or `rollup.config.js` or `esbuild.config.js`
+              - Update `package.json` with build scripts
+            - **Build outputs**:
+              - `plugin.bundle.js`: Main plugin code
+              - `pi.bundle.js`: Property inspector code
+              - `preview.bundle.js`: Preview server code
+            - **HTML files to update**:
+              - `index.html`: Load plugin bundle
+              - `index_pi.html`: Load PI bundle
+              - `dev/preview.html`: Load preview bundle
+            - **Implementation**:
+              1. Choose bundler (webpack = most features, rollup = smaller bundles, esbuild = fastest)
+              2. Configure entry points for each bundle
+              3. Set up development mode (source maps, watch mode)
+              4. Set up production mode (minification, tree shaking)
+              5. Update deployment process to use bundled files
 
-**Risks & Considerations**:
-- **Build complexity**: Adds significant complexity to build process
-- **Debugging**: Source maps needed to debug bundled code
-- **Development workflow**: Hot reload or watch mode needed for good DX
-- **Compatibility**: Ensure bundled code works in StreamDeck environment
-- **Dependencies**: Bundle size can grow with dependencies
-- **Testing**: Tests may need to run on source files, not bundles
+            **Risks & Considerations**:
+            - **Build complexity**: Adds significant complexity to build process
+            - **Debugging**: Source maps needed to debug bundled code
+            - **Development workflow**: Hot reload or watch mode needed for good DX
+            - **Compatibility**: Ensure bundled code works in StreamDeck environment
+            - **Dependencies**: Bundle size can grow with dependencies
+            - **Testing**: Tests may need to run on source files, not bundles
 
 ---
 
 ## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
 
-### 8.1 Document Connection States and Troubleshooting
+          ### 8.1 Document Connection States and Troubleshooting
 
-**Why?**
-- **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
-- **Support burden**: Repeated questions about connection issues
-- **Self-service**: Users should be able to diagnose and fix common issues
+          **Why?**
+          - **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
+          - **Support burden**: Repeated questions about connection issues
+          - **Self-service**: Users should be able to diagnose and fix common issues
 
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-  - Add help section or tooltips explaining states
-- **File**: `README.md` or create `TROUBLESHOOTING.md`
-  - Document connection state meanings
-  - Common issues and solutions
-  - Diagnostic steps
-- **Documentation content**:
-  - **LIVE**: Connected to primary provider with live data
-  - **BACKUP**: Primary provider failed, using backup/fallback provider
-  - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
-  - **BROKEN**: Connection failed and retries exhausted
-  - Add troubleshooting steps:
-    - Check internet connection
-    - Verify exchange is accessible (not blocked by firewall/VPN)
-    - Check if API is experiencing outages
-    - Try different provider
-    - Check plugin logs for detailed errors
+          **What needs to be changed?**
+          - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
+            - Add help section or tooltips explaining states
+          - **File**: `README.md`
+            - Document connection state meanings
+            - Common issues and solutions
+            - Diagnostic steps
+          - **Documentation content**:
+            - **LIVE**: Connected to primary provider with live data
+            - **BACKUP**: Primary provider failed, using backup/fallback provider
+            - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
+            - **BROKEN**: Connection failed and retries exhausted
+            - Add troubleshooting steps:
+              - Check internet connection
+              - Verify exchange is accessible (not blocked by firewall/VPN)
+              - Check if API is experiencing outages
+              - Try different provider
+              - Check plugin logs for detailed errors
 
-**Risks & Considerations**:
-- **Low risk**: Documentation-only change
-- **Maintenance**: Keep docs updated as states/behavior changes
-- **Localization**: Consider translating for non-English users
+          **Risks & Considerations**:
+          - **Low risk**: Documentation-only change
+          - **Maintenance**: Keep docs updated as states/behavior changes
 
 ---
 
-### 8.2 Improve Build and Release Process
+          ### 8.2 Improve Build and Release Process
 
-**Why?**
-- **Manual process**: Current rsync and copy commands are error-prone
-- **Version management**: Manual version bumping is easy to forget
-- **Changelog**: No automated changelog generation
-- **Consistency**: Manual process leads to inconsistent releases
+          **Why?**
+          - **Manual process**: Current rsync and copy commands are error-prone
+          - **Version management**: Manual version bumping is easy to forget
+          - **Changelog**: No automated changelog generation
+          - **Consistency**: Manual process leads to inconsistent releases
 
-**What needs to be changed?**
-- **New files to create**:
-  - `scripts/build.js`: Automated build script
-  - `scripts/release.js`: Automated release script
-  - `RELEASE_CHECKLIST.md`: Manual checklist for releases
-- **Package.json scripts**:
-  - `npm run build`: Build plugin for production
-  - `npm run release:patch`: Bump patch version and release
-  - `npm run release:minor`: Bump minor version and release
-  - `npm run release:major`: Bump major version and release
-- **Automation**:
-  1. Version bumping in `manifest.json` and `package.json`
-  2. Changelog generation from git commits (conventional commits)
-  3. Build and bundle for distribution
-  4. Create distribution `.streamDeckPlugin` file
-  5. Git tag and push
-  6. GitHub release creation (if applicable)
-- **CI/CD**:
-  - GitHub Actions or similar for automated testing
-  - Automated builds on every commit
-  - Automated releases on git tags
+          **What needs to be changed?**
+          - **New files to create**:
+            - `scripts/build.js`: Automated build script
+            - `scripts/release.js`: Automated release script
+            - `RELEASE_CHECKLIST.md`: Manual checklist for releases
+          - **Package.json scripts**:
+            - `npm run build`: Build plugin for production
+            - `npm run release:patch`: Bump patch version and release
+            - `npm run release:minor`: Bump minor version and release
+            - `npm run release:major`: Bump major version and release
+          - **Automation** (refer to README.md for the current build commands, as it needs to be done on a different plugin ID as the dev one -- make sure to update that file with the new commands once done):
+            1. Version bumping in `manifest.json` and `package.json`
+            2. Changelog generation from git commits (conventional commits)
+            3. Build and bundle for distribution
+            4. Create distribution `.streamDeckPlugin` file
 
-**Risks & Considerations**:
-- **Initial setup**: Significant effort to create automation scripts
-- **Testing**: Automation scripts themselves need testing
-- **Git workflow**: Team needs to follow conventional commit format
-- **Breaking**: Buggy release script could create bad releases
-- **Rollback**: Need ability to roll back bad releases
+          **Risks & Considerations**:
+          - **Initial setup**: Significant effort to create automation scripts
+          - **Testing**: Automation scripts themselves need testing
+          - **Git workflow**: Team needs to follow conventional commit format
+          - **Breaking**: Buggy release script could create bad releases
+          - **Rollback**: Need ability to roll back bad releases
 
 ---
 
@@ -414,33 +375,33 @@ const attemptDelay = Math.min(
 
 ---
 
-### 9.2 Improve Pair Selection UX
+        ### 9.2 Improve Pair Selection UX
 
-**Why?**
-- **Scale**: Binance has ~1500 pairs, making dropdown unusable
-- **Speed**: Users waste time scrolling through long list
-- **Favorites**: Power users repeatedly select same pairs
+        **Why?**
+        - **Scale**: Binance has ~1500 pairs, making dropdown unusable
+        - **Speed**: Users waste time scrolling through long list
+        - **Favorites**: Power users repeatedly select same pairs
 
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-  - Replace simple `<select>` with searchable dropdown
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Add search/filter logic, favorites management
-- **Implementation**:
-  1. Add search input above pair dropdown
-  2. Filter pairs as user types
-  3. Add "Favorites" section at top of dropdown
-  4. Add star/favorite button next to each pair
-  5. Store favorites per provider
-  6. Show recently used pairs
-  7. Support keyboard navigation (arrow keys, enter)
-  8. Add pair categories (BTC pairs, ETH pairs, Stablecoins, etc.)
+        **What needs to be changed?**
+        - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
+          - Replace simple `<select>` with searchable dropdown
+        - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
+          - Add search/filter logic, favorites management
+        - **Implementation**:
+          1. Add search input above pair dropdown
+          2. Filter pairs as user types
+          3. Add "Favorites" section at top of dropdown
+          4. Add star/favorite button next to each pair
+          5. Store favorites per provider
+          6. Show recently used pairs
+          7. Support keyboard navigation (arrow keys, enter)
+          8. Add pair categories (BTC pairs, ETH pairs, Stablecoins, etc.)
 
-**Risks & Considerations**:
-- **Performance**: Filtering 1500 items in real-time needs optimization
-- **Storage**: Favorites stored in plugin settings or separate storage
-- **Sync**: Consider syncing favorites across devices (future enhancement)
-- **UI**: Custom dropdown may have accessibility challenges
+        **Risks & Considerations**:
+        - **Performance**: Filtering 1500 items in real-time might need optimization
+        - **Storage**: Favorites stored in plugin settings or separate storage
+        - **Sync**: Consider syncing favorites across devices (future enhancement)
+        - **UI**: Custom dropdown may have accessibility challenges
 
 ---
 
