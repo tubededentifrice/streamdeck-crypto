@@ -1,0 +1,57 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "node": true
+  },
+  "extends": ["eslint:recommended", "prettier"],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "globals": {
+    "StreamDeck": "readonly",
+    "CryptoTickerConfig": "readonly",
+    "CryptoTickerProviders": "readonly",
+    "CryptoTickerConnectionStates": "readonly",
+    "CryptoTickerCanvasRenderer": "readonly",
+    "CryptoTickerAlertManager": "readonly",
+    "CryptoTickerFormatters": "readonly",
+    "CryptoTickerState": "readonly",
+    "CryptoTickerSettingsManager": "readonly",
+    "CryptoTickerDefaults": "readonly",
+    "CryptoTickerPIProviders": "readonly"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "com.courcelle.cryptoticker.streamDeckPlugin/",
+    "com.courcelle.cryptoticker-dev.sdPlugin/js/signalr_v8.0.0.min.js",
+    "com.courcelle.cryptoticker-dev.sdPlugin/libs/",
+    "com.courcelle.cryptoticker-dev.sdPlugin/dev/libs/"
+  ],
+  "overrides": [
+    {
+      "files": ["**/__tests__/**/*.js"],
+      "env": {
+        "jest": true
+      }
+    },
+    {
+      "files": ["preview-server.js"],
+      "env": {
+        "node": true
+      }
+    },
+    {
+      "files": ["com.courcelle.cryptoticker-dev.sdPlugin/dev/**/*.js"],
+      "env": {
+        "browser": true
+      }
+    }
+  ],
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-console": "off"
+  }
+}

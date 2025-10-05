@@ -26,6 +26,8 @@ The plugin consists of three main parts:
 
 Communication between the plugin and Stream Deck software happens via WebSocket established by the Stream Deck application.
 
+The runtime logic is now modular: `ticker.js` orchestrates lifecycle events while specialized helpers (`canvas-renderer`, `settings-manager`, `alert-manager`, `formatters`, `ticker-state`) encapsulate rendering, configuration, alerts, and shared caches to keep responsibilities focused and testable.
+
 ### Provider Architecture (NEW in direct_provider branch)
 
 The plugin now implements a **multi-provider system** with automatic failover:
@@ -75,13 +77,14 @@ Each ticker instance tracks its connection state:
 ### Core Plugin Logic
 
 - **`manifest.json`**: Plugin manifest defining properties, actions, and entry points
-- **`js/ticker.js`** (1055 lines): Core ticker display logic
-  - Canvas-based rendering (ticker mode and candle chart mode)
-  - Provider registry integration
-  - Subscription management
-  - Alert rule evaluation
-  - Currency conversion
-  - Canvas rendering with customizable colors, fonts, and layouts
+- **`js/ticker.js`**: Stream Deck integration layer that wires providers, state, and rendering modules together
+  - Handles WebSocket lifecycle, action callbacks, and provider subscriptions
+  - Delegates rendering, state management, alerts, and formatting to dedicated modules
+- **`js/canvas-renderer.js`**: Canvas drawing helpers for ticker and candle views, including connection-state icon support
+- **`js/settings-manager.js`**: Default settings resolution, normalization, and subscription refresh coordination
+- **`js/alert-manager.js`**: Alert rule evaluation plus arm/disarm state tracking
+- **`js/formatters.js`**: Number/price formatting and normalization helpers shared by renderer and tests
+- **`js/ticker-state.js`**: Centralized store for context metadata, subscriptions, connection states, and caches
 
 ### Property Inspector
 
@@ -148,8 +151,13 @@ Each ticker instance tracks its connection state:
 
 ### Testing
 
-- **`__tests__/ticker.test.js`** (60 lines): Core ticker tests
-- **`__tests__/binance-provider.test.js`** (39 lines): Binance provider tests
+- **`__tests__/ticker.test.js`**: Core ticker tests
+- **`__tests__/formatters.test.js`**: Formatting utility coverage
+- **`__tests__/alert-manager.test.js`**: Alert state evaluation tests
+- **`__tests__/settings-manager.test.js`**: Settings normalization and subscription callback tests
+- **`__tests__/ticker-state.test.js`**: State container behavior tests
+- **`__tests__/canvas-renderer.test.js`**: Rendering helper sanity checks
+- **`__tests__/binance-provider.test.js`**: Binance provider tests
 
 ### Development Tools
 
