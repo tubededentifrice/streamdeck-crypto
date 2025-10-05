@@ -96,11 +96,14 @@
             <div class="sdpi-item-label">Alert rule</div>
             <input type="text" class="sdpi-item-value" id="alertRule" name="alertRule"
                 placeholder="Example: value&gt;10 || value&lt;100">
+            <div class="pi-input-error" id="alertRuleError" role="alert" aria-live="polite"></div>
         </div>
         <details>
                 <summary>How alert rules work</summary>
-                <p>Alert rule are JavaScript snippets that will be evaluated upon value change.</p>
-                <p>When returning true, the text and background colors will be inverted.</p>
+                <p>Alert rules are validated expressions that run in a locked-down sandbox.</p>
+                <p>When they return true, the text and background colors are inverted.</p>
+                <p>Supported operators include +, -, *, /, %, comparison operators, logical &&/||, and the ternary (?:) syntax.</p>
+                <p>Available variables: <em>value</em>, <em>changeDaily</em>, <em>changeDailyPercent</em>, <em>volume</em>, <em>high</em>, <em>low</em>.</p>
                 <p><em>value</em> is the last price (displayed value).</p>
                 <p><em>changeDaily</em> is the amount that the last price has changed since yesterday.</p>
                 <p><em>changeDailyPercent</em> is the relative price change since yesterday (*100 for percentage change).</p>
@@ -114,17 +117,21 @@
             <div class="sdpi-item-label">Background color rule</div>
             <input type="text" class="sdpi-item-value" id="backgroundColorRule" name="backgroundColorRule"
                 placeholder="Example: alert?'#cc0000':''">
+            <div class="pi-input-error" id="backgroundColorRuleError" role="alert" aria-live="polite"></div>
         </div>
         <div class="sdpi-item">
             <div class="sdpi-item-label">Text color rule</div>
             <input type="text" class="sdpi-item-value" id="textColorRule" name="textColorRule"
                 placeholder="Example: alert?'blue':''">
+            <div class="pi-input-error" id="textColorRuleError" role="alert" aria-live="polite"></div>
         </div>
         <details>
                 <summary>How color rules work</summary>
-                <p>Color rule are JavaScript snippets that will be evaluated upon value change.</p>
-                <p>When returning a non empty color, it will override the default ones.</p>
+                <p>Color rules share the same sandboxed evaluator used for alerts.</p>
+                <p>When they return a non empty color string, it overrides the default colors.</p>
                 <p><em>alert</em> is a boolean indicating whether the alert mode is triggered (ie. the &quot;Alert rule&quot;).</p>
+                <p><em>backgroundColor</em> and <em>textColor</em> hold the current colors after alert inversion.</p>
+                <p><em>defaultBackgroundColor</em> and <em>defaultTextColor</em> expose the configured defaults.</p>
                 <p><em>value</em> is the last price (displayed value).</p>
                 <p><em>changeDaily</em> is the amount that the last price has changed since yesterday.</p>
                 <p><em>changeDailyPercent</em> is the relative price change since yesterday (*100 for percentage change).</p>
@@ -191,8 +198,12 @@
             </select>
         </div>
 
+    </div>
+
         <script src="js/providers/connection-states.js"></script>
         <script src="js/default-settings.js"></script>
+        <script src="js/vendor/expr-eval.min.js"></script>
+        <script src="js/expression-evaluator.js"></script>
         <script src="js/pi/providers/index.js"></script>
         <script src="js/pi/providers/binance.js"></script>
         <script src="js/pi/providers/bitfinex.js"></script>

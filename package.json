@@ -28,5 +28,8 @@
     "**/*.{json,css,html}": [
       "prettier --write"
     ]
+  },
+  "dependencies": {
+    "expr-eval": "^2.0.2"
   }
 }

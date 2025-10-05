@@ -15,6 +15,10 @@ This project is a Stream Deck plugin; The docs for the SDK are located at https:
 - `npm run format`: format sources with Prettier; run before committing changes that touch code or markup.
 - No build step required for development; Stream Deck reads files directly from the `.sdPlugin` folder.
 
+### Manual verification (pre-commit hook removed)
+- Husky's pre-commit hook has been removed; always run `npm run lint` and `npm test` manually before pushing any change.
+- Iterate on fixes until both commands succeed so the codebase stays lint- and test-clean.
+
 ## Coding Style & Naming Conventions
 - Formatting is enforced by Prettier: 2-space indentation, single quotes for JavaScript, double quotes remain acceptable in HTML where appropriate.
 - JavaScript: prefer small, focused modules; functions and variables in `lowerCamelCase`.

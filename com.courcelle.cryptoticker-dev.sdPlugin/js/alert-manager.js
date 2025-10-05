@@ -2,11 +2,16 @@
 
 (function (root, factory) {
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
+        module.exports = factory(require("./expression-evaluator"));
     } else {
-        root.CryptoTickerAlertManager = factory();
+        root.CryptoTickerAlertManager = factory(root.CryptoTickerExpressionEvaluator);
     }
-}(typeof self !== "undefined" ? self : this, function () {
+}(typeof self !== "undefined" ? self : this, function (expressionEvaluator) {
+    if (!expressionEvaluator) {
+        throw new Error("Expression evaluator dependency is missing");
+    }
+
+    const alertRuleEvaluator = expressionEvaluator.createEvaluator();
     const alertStatuses = {};
     const alertArmedStates = {};
 
@@ -54,16 +59,10 @@
         }
 
         try {
-            const value = values.last;
-            const change = values.changeDaily;
-            const changePercent = values.changeDailyPercent;
-            const high = values.high;
-            const low = values.low;
-            const volume = values.volume;
-            const open = values.open;
-            const close = values.close;
+            const contextVariables = expressionEvaluator.buildBaseContext(values);
+            const evaluationResult = alertRuleEvaluator.evaluate(alertRule, contextVariables);
 
-            if (eval(alertRule)) {
+            if (evaluationResult) {
                 alertStatuses[context] = "on";
                 if (isAlertArmed(context)) {
                     alertMode = true;
@@ -76,7 +75,13 @@
                 armAlert(context);
             }
         } catch (err) {
-            console.error("Error evaluating alertRule", context, settings, values, err);
+            alertStatuses[context] = "error";
+            console.error("Error evaluating alertRule", {
+                context: context,
+                settings: settings,
+                values: values,
+                error: err instanceof Error ? err.message : err
+            });
         }
 
         return {

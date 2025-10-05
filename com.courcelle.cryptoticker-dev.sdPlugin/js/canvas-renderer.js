@@ -2,17 +2,41 @@
 
 (function (root, factory) {
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./alert-manager"), require("./formatters"));
+        module.exports = factory(require("./alert-manager"), require("./formatters"), require("./expression-evaluator"));
     } else {
-        root.CryptoTickerCanvasRenderer = factory(root.CryptoTickerAlertManager, root.CryptoTickerFormatters);
+        root.CryptoTickerCanvasRenderer = factory(root.CryptoTickerAlertManager, root.CryptoTickerFormatters, root.CryptoTickerExpressionEvaluator);
     }
-}(typeof self !== "undefined" ? self : this, function (alertManager, formatters) {
+}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator) {
     if (!alertManager) {
         throw new Error("Alert manager dependency is missing");
     }
     if (!formatters) {
         throw new Error("Formatters dependency is missing");
     }
+    if (!expressionEvaluator) {
+        throw new Error("Expression evaluator dependency is missing");
+    }
+
+    function createColorRuleEvaluator() {
+        const allowed = expressionEvaluator.allowedVariables.slice(0);
+        const extras = [
+            "alert",
+            "backgroundColor",
+            "textColor",
+            "defaultBackgroundColor",
+            "defaultTextColor"
+        ];
+        for (let i = 0; i < extras.length; i++) {
+            if (allowed.indexOf(extras[i]) === -1) {
+                allowed.push(extras[i]);
+            }
+        }
+        return expressionEvaluator.createEvaluator({
+            allowedVariables: allowed
+        });
+    }
+
+    const colorRuleEvaluator = createColorRuleEvaluator();
 
     function getCanvasSizeMultiplier(canvasWidth, canvasHeight) {
         return Math.max(canvasWidth / 144, canvasHeight / 144);
@@ -194,8 +218,10 @@
     const priceFontSize = parseNumberSetting(settings["fontSizePrice"], baseFontSize * 35 / 25);
     const highLowFontSize = parseNumberSetting(settings["fontSizeHighLow"], baseFontSize);
     const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
-    let backgroundColor = settings["backgroundColor"] || "#000000";
-    let textColor = settings["textColor"] || "#ffffff";
+    const defaultBackgroundColor = settings["backgroundColor"] || "#000000";
+    const defaultTextColor = settings["textColor"] || "#ffffff";
+    let backgroundColor = defaultBackgroundColor;
+    let textColor = defaultTextColor;
     const effectiveConnectionState = connectionState || values.connectionState || null;
 
     const changeDailyPercent = values.changeDailyPercent || 0;
@@ -213,18 +239,47 @@
     backgroundColor = alertEvaluation.backgroundColor;
     textColor = alertEvaluation.textColor;
 
+    const baseColorContext = expressionEvaluator.buildContext(values, {
+        alert: alert,
+        backgroundColor: backgroundColor,
+        textColor: textColor,
+        defaultBackgroundColor: defaultBackgroundColor,
+        defaultTextColor: defaultTextColor
+    });
+
     if (settings["backgroundColorRule"]) {
         try {
-            backgroundColor = eval(settings["backgroundColorRule"]) || backgroundColor;
+            const result = colorRuleEvaluator.evaluate(settings["backgroundColorRule"], baseColorContext);
+            const stringResult = String(result || "").trim();
+            if (stringResult) {
+                backgroundColor = stringResult;
+                baseColorContext.backgroundColor = backgroundColor;
+            }
         } catch (err) {
-            console.error("Error evaluating backgroundColorRule", context, settings, values, err);
+            console.error("Error evaluating backgroundColorRule", {
+                context: context,
+                expression: settings["backgroundColorRule"],
+                values: values,
+                error: err instanceof Error ? err.message : err
+            });
         }
     }
     if (settings["textColorRule"]) {
         try {
-            textColor = eval(settings["textColorRule"]) || textColor;
+            baseColorContext.textColor = textColor;
+            const result = colorRuleEvaluator.evaluate(settings["textColorRule"], baseColorContext);
+            const stringResult = String(result || "").trim();
+            if (stringResult) {
+                textColor = stringResult;
+                baseColorContext.textColor = textColor;
+            }
         } catch (err) {
-            console.error("Error evaluating textColorRule", context, settings, values, err);
+            console.error("Error evaluating textColorRule", {
+                context: context,
+                expression: settings["textColorRule"],
+                values: values,
+                error: err instanceof Error ? err.message : err
+            });
         }
     }
 
