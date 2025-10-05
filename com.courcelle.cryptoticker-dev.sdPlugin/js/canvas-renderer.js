@@ -176,6 +176,144 @@
     canvasContext.restore();
     }
 
+    function splitMessageIntoLines(canvasContext, message, maxWidth, font) {
+        if (!message && message !== 0) {
+            return [""];
+        }
+
+        const rawSegments = String(message).split(/\r?\n/);
+        const lines = [];
+
+        function splitLongWord(word) {
+            const characters = word.split("");
+            const chunks = [];
+            let current = "";
+            for (let i = 0; i < characters.length; i++) {
+                const candidate = current + characters[i];
+                if (canvasContext.measureText(candidate).width > maxWidth && current) {
+                    chunks.push(current);
+                    current = characters[i];
+                } else {
+                    current = candidate;
+                }
+            }
+            if (current) {
+                chunks.push(current);
+            }
+            return chunks;
+        }
+
+        canvasContext.font = font;
+
+        for (let i = 0; i < rawSegments.length; i++) {
+            const segment = rawSegments[i];
+            if (!segment || segment.trim() === "") {
+                lines.push("");
+                continue;
+            }
+
+            const words = segment.trim().split(/\s+/);
+            let currentLine = words.shift() || "";
+
+            while (words.length > 0) {
+                const word = words.shift();
+                const candidate = currentLine ? currentLine + " " + word : word;
+
+                if (canvasContext.measureText(candidate).width <= maxWidth) {
+                    currentLine = candidate;
+                    continue;
+                }
+
+                if (currentLine) {
+                    lines.push(currentLine);
+                }
+
+                if (canvasContext.measureText(word).width <= maxWidth) {
+                    currentLine = word;
+                } else {
+                    const chunks = splitLongWord(word);
+                    for (let c = 0; c < chunks.length - 1; c++) {
+                        lines.push(chunks[c]);
+                    }
+                    currentLine = chunks.length > 0 ? chunks[chunks.length - 1] : "";
+                }
+            }
+
+            if (currentLine) {
+                lines.push(currentLine);
+            }
+        }
+
+        if (lines.length === 0) {
+            lines.push("");
+        }
+
+        return lines;
+    }
+
+    function renderMessageCanvas(params) {
+        const canvas = params.canvas;
+        const canvasContext = params.canvasContext;
+        const message = params.message;
+        const backgroundColor = params.backgroundColor || "#000000";
+        const textColor = params.textColor || "#ffffff";
+        const fontFamily = params.font || "Lato";
+        const explicitFontSize = params.fontSize;
+        const connectionStates = params.connectionStates;
+        const connectionState = params.connectionState;
+        const connectionIconSetting = (params.displayConnectionStatusIcon || "OFF").toUpperCase();
+
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const sizeMultiplier = getCanvasSizeMultiplier(canvasWidth, canvasHeight);
+        const padding = 12 * sizeMultiplier;
+        const baseFontSize = explicitFontSize ? explicitFontSize * sizeMultiplier : Math.max(22 * sizeMultiplier, 14);
+        const font = "bold " + baseFontSize + "px " + fontFamily;
+        const lineHeight = baseFontSize * 1.25;
+
+        canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
+        canvasContext.fillStyle = backgroundColor;
+        canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        const maxLineWidth = canvasWidth - (padding * 2);
+        const lines = splitMessageIntoLines(canvasContext, message, maxLineWidth, font);
+
+        let availableHeight = canvasHeight - (padding * 2);
+        if (connectionIconSetting !== "OFF" && connectionStates) {
+            availableHeight -= 28 * sizeMultiplier;
+        }
+
+        const totalTextHeight = lineHeight * lines.length;
+        let startY = padding + (availableHeight - totalTextHeight) / 2 + (lineHeight / 2);
+        if (startY < padding + (lineHeight / 2)) {
+            startY = padding + (lineHeight / 2);
+        }
+
+        canvasContext.fillStyle = textColor;
+        canvasContext.textAlign = "center";
+        canvasContext.textBaseline = "middle";
+        canvasContext.font = font;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line) {
+                canvasContext.fillText(line, canvasWidth / 2, startY + (i * lineHeight));
+            }
+        }
+
+        if (connectionIconSetting !== "OFF" && connectionStates) {
+            renderConnectionStatusIcon({
+                canvas: canvas,
+                canvasContext: canvasContext,
+                state: connectionState,
+                color: textColor,
+                sizeMultiplier: sizeMultiplier,
+                position: connectionIconSetting,
+                connectionStates: connectionStates
+            });
+        }
+    }
+
     function renderTickerCanvas(params) {
     const canvas = params.canvas;
     const canvasContext = params.canvasContext;
@@ -481,6 +619,7 @@
         getCandlesDisplayCount,
         renderConnectionStatusIcon,
         renderTickerCanvas,
-        renderCandlesCanvas
+        renderCandlesCanvas,
+        renderMessageCanvas
     };
 }));

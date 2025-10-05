@@ -2,11 +2,6 @@
 
 This document consolidates proposed improvements from code reviews and analysis. Each improvement includes rationale, specific implementation details, and risk considerations.
 
-
-Implement a method to display an arbitrary message to the user on the plugin display.
-Update "IMPROVEMENTS.md" to leverage this method when an irrecoverable error occured (eg. currency conversion failed, loading, can't connect, etc.).
-
-
 ---
 
 ## 1. CRITICAL SECURITY & STABILITY
@@ -156,6 +151,7 @@ Update "IMPROVEMENTS.md" to leverage this method when an irrecoverable error occ
   2. Clearly label as original currency (e.g., "USD") when conversion fails
   3. Add "CONVERSION ERROR" text on button
   4. Use connection state icon to show BROKEN state
+  5. Call `tickerAction.displayMessage()` to render a clear, single-message fallback on the key surface
 
 **Current code:**
 ```javascript

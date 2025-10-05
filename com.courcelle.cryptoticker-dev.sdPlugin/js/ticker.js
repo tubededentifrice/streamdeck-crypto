@@ -512,6 +512,37 @@ const tickerAction = {
                 break;
         }
     },
+    displayMessage: function (context, message, options) {
+        this.initCanvas();
+
+        const opts = options || {};
+        const normalizedSettings = applyDefaultSettings(opts.settings || {});
+        const backgroundColor = opts.backgroundColor || normalizedSettings.backgroundColor || "#000000";
+        const textColor = opts.textColor || normalizedSettings.textColor || "#ffffff";
+        const font = opts.font || normalizedSettings.font || "Lato";
+        const fontSize = opts.fontSize || null;
+        const desiredConnectionState = opts.connectionState || null;
+        const displayConnectionIcon = opts.displayConnectionStatusIcon || normalizedSettings.displayConnectionStatusIcon || "OFF";
+
+        if (desiredConnectionState) {
+            this.setContextConnectionState(context, desiredConnectionState);
+        }
+
+        canvasRenderer.renderMessageCanvas({
+            canvas: canvas,
+            canvasContext: canvasContext,
+            message: message,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            font: font,
+            fontSize: fontSize,
+            connectionStates: connectionStates,
+            connectionState: desiredConnectionState || this.getContextConnectionState(context),
+            displayConnectionStatusIcon: displayConnectionIcon
+        });
+
+        this.sendCanvas(context);
+    },
     getCanvasSizeMultiplier: function(canvasWidth, canvasHeight) {
         return canvasRenderer.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
     },

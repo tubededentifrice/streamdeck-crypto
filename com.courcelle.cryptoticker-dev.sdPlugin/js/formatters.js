@@ -83,7 +83,7 @@
                 let autoSuffix = "";
                 let autoValue = absoluteValue;
                 if (absoluteValue > 100000) {
-                    autoSuffix = "k";
+                    autoSuffix = "K";
                     autoValue = absoluteValue / 1000;
                 }
 
