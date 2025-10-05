@@ -52,8 +52,11 @@ function normalizeCurrencyCode(value) {
 }
 
 const moduleConfig = requireOrNull("./config");
+const constantsModule = requireOrNull("./constants");
 const globalConfig = resolveGlobalConfig();
 const runtimeConfig = Object.assign({}, defaultConfig, moduleConfig || {}, globalConfig || {});
+const constants = constantsModule || (typeof CryptoTickerConstants !== "undefined" ? CryptoTickerConstants : null) || {};
+const TIMESTAMP_SECONDS_THRESHOLD = typeof constants.TIMESTAMP_SECONDS_THRESHOLD === "number" ? constants.TIMESTAMP_SECONDS_THRESHOLD : 9999999999;
 const tProxyBase = runtimeConfig.tProxyBase;
 const DEFAULT_MESSAGE_CONFIG = defaultConfig.messages;
 const messageConfig = Object.assign({}, DEFAULT_MESSAGE_CONFIG, (runtimeConfig && runtimeConfig.messages) || {});
@@ -588,7 +591,7 @@ const tickerAction = {
             }
             const parsed = parseNumeric(values[key], null, true);
             if (parsed !== null && parsed !== undefined) {
-                const normalizedTimestamp = parsed > 9999999999 ? parsed : parsed * 1000;
+                const normalizedTimestamp = parsed > TIMESTAMP_SECONDS_THRESHOLD ? parsed : parsed * 1000;
                 timestamp = normalizedTimestamp;
                 sanitized.lastUpdated = normalizedTimestamp;
                 break;

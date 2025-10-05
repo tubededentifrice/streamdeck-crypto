@@ -2,11 +2,16 @@
 
 (function (root, factory) {
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./alert-manager"), require("./formatters"), require("./expression-evaluator"));
+        module.exports = factory(require("./alert-manager"), require("./formatters"), require("./expression-evaluator"), require("./constants"));
     } else {
-        root.CryptoTickerCanvasRenderer = factory(root.CryptoTickerAlertManager, root.CryptoTickerFormatters, root.CryptoTickerExpressionEvaluator);
+        root.CryptoTickerCanvasRenderer = factory(
+            root.CryptoTickerAlertManager,
+            root.CryptoTickerFormatters,
+            root.CryptoTickerExpressionEvaluator,
+            root.CryptoTickerConstants
+        );
     }
-}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator) {
+}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator, constants) {
     if (!alertManager) {
         throw new Error("Alert manager dependency is missing");
     }
@@ -16,6 +21,10 @@
     if (!expressionEvaluator) {
         throw new Error("Expression evaluator dependency is missing");
     }
+
+    const sharedConstants = constants || {};
+    const TIMESTAMP_SECONDS_THRESHOLD = typeof sharedConstants.TIMESTAMP_SECONDS_THRESHOLD === "number" ? sharedConstants.TIMESTAMP_SECONDS_THRESHOLD : 9999999999;
+    const DEFAULT_PRICE_BAR_POSITION = typeof sharedConstants.DEFAULT_PRICE_BAR_POSITION === "number" ? sharedConstants.DEFAULT_PRICE_BAR_POSITION : 0.5;
 
     function createColorRuleEvaluator() {
         const allowed = expressionEvaluator.allowedVariables.slice(0);
@@ -261,7 +270,7 @@
             return null;
         }
 
-        const normalized = numericTimestamp > 9999999999 ? numericTimestamp : numericTimestamp * 1000;
+        const normalized = numericTimestamp > TIMESTAMP_SECONDS_THRESHOLD ? numericTimestamp : numericTimestamp * 1000;
         const date = new Date(normalized);
         if (isNaN(date.getTime())) {
             return null;
@@ -582,7 +591,7 @@
                 const range = highValue - lowValue;
                 const percent = range > 0
                     ? Math.min(Math.max((priceValue - lowValue) / range, 0), 1)
-                    : 0.5;
+                    : DEFAULT_PRICE_BAR_POSITION;
                 const lineLength = canvasWidth - (padding * 2);
                 const cursorPositionX = padding + Math.round(lineLength * percent);
 
