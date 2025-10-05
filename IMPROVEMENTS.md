@@ -36,37 +36,50 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ---
 
-### 1.2 Fix Global Variable Leak in Property Inspector
+### 1.2 Fix Global Variable Leaks in Property Inspector
 
 **Why?**
-- **Code quality**: Undeclared loop variable creates global pollution
-- **Bugs**: Global `i` variable can interfere with other loops and cause unpredictable behavior
-- **Reliability**: Currency-related controls may not hide/show correctly due to skipped non-index keys
+- **Code quality**: `applyDisplay` and `extractSettings` introduce implicit globals (`i`, `k`) that pollute `window`
+- **Bugs**: Global loop counters can be overwritten by other code paths, breaking DOM updates unpredictably
+- **Reliability**: `for (i in Object.keys(elements))` iterates string indices from an intermediate array and will walk unexpected keys if prototypes are extended
 
 **What needs to be changed?**
 - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Lines 452-455: The `applyDisplay` function
+  - Lines 467-472: The `applyDisplay` function
+  - Lines 407-413: `extractSettings` loop copying legacy pair settings
 - **Current code**:
   ```javascript
-  for (i = 0; i < elements.length; i++) {
-      elements[i].style.display = display;
+  applyDisplay: function(elements, display) {
+      for(i in Object.keys(elements)) {
+          elements[i].style.display = display;
+      }
+  },
+
+  if (pairElements) {
+      for (k in pairElements) {
+          settings[k] = pairElements[k];
+      }
   }
   ```
 - **Fixed code**:
   ```javascript
-  for (let idx = 0; idx < elements.length; idx++) {
-      elements[idx].style.display = display;
-  }
-  // OR
-  for (const element of elements) {
-      element.style.display = display;
+  applyDisplay: function(elements, display) {
+      for (const element of elements) {
+          element.style.display = display;
+      }
+  },
+
+  if (pairElements) {
+      for (const [key, value] of Object.entries(pairElements)) {
+          settings[key] = value;
+      }
   }
   ```
 
 **Risks & Considerations**:
 - **Low risk**: Simple fix with no breaking changes
 - **Testing**: Verify currency dropdown visibility logic works correctly across all providers
-- **Side effects**: Check if any other code relies on the global `i` variable (unlikely but possible)
+- **Audit**: Confirm no other helper relies on `window.i`/`window.k`
 
 ---
 
@@ -116,6 +129,29 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Performance**: Check guards don't slow down frequent renders
 - **State management**: Track "last known good" values for fallback
 - **Testing**: Mock provider failures to verify graceful degradation
+
+---
+
+### 1.5 Stabilize Daily Change Rendering
+
+**Why?**
+- **Incorrect precision**: Duplicate `Math.abs(changePercent) >= 10` checks in `updateCanvasTicker` prevent the code from ever rendering whole numbers for large moves
+- **NaN exposure**: When providers omit `changeDailyPercent`, the multiplication yields `NaN`, propagating to the canvas and producing unreadable output
+- **Visual regressions**: Color switching logic still runs even when no valid change is available
+
+**What needs to be changed?**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
+  - Lines 689-713: Daily change block inside `updateCanvasTicker`
+
+**Implementation**:
+1. Default `const changePercentRaw = Number(values.changeDailyPercent)` and bail out unless `Number.isFinite(changePercentRaw)`
+2. Fix the precision thresholds (e.g., `< 1` → 2 digits, `< 10` → 1 digit, `>= 10` → 0 digits) instead of repeating the same condition twice
+3. Only adjust fill colors and render the text when a valid numeric change is available
+
+**Risks & Considerations**:
+- **Backward compatibility**: Confirm existing presets rely on the intended precision behavior
+- **Testing**: Add unit tests for positive, negative, zero, and missing change scenarios to prevent regressions
+- **Localization**: Ensure formatting still works with locales that use different decimal separators
 
 ---
 
