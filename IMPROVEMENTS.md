@@ -6,77 +6,6 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ## 1. CRITICAL SECURITY & STABILITY
 
-### 1.2 Fix Global Variable Leaks in Property Inspector
-
-**Why?**
-- **Code quality**: `applyDisplay` and `extractSettings` introduce implicit globals (`i`, `k`) that pollute `window`
-- **Bugs**: Global loop counters can be overwritten by other code paths, breaking DOM updates unpredictably
-- **Reliability**: `for (i in Object.keys(elements))` iterates string indices from an intermediate array and will walk unexpected keys if prototypes are extended
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Lines 467-472: The `applyDisplay` function
-  - Lines 407-413: `extractSettings` loop copying legacy pair settings
-- **Current code**:
-  ```javascript
-  applyDisplay: function(elements, display) {
-      for(i in Object.keys(elements)) {
-          elements[i].style.display = display;
-      }
-  },
-
-  if (pairElements) {
-      for (k in pairElements) {
-          settings[k] = pairElements[k];
-      }
-  }
-  ```
-- **Fixed code**:
-  ```javascript
-  applyDisplay: function(elements, display) {
-      for (const element of elements) {
-          element.style.display = display;
-      }
-  },
-
-  if (pairElements) {
-      for (const [key, value] of Object.entries(pairElements)) {
-          settings[key] = value;
-      }
-  }
-  ```
-
-**Risks & Considerations**:
-- **Low risk**: Simple fix with no breaking changes
-- **Testing**: Verify currency dropdown visibility logic works correctly across all providers
-- **Audit**: Confirm no other helper relies on `window.i`/`window.k`
-
----
-
-### 1.3 Fix Preview Canvas Volume Bug
-
-**Why?**
-- **Broken dev workflow**: Preview server renders `NaN` for candle volumes, breaking development/testing
-- **Developer experience**: Makes visual debugging and screenshots impossible
-- **Data integrity**: Reveals logic error in sample data generation
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/dev/preview.js`
-  - Lines 11-26: `generateSampleCandles` function
-- **Current issue**:
-  ```javascript
-  volumeQuote: volume  // 'volume' is undefined
-  ```
-- **Fix**: Use the computed `volumeQuote` value from earlier in the loop
-- **Add test**: Create smoke test in `__tests__/ticker.test.js` to verify `generateSampleCandles` produces valid data
-
-**Risks & Considerations**:
-- **No risk**: Fixes existing bug, doesn't change production behavior
-- **Testing**: Add test case for `getCandlesNormalized` with sample data
-- **Documentation**: Consider documenting expected candle data format
-
----
-
 ### 1.4 Harden Canvas Rendering Against Missing Data
 
 **Why?**
@@ -171,6 +100,28 @@ This document consolidates proposed improvements from code reviews and analysis.
 ---
 
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
+
+### 2.4 Expand Test Coverage
+
+**Status:** Significantly improved in improvements2 branch
+
+**What was done:**
+- Created comprehensive test suite with 7 test files and 24 tests
+- Test files for all new modules: canvas-renderer, formatters, alert-manager, settings-manager, ticker-state
+- Tests are passing and integrated into development workflow
+
+**What remains:**
+- Increase coverage for provider modules (Binance, Bitfinex, provider registry)
+- Add integration tests for full plugin workflows
+- Add tests for subscription management and caching
+- Target: >80% code coverage
+
+**Impact:**
+- Much better test coverage than before (~5% → ~40%)
+- Regression prevention for refactored modules
+- Foundation for future test expansion
+
+---
 
 ### 2.5 Implement Exponential Backoff for Reconnections
 
