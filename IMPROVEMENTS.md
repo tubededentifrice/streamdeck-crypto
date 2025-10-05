@@ -15,10 +15,9 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Maintainability**: Explicit expression parser makes debugging easier
 
 **What needs to be changed?**
-- **Files**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 599: Alert rule evaluation
-  - Lines 624: Background color rule evaluation
-  - Lines 633: Text color rule evaluation
+- **Files**: `com.courcelle.cryptoticker-dev.sdPlugin/js/alert-manager.js`
+  - Line 66: Alert rule evaluation using eval()
+  - Note: Background and text color rule evaluation also need to be addressed
 - **Implementation**:
   1. Add dependency on safe expression parser (e.g., `expr-eval`, `mathjs`, or custom parser)
   2. Create sandboxed evaluator class that exposes only allowed variables: `value`, `high`, `low`, `changeDaily`, `changeDailyPercent`, `volume`
@@ -115,8 +114,8 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Error recovery**: Users see "stale" or "error" state instead of blank button
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 350-449: Canvas rendering logic in `drawTicker` function
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js`
+  - Canvas rendering logic in rendering functions
 - **Implementation**:
   1. Add null/undefined checks before using ticker values
   2. Provide sensible defaults (0 for numbers, empty string for text)
@@ -200,8 +199,9 @@ This document consolidates proposed improvements from code reviews and analysis.
 - **Better UX**: Show clear indication of missing/unavailable data
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 560-773: `updateCanvasTicker` function
+- **Files**:
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js` - `updateCanvasTicker` function
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js` - Add null/missing data checks to rendering functions
 - **Implementation**:
   1. Check if critical values are missing/invalid: `!values || !Number.isFinite(values.last)`
   2. Display "N/A", "---", or "LOADING..." when data missing
@@ -260,68 +260,163 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
 
-### 2.1 Single Source of Truth for Default Settings
+### 2.1 Single Source of Truth for Default Settings ✅ COMPLETED
 
-**Why?**
-- **Consistency**: Settings defaults are duplicated in `ticker.js:44-94` and `pi.js:14-116`
-- **Maintenance burden**: Adding new settings requires updating multiple locations
-- **Bug prevention**: Mismatched defaults cause confusing behavior
-- **Type safety**: Shared module can define interfaces for TypeScript migration
+**Status:** Completed in improvements1 branch
 
-**What needs to be changed?**
-- **Create new file**: `com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js`
-- **Files to refactor**:
-  - `js/ticker.js`: Import defaults from shared module (lines 93-144)
-  - `js/pi.js`: Import defaults from shared module (lines 14-116)
-  - `dev/preview.js`: Import defaults for preview rendering
-  - `__tests__/ticker.test.js`: Import defaults for tests
-- **Implementation**:
-  1. Extract complete settings schema with defaults, types, and validation rules
-  2. Export as module that works in both Node.js and browser contexts
-  3. Update all consumers to import from shared module
-  4. Add validation function to check settings against schema
+**What was done:**
+- **New file**: `js/default-settings.js` (335 lines)
+  - Centralized settings schema with types and defaults
+  - Built-in validation and normalization
+  - Range clamping (e.g., digits: 0-10, fontSize: 1-200)
+  - Enum validation (e.g., mode: "ticker" or "candles")
+  - Type coercion (strings to uppercase, numbers clamped)
+  - Deep cloning to prevent mutation
 
-**Risks & Considerations**:
-- **Module loading**: Ensure shared module works in StreamDeck plugin environment (may need globals)
-- **Build process**: May need bundler to handle module imports correctly
-- **Migration**: Existing settings must remain compatible
-- **Testing**: Update all tests to use shared defaults
+**Impact:**
+- No more scattered hardcoded defaults
+- Invalid settings automatically corrected
+- Consistent settings behavior across plugin
+- Foundation for better error messages
+
+**Files changed:**
+- Created: `js/default-settings.js`
+- Updated: `js/ticker.js`, `js/pi.js` to use centralized defaults
+- Tests: `__tests__/settings-manager.test.js`
 
 ---
 
-### 2.2 Refactor Monolithic `ticker.js`
+### 2.2 Refactor Monolithic ticker.js ✅ COMPLETED
 
-**Why?**
-- **Maintainability**: 1200+ lines handling rendering, data fetching, WebSocket management, and business logic
-- **Testing**: Monolithic file is difficult to unit test in isolation
-- **Code navigation**: Hard to find specific functionality
-- **Reusability**: Logic cannot be shared across plugin and preview modes
+**Status:** Completed in improvements1 branch (commit: 5d6e3af)
 
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-- **Proposed structure**:
-  1. **`js/canvas-renderer.js`**: Extract lines 350-746 (canvas drawing logic)
-     - `drawTicker()`, `drawCandles()`, `drawHighLowBar()`, formatting helpers
-  2. **`js/settings-manager.js`**: Extract settings handling
-     - Default settings, settings validation, settings change handlers
-  3. **`js/alert-manager.js`**: Extract lines related to alert logic
-     - Alert evaluation, alert arming/disarming, alert state management
-  4. **`js/formatters.js`**: Extract formatting utilities
-     - Price formatting, number formatting, date formatting
-  5. **`js/ticker-state.js`**: Centralized state management
-     - `contextDetails`, `contextSubscriptions`, `contextConnectionStates`, caches
-  6. Keep main plugin lifecycle and StreamDeck integration in `ticker.js`
+**What was wrong:**
+- Single 1,430-line file with multiple responsibilities
+- Hard to test, maintain, and understand
+- Mixed concerns: state management, rendering, alerts, formatting
 
-**Risks & Considerations**:
-- **Breaking changes**: Ensure all dependencies are properly passed between modules
-- **Global state**: Carefully manage shared state during refactor (consider dependency injection)
-- **Testing**: Create tests for each new module before extraction
-- **Gradual migration**: Can be done incrementally to reduce risk
-- **StreamDeck compatibility**: Verify module loading works in plugin environment
+**What was done:**
+- **Reduced ticker.js from 1,430 to 931 lines (-35%)**
+- **Created focused modules:**
+
+1. **`js/ticker-state.js`** (134 lines)
+   - Centralized state management
+   - Context details, subscriptions, connection states
+   - Conversion rates cache, candles cache
+   - Clean reset functionality
+
+2. **`js/alert-manager.js`** (98 lines)
+   - Alert rule evaluation
+   - Armed state management
+   - Color swapping logic
+   - Re-arming on condition change
+
+3. **`js/canvas-renderer.js`** (431 lines)
+   - All canvas drawing functions
+   - Connection status icon rendering
+   - Ticker and candles mode rendering
+   - Modular, testable rendering logic
+
+4. **`js/settings-manager.js`** (88 lines)
+   - Settings refresh and application
+   - Integration with default-settings module
+   - Works in browser and Node.js (for tests)
+
+5. **`js/formatters.js`** (115 lines)
+   - Number formatting (full, compact, plain, auto)
+   - Locale-aware formatting
+   - Unit suffixes (K, M, B, T)
+   - Value normalization
+
+6. **`js/default-settings.js`** (335 lines)
+   - See §2.1 above
+
+**Benefits:**
+- Single Responsibility Principle
+- Independently testable modules
+- Clear dependency graph
+- Easier to onboard new contributors
+- Foundation for TypeScript migration
+
+**Files changed:**
+- Created: 6 new modules (1,201 lines)
+- Reduced: ticker.js by 499 lines
+- Updated: index.html, index_pi.html, dev/preview.html to load modules
+- Tests: Created __tests__ for each module
 
 ---
 
-### 2.5 Implement Exponential Backoff for Reconnections
+## 3. TESTING & BUILD INFRASTRUCTURE ✅ COMPLETED
+
+### 3.1 Add Linting and Code Formatting ✅ COMPLETED
+
+**Status:** Completed in improvements1 branch (commit: e2585d5)
+
+**What was done:**
+- **ESLint configuration** (`.eslintrc.json`)
+  - Extends recommended rules
+  - ES2022 syntax support
+  - Browser + Node environment
+  - StreamDeck globals defined
+
+- **Prettier configuration** (`.prettierrc`)
+  - 4-space indentation
+  - Single quotes, trailing commas
+  - 120-character line width
+  - Unix line endings (LF)
+
+- **Git pre-commit hook** (`.husky/pre-commit`)
+  - Automatic linting before commit
+  - Prevents committing code with errors
+
+- **Package.json scripts:**
+  - `npm run lint` - Run ESLint
+  - `npm run format` - Run Prettier
+
+**Impact:**
+- Consistent code style across team
+- Catches common bugs before commit
+- Reduced code review friction
+- Professional development workflow
+
+**Files changed:**
+- Created: `.eslintrc.json`, `.prettierrc`, `.prettierignore`, `.husky/pre-commit`
+- Updated: `package.json` with new scripts and dev dependencies
+
+---
+
+### 3.2 Expand Test Coverage (Ongoing)
+
+**Status:** Foundation completed, expansion in progress
+
+**What was done:**
+- Created test files for all new modules:
+  - `__tests__/alert-manager.test.js`
+  - `__tests__/canvas-renderer.test.js`
+  - `__tests__/formatters.test.js`
+  - `__tests__/settings-manager.test.js`
+  - `__tests__/ticker-state.test.js`
+  - Expanded `__tests__/ticker.test.js`
+
+- Configured Jest testing framework
+- Added `npm test` script
+
+**Current coverage:** ~10-15% (estimated)
+**Target coverage:** >80%
+
+**Next steps:**
+- Add integration tests for full workflows
+- Test WebSocket reconnection logic
+- Test provider failover scenarios
+- Test conversion rate caching
+- Test canvas rendering variations
+- Mock StreamDeck SDK, WebSocket, fetch, canvas
+
+---
+
+## 4. CODE ARCHITECTURE & MAINTAINABILITY
+
+### 4.1 Implement Exponential Backoff for Reconnections
 
 **Priority:** 🟡 Medium (prevents API hammering)
 
@@ -382,9 +477,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 3. ERROR HANDLING & USER FEEDBACK
+## 5. ERROR HANDLING & USER FEEDBACK
 
-### 3.1 Graceful Network Error Handling in Property Inspector
+### 5.1 Graceful Network Error Handling in Property Inspector
 
 **Why?**
 - **User experience**: Failures when fetching provider lists/pairs result in empty dropdowns with no feedback
@@ -414,7 +509,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 3.2 Improved Error Handling Throughout Plugin
+### 5.2 Improved Error Handling Throughout Plugin
 
 **Why?**
 - **Silent failures**: Many try-catch blocks log errors but don't provide user feedback
@@ -448,7 +543,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 3.3 Add Logging and Diagnostics Configuration
+### 5.3 Add Logging and Diagnostics Configuration
 
 **Why?**
 - **Support**: Hard to debug issues without verbose logs from user sessions
@@ -476,77 +571,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 4. TESTING & QUALITY ASSURANCE
+## 6. PERFORMANCE OPTIMIZATION
 
-### 4.1 Expand Test Coverage
-
-**Why?**
-- **Current state**: Only 57 lines of tests in `__tests__/ticker.test.js` (~5% coverage)
-- **Risk**: Refactoring and new features break existing functionality
-- **Confidence**: Can't confidently make changes without tests
-- **Regressions**: Bugs like the preview volume issue could have been caught
-
-**What needs to be changed?**
-- **File**: `__tests__/ticker.test.js` (expand significantly)
-- **New test files to create**:
-  1. `__tests__/canvas-renderer.test.js`: Test canvas drawing functions
-  2. `__tests__/providers/binance-provider.test.js`: Test Binance WebSocket handling
-  3. `__tests__/providers/bitfinex-provider.test.js`: Test Bitfinex WebSocket handling
-  4. `__tests__/providers/provider-registry.test.js`: Test failover logic
-  5. `__tests__/subscription-manager.test.js`: Test cache expiration
-  6. `__tests__/pi-helpers.test.js`: Test property inspector utilities
-  7. `__tests__/formatters.test.js`: Test price/number formatting
-- **Coverage areas**:
-  - WebSocket reconnection logic with exponential backoff
-  - Provider failover when primary fails
-  - Conversion rate caching and expiration
-  - Alert rule evaluation (post-eval replacement)
-  - Canvas rendering with various settings combinations
-  - Settings validation and defaults
-- **Target**: >80% code coverage
-
-**Risks & Considerations**:
-- **Effort**: Significant time investment to write comprehensive tests
-- **Mocking**: Need to mock WebSocket, fetch, StreamDeck SDK, canvas
-- **Test infrastructure**: May need to add testing utilities and helpers
-- **CI/CD**: Tests should run automatically on every commit
-- **Maintenance**: Tests need updates when code changes
-
----
-
-### 4.2 Add Linting and Code Formatting
-
-**Why?**
-- **Consistency**: Code style is inconsistent across files (spacing, quotes, semicolons)
-- **Quality**: Catch common mistakes (unused variables, missing semicolons, etc.)
-- **Collaboration**: Easier for multiple developers to work on code
-- **Automation**: Enforce standards without manual review
-
-**What needs to be changed?**
-- **New files to create**:
-  - `.eslintrc.json`: ESLint configuration
-  - `.prettierrc`: Prettier configuration
-  - `.prettierignore`: Exclude generated files
-- **Package.json additions**:
-  - `eslint`, `prettier`, `eslint-config-prettier`, `husky`, `lint-staged`
-- **Configuration**:
-  - ESLint rules for StreamDeck plugin environment
-  - Prettier rules for code formatting (2 spaces, single quotes, etc.)
-  - Pre-commit hooks to auto-format and lint changed files
-  - Git hooks with husky to prevent committing unlinted code
-- **Scripts**: Add `npm run lint`, `npm run format`, `npm run lint:fix`
-
-**Risks & Considerations**:
-- **Initial effort**: Fixing existing violations will be time-consuming
-- **Breaking changes**: Auto-formatting might make git history messy (can be mitigated)
-- **Team alignment**: Team needs to agree on code style preferences
-- **Editor integration**: Developers need to configure editors for consistency
-
----
-
-## 5. PERFORMANCE OPTIMIZATION
-
-### 5.1 Optimize Canvas Rendering
+### 6.1 Optimize Canvas Rendering
 
 **Why?**
 - **CPU usage**: Canvas redraws on every ticker update, even when values unchanged
@@ -554,8 +581,8 @@ const attemptDelay = Math.min(
 - **Smoothness**: Rapid updates can cause visual glitches
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Lines 321-746: Canvas rendering logic
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js`
+  - Canvas rendering functions
 - **Implementation**:
   1. Implement dirty checking:
      - Store previous values for each context
@@ -582,7 +609,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 5.2 WebSocket Connection Pooling
+### 6.2 WebSocket Connection Pooling
 
 **Why?**
 - **Resource waste**: Each button subscription creates its own WebSocket connection
@@ -619,9 +646,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 6. FEATURE ENHANCEMENTS
+## 7. FEATURE ENHANCEMENTS
 
-### 6.1 Add TypeScript Support
+### 7.1 Add TypeScript Support
 
 **Why?**
 - **Type safety**: Catch type-related bugs at compile time
@@ -658,7 +685,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 6.2 Add Module Bundler
+### 7.2 Add Module Bundler
 
 **Why?**
 - **Plugin size**: Files loaded individually increase plugin size
@@ -696,9 +723,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 7. DOCUMENTATION & DEVELOPER EXPERIENCE
+## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
 
-### 7.1 Document Connection States and Troubleshooting
+### 8.1 Document Connection States and Troubleshooting
 
 **Why?**
 - **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
@@ -731,7 +758,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 7.2 Improve Build and Release Process
+### 8.2 Improve Build and Release Process
 
 **Why?**
 - **Manual process**: Current rsync and copy commands are error-prone
@@ -770,9 +797,9 @@ const attemptDelay = Math.min(
 
 ---
 
-## 8. USER EXPERIENCE IMPROVEMENTS
+## 9. USER EXPERIENCE IMPROVEMENTS
 
-### 8.1 Improve Property Inspector UI
+### 9.1 Improve Property Inspector UI
 
 **Why?**
 - **Overwhelming**: Dense form with 20+ options is intimidating for new users
@@ -804,7 +831,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 8.2 Improve Pair Selection UX
+### 9.2 Improve Pair Selection UX
 
 **Why?**
 - **Scale**: Binance has ~1500 pairs, making dropdown unusable
@@ -834,9 +861,31 @@ const attemptDelay = Math.min(
 
 ---
 
-## 9. CONFIGURATION & DATA MANAGEMENT
+## 10. CONFIGURATION & DATA MANAGEMENT
 
-### 9.1 Implement Configuration Validation
+### 10.1 Implement Configuration Validation ✅ PARTIALLY COMPLETED
+
+**Status:** Basic validation completed in improvements1 branch
+
+**What was done:**
+- Created comprehensive settings schema in `js/default-settings.js`
+- Automatic validation and normalization on settings load
+- Type checking, range clamping, enum validation
+- Graceful fallback to defaults for invalid values
+
+**What remains:**
+- Settings migration for version upgrades
+- Show validation errors in property inspector UI
+- Add JSON Schema export for documentation
+
+**Impact:**
+- Invalid settings no longer crash plugin
+- Automatic correction of out-of-range values
+- Foundation for better error messages
+
+---
+
+### 10.2 Implement Configuration Validation (Enhanced)
 
 **Why?**
 - **Crashes**: Invalid settings can crash the plugin
@@ -844,10 +893,10 @@ const attemptDelay = Math.min(
 - **Migration**: Old settings formats may be incompatible with new versions
 
 **What needs to be changed?**
-- **Create new file**: `com.courcelle.cryptoticker-dev.sdPlugin/js/settings-validator.js`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js` (expand validation)
 - **Files to update**:
-  - `js/ticker.js`: Validate settings on load
-  - `js/pi.js`: Validate before saving
+  - `js/ticker.js`: Use enhanced validation
+  - `js/pi.js`: Show validation errors in UI
 - **Implementation**:
   1. Define JSON Schema for settings structure
   2. Add validation library (e.g., `ajv`) or write custom validator
@@ -871,7 +920,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 9.2 Export/Import Configuration
+### 10.3 Export/Import Configuration
 
 **Why?**
 - **Backup**: Users want to backup their settings
@@ -905,7 +954,7 @@ const attemptDelay = Math.min(
 
 ---
 
-### 9.3 Adjust Polling and Timeout Defaults
+### 10.4 Adjust Polling and Timeout Defaults
 
 **Priority:** 🟡 Medium (affects user experience)
 
@@ -968,7 +1017,7 @@ const defaultConfig = {
 
 ---
 
-### 9.4 Document Symbol Transformation Rules
+### 10.5 Document Symbol Transformation Rules
 
 **Priority:** 🟢 Low (documentation)
 
@@ -1030,7 +1079,7 @@ const defaultConfig = {
 
 ---
 
-### 9.5 Clarify Alert Re-Arming Logic
+### 10.6 Clarify Alert Re-Arming Logic
 
 **Priority:** 🟡 Medium (affects alerts feature)
 
@@ -1118,7 +1167,7 @@ if (eval(settings["alertRule"])) {
 ```
 
 **What needs to be changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:609-626`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/alert-manager.js` (evaluateAlert function)
 - Initialize alert state on startup
 - Add optional cooldown mechanism
 - Consider user acknowledgement feature
@@ -1126,9 +1175,9 @@ if (eval(settings["alertRule"])) {
 
 ---
 
-## 10. CONNECTION & PROVIDER IMPROVEMENTS
+## 11. CONNECTION & PROVIDER IMPROVEMENTS
 
-### 10.1 Add Rate Limiting Protection
+### 11.1 Add Rate Limiting Protection
 
 **Priority:** 🟡 Medium (prevents API bans)
 
@@ -1222,7 +1271,7 @@ const RATE_LIMITS = {
 
 ---
 
-### 10.2 Improve Connection Status Communication
+### 11.2 Improve Connection Status Communication
 
 **Priority:** 🔴 High (user experience critical)
 
@@ -1305,9 +1354,9 @@ function onConnectionStateChange(context, oldState, newState) {
 
 ---
 
-## 11. ADVANCED FEATURES (FUTURE)
+## 12. ADVANCED FEATURES (FUTURE)
 
-### 10.1 Multi-Currency Portfolio Tracking
+### 12.1 Multi-Currency Portfolio Tracking
 
 **Why?**
 - **User need**: Users want to track total portfolio value across multiple assets
@@ -1341,7 +1390,7 @@ function onConnectionStateChange(context, oldState, newState) {
 
 ---
 
-### 10.2 Historical Data and Technical Indicators
+### 12.2 Historical Data and Technical Indicators
 
 **Why?**
 - **User demand**: Traders want to see trends and indicators
@@ -1375,68 +1424,198 @@ function onConnectionStateChange(context, oldState, newState) {
 
 ---
 
-## IMPLEMENTATION PRIORITY
+## NEW FILE STRUCTURE (improvements1 branch)
+
+The codebase has been refactored into a modular architecture:
+
+```
+com.courcelle.cryptoticker-dev.sdPlugin/
+├── js/
+│   ├── ticker.js (931 lines) - Main plugin logic
+│   │   └─→ Orchestrates all modules
+│   │
+│   ├── default-settings.js (335 lines) ✨ NEW
+│   │   └─→ Settings schema, validation, defaults
+│   │
+│   ├── ticker-state.js (134 lines) ✨ NEW
+│   │   └─→ Centralized state management
+│   │
+│   ├── alert-manager.js (98 lines) ✨ NEW
+│   │   └─→ Alert evaluation and armed state
+│   │
+│   ├── canvas-renderer.js (431 lines) ✨ NEW
+│   │   └─→ All canvas drawing functions
+│   │
+│   ├── settings-manager.js (88 lines) ✨ NEW
+│   │   └─→ Settings refresh and application
+│   │
+│   ├── formatters.js (115 lines) ✨ NEW
+│   │   └─→ Number formatting utilities
+│   │
+│   ├── pi.js - Property inspector
+│   ├── providers/ - Exchange provider modules
+│   └── ...
+│
+├── __tests__/ ✨ NEW
+│   ├── alert-manager.test.js
+│   ├── canvas-renderer.test.js
+│   ├── formatters.test.js
+│   ├── settings-manager.test.js
+│   ├── ticker-state.test.js
+│   └── ticker.test.js
+│
+├── .eslintrc.json ✨ NEW
+├── .prettierrc ✨ NEW
+├── .husky/pre-commit ✨ NEW
+└── ...
+```
+
+### Module Responsibilities:
+
+1. **default-settings.js** - Configuration
+   - Settings schema definition
+   - Type validation and normalization
+   - Range clamping and enum validation
+   - Default values
+
+2. **ticker-state.js** - State Management
+   - Context details storage
+   - Subscription tracking
+   - Connection states (LIVE/BACKUP/BROKEN/DETACHED)
+   - Conversion rates cache
+   - Candles cache
+
+3. **alert-manager.js** - Business Logic
+   - Alert rule evaluation (⚠️ still uses eval())
+   - Armed/disarmed state management
+   - Color swapping for alerts
+   - Alert re-arming logic
+
+4. **canvas-renderer.js** - Presentation
+   - Connection status icon rendering
+   - Ticker mode rendering
+   - Candles mode rendering
+   - Text and graphics drawing
+
+5. **settings-manager.js** - Integration
+   - Applies defaults to partial settings
+   - Refreshes settings on change
+   - Works in browser and Node.js
+
+6. **formatters.js** - Utilities
+   - Number formatting (full, compact, plain, auto)
+   - Locale-aware formatting
+   - Unit suffixes (K, M, B, T)
+   - Value normalization
+
+### Dependency Graph:
+```
+ticker.js
+  ├─→ default-settings.js (no deps)
+  ├─→ ticker-state.js (no deps)
+  ├─→ settings-manager.js
+  │     ├─→ ticker-state.js
+  │     └─→ default-settings.js
+  ├─→ formatters.js (no deps)
+  ├─→ alert-manager.js (no deps)
+  └─→ canvas-renderer.js
+        ├─→ alert-manager.js
+        └─→ formatters.js
+```
+
+---
+
+## IMPLEMENTATION PRIORITY (UPDATED)
 
 ### Phase 1: Critical Security & Stability (1-2 weeks)
-1. Replace `eval()` with safe expression parser (1.1)
+1. Replace `eval()` with safe expression parser (1.1) ⚠️ CRITICAL
 2. Fix global variable leak (1.2)
 3. Fix preview canvas volume bug (1.3)
 4. Harden canvas rendering (1.4)
 
-### Phase 2: Code Quality & Testing (2-3 weeks)
-1. Single source of truth for defaults (2.1)
-2. Expand test coverage (4.1)
-3. Add linting and formatting (4.2)
-4. Implement configuration validation (9.1)
+### Phase 2: Code Quality & Testing ✅ MOSTLY COMPLETED
+1. ✅ Single source of truth for defaults (2.1)
+2. ✅ Refactor monolithic ticker.js (2.2)
+3. ✅ Add linting and formatting (3.1)
+4. ✅ Basic test infrastructure (3.2)
+5. 🔄 Expand test coverage to >80% (3.2 - ongoing)
+6. ✅ Implement configuration validation (10.1 - basic)
 
 ### Phase 3: Error Handling & UX (2-3 weeks)
-1. Graceful network error handling (3.1)
-2. Improved error handling throughout (3.2)
-3. Add logging configuration (3.3)
-4. Document connection states (7.1)
+1. Graceful network error handling (5.1)
+2. Improved error handling throughout (5.2)
+3. Add logging configuration (5.3)
+4. Document connection states (8.1)
 
 ### Phase 4: Performance & Architecture (3-4 weeks)
-1. Implement bounded cache (2.3)
-2. Optimize canvas rendering (5.1)
-3. WebSocket connection pooling (5.2)
-4. Refactor monolithic ticker.js (2.2) - ongoing
+1. Optimize canvas rendering (6.1)
+2. WebSocket connection pooling (6.2)
+3. Implement exponential backoff (4.1)
 
 ### Phase 5: Build & Tooling (1-2 weeks)
-1. Add module bundler (6.2)
-2. Improve build and release process (7.2)
-3. Add TypeScript support (6.1) - ongoing
+1. Add module bundler (7.2)
+2. Improve build and release process (8.2)
+3. Add TypeScript support (7.1) - ongoing
 
 ### Phase 6: Enhanced UX (2-3 weeks)
-1. Improve property inspector UI (8.1)
-2. Improve pair selection UX (8.2)
-3. Export/import configuration (9.2)
+1. Improve property inspector UI (9.1)
+2. Improve pair selection UX (9.2)
+3. Export/import configuration (10.3)
 
 ### Phase 7: Advanced Features (4-6 weeks)
-1. Multi-currency portfolio tracking (10.1)
-2. Historical data and technical indicators (10.2)
+1. Multi-currency portfolio tracking (12.1)
+2. Historical data and technical indicators (12.2)
 
 ---
 
 ## SUMMARY
 
-**Total Improvements Identified**: 25 main items across 10 categories
+**Total Improvements Identified**: 30+ items across 12 categories
 
-**Critical Priority**: 4 items (security and stability)
-**High Priority**: 8 items (architecture, testing, error handling)
-**Medium Priority**: 9 items (performance, UX, documentation)
-**Low Priority**: 4 items (advanced features for future)
+**Completed in improvements1 branch**: ✅
+- Modularization (2.2) - Reduced ticker.js from 1,430 to 931 lines
+- Default settings consolidation (2.1) - Centralized validation
+- Linting and formatting (3.1) - ESLint + Prettier + pre-commit hooks
+- Basic test infrastructure (3.2) - Tests for all modules
+- Candles duration display fix (UI improvement)
+- Basic configuration validation (10.1)
 
-**Estimated Total Effort**: 20-30 weeks of focused development
+**Critical Priority** (Next):
+- Replace eval() with safe parser (1.1) ⚠️ SECURITY CRITICAL
 
-**Key Risks**:
-- Breaking changes requiring user migration
-- Build complexity with TypeScript and bundler
-- Testing infrastructure needs significant investment
-- Large refactoring effort for monolithic files
+**High Priority**:
+- Expand test coverage to >80% (3.2)
+- Error handling improvements (5.1, 5.2)
+- Canvas rendering hardening (1.4)
+
+**Medium Priority**:
+- Performance optimizations (6.1, 6.2)
+- UX improvements (9.1, 9.2)
+- Documentation (8.1)
+
+**Low Priority**:
+- Advanced features (12.1, 12.2)
+
+**Estimated Remaining Effort**: 15-20 weeks
+
+**Key Achievements**:
+- ✅ Clean modular architecture
+- ✅ Comprehensive settings validation
+- ✅ Centralized state management
+- ✅ Professional development tooling
+- ✅ Foundation for robust testing
+
+**Remaining Key Risks**:
+- ⚠️ eval() security vulnerability (critical)
+- Testing coverage still low (~10-15%)
+- Build complexity when adding bundler
+- TypeScript migration effort
 
 **Success Metrics**:
-- Zero `eval()` usage (security)
-- >80% test coverage (quality)
-- <5 sec property inspector load time (UX)
-- <100 MB plugin memory footprint after 24h (performance)
-- <10 support tickets per month about errors (reliability)
+- ✅ Reduced code complexity (35% reduction in main file)
+- ✅ Consistent code style (linting + formatting)
+- 🔄 Test coverage: 10-15% → target 80%
+- ⚠️ eval() usage: 1 instance → target 0
+- Target: <5 sec property inspector load time
+- Target: <100 MB plugin memory footprint after 24h
+- Target: <10 support tickets per month about errors
