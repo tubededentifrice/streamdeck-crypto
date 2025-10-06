@@ -4,6 +4,10 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ---
 
+Hi, We would just like to forward some feedback regarding the Crypto Ticker PRO plugin for Stream Deck to bring it up to date with our current documentation: - The icons for Category and actions will need to be swapped to white stroke (#FFFFFF), you can read more in our documentation here: https://docs.elgato.com/guidelines/streamdeck/plugins/images-and-layouts#actions - It would also be great to get a more detailed description and some media for the product page to really showcase the plugin and its functionality For now we can approve the current version and you can make the changes in a further version Thanks again!
+
+---
+
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
 
 ### 2.5 Implement Exponential Backoff for Reconnections
