@@ -559,6 +559,21 @@ const tickerAction = {
                 break;
         }
     },
+    /**
+     * Sanitizes and normalizes ticker values by parsing numeric fields, validating input, and extracting key metadata.
+     *
+     * @param {Object} values - The raw ticker values object to sanitize. May contain price, volume, timestamp, and other fields.
+     * @returns {Object} An object with the following structure:
+     *   {
+     *     values: {Object} - The sanitized values with numeric fields parsed and normalized.
+     *     hasAny: {boolean} - True if any value is present after sanitization.
+     *     hasCritical: {boolean} - True if any critical value (e.g., price, close) is present and valid.
+     *     timestamp: {number|null} - The normalized timestamp (in ms since epoch) if available, otherwise null.
+     *   }
+     *
+     * The function handles parsing of numeric fields, checks for the presence of critical values,
+     * and normalizes the timestamp field if present. Used to ensure ticker data is in a consistent format.
+     */
     sanitizeTickerValues: function (values) {
         if (!values || typeof values !== "object") {
             return {
