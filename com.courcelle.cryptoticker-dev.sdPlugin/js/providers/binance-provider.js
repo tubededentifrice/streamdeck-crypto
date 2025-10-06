@@ -116,6 +116,7 @@
             this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
 
             this.wsRequestId = 0;
+            // Binance multi-stream socket; pool keeps connection alive and muxes symbols.
             this.webSocketPool = new WebSocketConnectionPool({
                 logger: (...args) => {
                     this.logger(...args);
@@ -274,6 +275,7 @@
             return true;
         }
 
+        // Binance tickers usually end with USDT; remap PI-friendly USD symbols to live endpoints.
         resolveSymbol(params) {
             if (!params) {
                 return null;
@@ -377,6 +379,7 @@
                 return;
             }
 
+            // Mark stream healthy so pool does not re-request subscription on reconnect.
             helpers.markSubscribed(symbol);
             helpers.dispatch(symbol, payload, message);
         }

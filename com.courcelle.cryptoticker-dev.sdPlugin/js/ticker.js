@@ -36,6 +36,7 @@ function resolveGlobalConfig() {
     return null;
 }
 
+// Normalize PI/runtime currency values; accept null/number so stale settings do not crash.
 function normalizeCurrencyCode(value) {
     if (typeof value === "string") {
         const trimmed = value.trim();
@@ -64,6 +65,7 @@ const messageConfig = Object.assign({}, DEFAULT_MESSAGE_CONFIG, (runtimeConfig &
 
 const subscriptionKeyModule = requireOrNull("./providers/subscription-key");
 const globalProviders = typeof CryptoTickerProviders !== "undefined" ? CryptoTickerProviders : null;
+// Local fallback keeps subscription key format stable when provider bundle missing (tests/preview).
 const buildSubscriptionKey = subscriptionKeyModule && subscriptionKeyModule.buildSubscriptionKey
     ? subscriptionKeyModule.buildSubscriptionKey
     : globalProviders && typeof globalProviders.buildSubscriptionKey === "function"
@@ -140,6 +142,7 @@ const tickerAction = {
 
     getProviderRegistry: function () {
         if (!providerRegistrySingleton) {
+            // Lazy-load to avoid pulling heavy providers in PI/tests yet keep runtime behavior.
             const providerRegistryModule = requireOrNull("./providers/provider-registry");
             const ProviderRegistryClass = providerRegistryModule && providerRegistryModule.ProviderRegistry
                 ? providerRegistryModule.ProviderRegistry
@@ -243,6 +246,7 @@ const tickerAction = {
         }
 
         if (current && typeof current.unsubscribe === "function") {
+            // Tear down previous sub; lingering sockets pile up when switching pairs.
             try {
                 current.unsubscribe();
             } catch (err) {
@@ -313,6 +317,7 @@ const tickerAction = {
         return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
     },
 
+    // Decide if conversion required; when override empty or same currency return `to:null` so later steps skip it.
     resolveConversionCurrencies: function (fromCurrency, toCurrency) {
         const resolvedFrom = normalizeCurrencyCode(fromCurrency) || "USD";
         const resolvedTo = normalizeCurrencyCode(toCurrency);
@@ -347,6 +352,7 @@ const tickerAction = {
         }
 
         if (cacheEntry.promise) {
+            // Reuse pending fetch (avoids rate spam); swallow failure so next call can retry.
             try {
                 return await cacheEntry.promise;
             } catch (promiseErr) {
@@ -436,6 +442,7 @@ const tickerAction = {
         return this.applyTickerConversion(tickerValues, rate, currencies.from, currencies.to);
     },
 
+    // Strip numeric fields when conversion fails so UI shows metadata + error text only.
     createConversionErrorValues: function (tickerValues) {
         const errorValues = Object.assign({}, tickerValues);
         const numericKeys = [
@@ -461,6 +468,7 @@ const tickerAction = {
         return errorValues;
     },
 
+    // Multiply numeric fields; parse strings since providers emit them during outages.
     applyTickerConversion: function (tickerValues, rate, fromCurrency, toCurrency) {
         if (!tickerValues || typeof tickerValues !== "object") {
             return tickerValues;
@@ -496,6 +504,7 @@ const tickerAction = {
         return converted;
     },
 
+    // Clone candles before scaling prices/quote volume; avoid mutating shared cache.
     applyCandlesConversion: function (candles, rate) {
         if (!Array.isArray(candles) || !rate || !isFinite(rate) || rate <= 0) {
             return candles;
@@ -677,6 +686,7 @@ const tickerAction = {
         const isBroken = effectiveConnectionState === connectionStates.BROKEN;
         const liveLikeStates = [connectionStates.LIVE, connectionStates.BACKUP, connectionStates.DETACHED];
         const isConnectionLiveLike = liveLikeStates.indexOf(effectiveConnectionState) !== -1;
+        // Detect exchange "zero" payloads; mark misconfig only when link degraded so we still recover on open.
         const looksLikeEmptyTicker = sanitizedResult.hasCritical
             && Number.isFinite(sanitizedValues.last)
             && sanitizedValues.last === 0

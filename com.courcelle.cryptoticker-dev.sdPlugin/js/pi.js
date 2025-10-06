@@ -10,6 +10,7 @@ var websocket = null,
 
 const expressionEvaluatorModule = typeof CryptoTickerExpressionEvaluator !== "undefined" ? CryptoTickerExpressionEvaluator : null;
 
+// Separate evaluator instances so alert + color allowlists stay isolated.
 const expressionEvaluatorInstances = (function() {
     if (!expressionEvaluatorModule) {
         return {
@@ -189,6 +190,7 @@ function buildStaleDataMessage(timestamp) {
     return "Showing cached data from " + formatted + ". Data may be outdated.";
 }
 
+// Centralize dropdown loading/warning UX for providers/pairs/currencies so fetch code stays lean.
 const networkStatusManager = (function() {
     const config = {
         providers: {
@@ -335,6 +337,7 @@ const networkStatusManager = (function() {
     };
 }());
 
+// Generic exponential backoff helper for PI fetches; smooths proxy hiccups.
 async function fetchJsonWithRetry(url, options) {
     const opts = options || {};
     const attempts = Math.max(1, opts.attempts || FETCH_MAX_ATTEMPTS);
@@ -376,6 +379,7 @@ async function fetchJsonWithRetry(url, options) {
     throw lastError || new Error("Request failed");
 }
 
+// Normalize pair payloads into {value, symbol, display} regardless of backend format.
 function normalizePairsList(pairs) {
     return (pairs || []).map(function(item) {
         if (!item) {

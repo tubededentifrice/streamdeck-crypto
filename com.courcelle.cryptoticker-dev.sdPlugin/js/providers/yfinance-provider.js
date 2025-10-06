@@ -16,6 +16,9 @@
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
 
+    // Passive wrapper that delegates to the generic provider until Yahoo's
+    // APIs are wired up. Keeping it as a dedicated class avoids breaking the
+    // registry contract when the real implementation lands.
     class YFinanceProvider extends ProviderInterface {
         constructor(options) {
             super(options);

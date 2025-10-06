@@ -7,6 +7,9 @@
         root.CryptoTickerFormatters = factory();
     }
 }(typeof self !== "undefined" ? self : this, function () {
+    // Entry point used by both the plugin and PI to print numbers. Handles
+    // localization, optional scaling (multiplier), and compact suffixes while
+    // staying resilient to bogus input from upstream providers.
     function getRoundedValue(value, digits, multiplier, format) {
         const formatOption = format || "auto";
         let precision = parseInt(digits);
@@ -100,6 +103,9 @@
         return sign + formattedValue;
     }
 
+    // Maps a raw numeric value into a [0,1] domain. Used for price cursors on
+    // the high/low bar; guard against `min === max` to avoid a divide-by-zero
+    // when exchanges deliver flat data.
     function normalizeValue(value, min, max) {
         if (max - min === 0) {
             return 0.5;

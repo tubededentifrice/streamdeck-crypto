@@ -18,6 +18,8 @@
 
         return list.map(function (value) {
             const display = (value || "").toUpperCase();
+            // Bitfinex uses ":" separators for derivatives. Strip punctuation
+            // so the value matches what the provider expects when subscribing.
             const sanitized = display.replace(/[:/]/g, "");
             return {
                 value: display,

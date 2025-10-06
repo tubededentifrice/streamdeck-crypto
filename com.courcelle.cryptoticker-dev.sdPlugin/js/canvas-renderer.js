@@ -430,12 +430,14 @@
         const changePercent = changeDailyPercentValue !== null ? changeDailyPercentValue * 100 : null;
 
         const dataState = typeof dataStateRaw === "string" ? dataStateRaw.toLowerCase() : "live";
+        // Draw small indicator on stale/missing so user knows why price frozen.
         const degradedColor = dataState === "stale"
             ? "#f6a623"
             : dataState === "missing"
                 ? "#d9534f"
                 : null;
 
+        // Alerts may swap colors; do this before color rules so expressions see alert palette.
         const alertEvaluation = alertManager.evaluateAlert({
             context: context,
             settings: settings,
@@ -448,6 +450,7 @@
         backgroundColor = alertEvaluation.backgroundColor;
         textColor = alertEvaluation.textColor;
 
+        // Color rules read both values and palette (supports `alert ? '#ff0000' : defaultBackgroundColor`).
         const baseColorContext = expressionEvaluator.buildContext(values, {
             alert: alert,
             backgroundColor: backgroundColor,
@@ -457,6 +460,7 @@
         });
 
         if (settings["backgroundColorRule"]) {
+            // Allow expressions to repaint background (e.g. by change %); log but continue on errors.
             try {
                 const result = colorRuleEvaluator.evaluate(settings["backgroundColorRule"], baseColorContext);
                 const stringResult = String(result || "").trim();
@@ -671,6 +675,7 @@
     const backgroundColor = settings["backgroundColor"] || "#000000";
     const textColor = settings["textColor"] || "#ffffff";
 
+    // Upstream already normalizes; keep only newest N candles so 144x144 key stays readable.
     const candlesToDisplay = candlesNormalized.slice(-getCandlesDisplayCount(settings));
     const candleCount = candlesToDisplay.length;
     const paddingWidth = canvasWidth - (2 * padding);
@@ -700,6 +705,7 @@
         canvasContext.moveTo(xPosition, highPosition);
         canvasContext.lineTo(xPosition, lowPosition);
         canvasContext.lineWidth = wickWidth;
+        // Green/up vs red/down; compare percents so flat candles render consistently.
         canvasContext.strokeStyle = candleNormalized.closePercent > candleNormalized.openPercent ? "#1c9900" : "#a10";
         canvasContext.stroke();
 

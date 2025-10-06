@@ -9,6 +9,8 @@
 }(typeof self !== "undefined" ? self : this, function () {
     function noop() {}
 
+    // Abstract base class shared by all exchange integrations. Keeping the
+    // shape centralized helps the ticker action treat providers polymorphically.
     class ProviderInterface {
         constructor(options) {
             const opts = options || {};
