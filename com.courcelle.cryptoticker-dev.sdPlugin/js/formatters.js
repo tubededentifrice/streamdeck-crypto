@@ -46,6 +46,7 @@
                 break;
             }
             case "compact": {
+                // T=trillion, B=billion, M=million, K=thousand; pick largest threshold that fits.
                 const units = [
                     { value: 1000000000000, suffix: "T" },
                     { value: 1000000000, suffix: "B" },
@@ -81,6 +82,7 @@
             }
             case "auto":
             default: {
+                // Legacy auto mode: add K suffix above 100k threshold only.
                 let autoSuffix = "";
                 let autoValue = absoluteValue;
                 if (absoluteValue > 100000) {
@@ -101,7 +103,7 @@
         return sign + formattedValue;
     }
 
-    // Normalize into [0,1] for price cursors; guard against flat `min === max` ranges.
+    // Normalize into [0,1] for price cursors; clamp to 0.5 when min==max prevents divide-by-zero.
     function normalizeValue(value, min, max) {
         if (max - min === 0) {
             return 0.5;

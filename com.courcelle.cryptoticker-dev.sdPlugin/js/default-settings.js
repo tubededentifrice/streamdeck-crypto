@@ -120,6 +120,7 @@
         };
     }
 
+    // Schema defines type, default, and normalize fn for each setting; drives validation + coercion.
     const settingsSchema = {
         title: {
             type: "string",
@@ -303,6 +304,7 @@
             }
         }
 
+        // Pass-through unknown keys so future settings remain after downgrade.
         for (const extraKey in provided) {
             if (!Object.prototype.hasOwnProperty.call(settingsSchema, extraKey) && Object.prototype.hasOwnProperty.call(provided, extraKey)) {
                 normalized[extraKey] = provided[extraKey];

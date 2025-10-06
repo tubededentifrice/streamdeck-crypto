@@ -504,6 +504,7 @@
 
         const pairBaselineY = 25 * sizeMultiplier;
         let pairTextX = textPadding;
+        // Degraded dot stays visible even under alert colors so user knows data is frozen.
         if (degradedColor) {
             const indicatorRadius = 5 * sizeMultiplier;
             const indicatorCenterX = textPadding + indicatorRadius;
@@ -675,6 +676,7 @@
     const candleCount = candlesToDisplay.length;
     const paddingWidth = canvasWidth - (2 * padding);
     const paddingHeight = canvasHeight - (2 * padding);
+    // Divide available width by candle count; wick/body ratios keep visuals balanced at small sizes.
     const candleWidth = candleCount > 0 ? paddingWidth / candleCount : paddingWidth;
     const wickWidth = Math.max(2 * sizeMultiplier, candleWidth * 0.15);
     const bodyWidth = Math.max(4 * sizeMultiplier, candleWidth * 0.6);

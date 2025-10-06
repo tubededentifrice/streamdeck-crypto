@@ -444,6 +444,7 @@ function getDefaultSettingsSnapshot() {
 }
 
 const defaultSettings = getDefaultSettingsSnapshot();
+// Maps setting keys to DOM elements, default values, and optional getValue/setValue overrides for non-standard controls.
 const settingsConfig = {
     "title": {
         "default": defaultSettings.title,
@@ -645,6 +646,7 @@ const pi = {
         }
     },
 
+    // Parse + evaluate expressions against sample context; report syntax, runtime, Inf/NaN errors.
     validateRuleExpressions: function(settings) {
         const result = {
             hasErrors: false,

@@ -134,6 +134,7 @@
     return wrapped;
   };
 
+  // Parse + cache compiled AST; cache persists until plugin restart so repeated evals stay fast.
   ExpressionEvaluator.prototype._getCacheEntry = function (expression) {
     const normalized = this._normalizeExpression(expression);
     if (!normalized) {
