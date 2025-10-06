@@ -4,6 +4,7 @@ const tickerState = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticke
 const connectionStates = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/providers/connection-states.js");
 const runtimeConfig = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/config.js");
 const messageConfig = runtimeConfig.messages || {};
+const EXPIRED_CACHE_OFFSET_MS = 61 * 60 * 1000;
 
 test("subscription key builds with conversion", () => {
     const key = ticker.getSubscriptionContextKey("BITFINEX", "BTCUSD", "USD", "EUR");
@@ -153,7 +154,7 @@ test("getConversionRate refreshes after cache expiry", async () => {
         expect(first).toBeCloseTo(2.0);
 
         const cacheEntry = tickerState.getOrCreateConversionRateEntry("USD_JPY");
-        cacheEntry.fetchedAt = Date.now() - (61 * 60 * 1000);
+        cacheEntry.fetchedAt = Date.now() - EXPIRED_CACHE_OFFSET_MS;
 
         const second = await ticker.getConversionRate("USD", "JPY");
         expect(second).toBeCloseTo(3.0);

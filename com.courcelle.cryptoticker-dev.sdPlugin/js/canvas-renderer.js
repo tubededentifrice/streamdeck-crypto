@@ -185,6 +185,16 @@
     canvasContext.restore();
     }
 
+    function drawPriceCursorTriangle(canvasContext, cursorPositionX, lineY, triangleSide, fillStyle) {
+        const triangleHeight = Math.sqrt(0.75 * Math.pow(triangleSide, 2));
+        canvasContext.beginPath();
+        canvasContext.moveTo(cursorPositionX - (triangleSide / 2), lineY - (triangleHeight / 3));
+        canvasContext.lineTo(cursorPositionX + (triangleSide / 2), lineY - (triangleHeight / 3));
+        canvasContext.lineTo(cursorPositionX, lineY + (triangleHeight * 2 / 3));
+        canvasContext.fillStyle = fillStyle;
+        canvasContext.fill();
+    }
+
     function splitMessageIntoLines(canvasContext, message, maxWidth, font) {
         if (!message && message !== 0) {
             return [""];
@@ -596,7 +606,6 @@
                 const cursorPositionX = padding + Math.round(lineLength * percent);
 
                 const triangleSide = 12 * sizeMultiplier;
-                const triangleHeight = Math.sqrt(3 / 4 * Math.pow(triangleSide, 2));
 
                 canvasContext.beginPath();
                 canvasContext.moveTo(padding, lineY);
@@ -612,12 +621,7 @@
                 canvasContext.strokeStyle = "red";
                 canvasContext.stroke();
 
-                canvasContext.beginPath();
-                canvasContext.moveTo(cursorPositionX - (triangleSide / 2), lineY - (triangleHeight / 3));
-                canvasContext.lineTo(cursorPositionX + (triangleSide / 2), lineY - (triangleHeight / 3));
-                canvasContext.lineTo(cursorPositionX, lineY + (triangleHeight * 2 / 3));
-                canvasContext.fillStyle = textColor;
-                canvasContext.fill();
+                drawPriceCursorTriangle(canvasContext, cursorPositionX, lineY, triangleSide, textColor);
             }
         }
 

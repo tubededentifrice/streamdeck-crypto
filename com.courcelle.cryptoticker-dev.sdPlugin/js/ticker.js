@@ -619,7 +619,8 @@ const tickerAction = {
         let timestamp = null;
         for (let i = 0; i < timestampCandidateKeys.length; i++) {
             const key = timestampCandidateKeys[i];
-            if (!Object.prototype.hasOwnProperty.call(values, key)) {
+            const hasValueKey = Object.hasOwn ? Object.hasOwn(values, key) : key in values;
+            if (!hasValueKey) {
                 continue;
             }
             const parsed = parseNumeric(values[key], null, true);

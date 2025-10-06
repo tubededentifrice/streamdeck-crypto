@@ -105,11 +105,60 @@ const pairSearchFeedback = document.getElementById("pair-search-feedback");
 const FETCH_TIMEOUT_MS = 10000;
 const FETCH_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 600;
+const MAX_RETRY_DELAY_MS = 5000;
 
 function wait(ms) {
     return new Promise(function(resolve) {
         setTimeout(resolve, ms);
     });
+}
+
+function safeInvokeRetryCallback(callback, payload, label) {
+    if (typeof callback !== "function") {
+        return;
+    }
+    try {
+        callback(payload);
+    } catch (callbackErr) {
+        console.error("fetchJsonWithRetry " + label + " failed", callbackErr);
+    }
+}
+
+function createAbortControllerWithTimeout(timeout) {
+    if (typeof AbortController === "undefined") {
+        return {
+            controller: null,
+            timerId: null
+        };
+    }
+
+    const controller = new AbortController();
+    const timerId = setTimeout(function() {
+        controller.abort();
+    }, timeout);
+
+    return {
+        controller: controller,
+        timerId: timerId
+    };
+}
+
+function clearAbortTimer(timerId) {
+    if (timerId) {
+        clearTimeout(timerId);
+    }
+}
+
+async function performJsonFetch(url, controller, baseFetchOptions) {
+    const fetchOptions = Object.assign({}, baseFetchOptions || {});
+    if (controller) {
+        fetchOptions.signal = controller.signal;
+    }
+    const response = await fetch(url, fetchOptions);
+    if (!response.ok) {
+        throw new Error("Request failed with status " + response.status);
+    }
+    return response.json();
 }
 
 function formatCacheTimestamp(timestamp) {
@@ -284,71 +333,36 @@ async function fetchJsonWithRetry(url, options) {
     let lastError = null;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
-        if (typeof opts.onAttemptStart === "function") {
-            try {
-                opts.onAttemptStart({
-                    attempt: attempt,
-                    maxAttempts: attempts
-                });
-            } catch (callbackErr) {
-                console.error("fetchJsonWithRetry onAttemptStart failed", callbackErr);
-            }
-        }
+        safeInvokeRetryCallback(opts.onAttemptStart, {
+            attempt: attempt,
+            maxAttempts: attempts
+        }, "onAttemptStart");
 
-        let controller = null;
-        let timerId = null;
-
-        if (typeof AbortController !== "undefined") {
-            controller = new AbortController();
-            timerId = setTimeout(function() {
-                controller.abort();
-            }, timeout);
-        }
+        const abortContext = createAbortControllerWithTimeout(timeout);
 
         try {
-            const fetchOptions = Object.assign({}, opts.fetchOptions || {});
-            if (controller) {
-                fetchOptions.signal = controller.signal;
-            }
-            const response = await fetch(url, fetchOptions);
-            if (timerId) {
-                clearTimeout(timerId);
-            }
-            if (!response.ok) {
-                throw new Error("Request failed with status " + response.status);
-            }
-            return await response.json();
+            const fetchOptions = opts.fetchOptions || {};
+            const result = await performJsonFetch(url, abortContext.controller, fetchOptions);
+            clearAbortTimer(abortContext.timerId);
+            return result;
         } catch (err) {
-            if (timerId) {
-                clearTimeout(timerId);
-            }
             lastError = err;
-            if (typeof opts.onAttemptError === "function") {
-                try {
-                    opts.onAttemptError({
-                        attempt: attempt,
-                        maxAttempts: attempts,
-                        error: err
-                    });
-                } catch (callbackErr) {
-                    console.error("fetchJsonWithRetry onAttemptError failed", callbackErr);
-                }
-            }
+            clearAbortTimer(abortContext.timerId);
+            safeInvokeRetryCallback(opts.onAttemptError, {
+                attempt: attempt,
+                maxAttempts: attempts,
+                error: err
+            }, "onAttemptError");
 
             if (attempt < attempts) {
-                const delay = Math.min(5000, (opts.retryBaseDelay || RETRY_BASE_DELAY_MS) * Math.pow(2, attempt - 1));
+                const delayBase = opts.retryBaseDelay || RETRY_BASE_DELAY_MS;
+                const delay = Math.min(MAX_RETRY_DELAY_MS, delayBase * Math.pow(2, attempt - 1));
                 await wait(delay);
             }
         }
     }
 
-    if (typeof opts.onFinalFailure === "function") {
-        try {
-            opts.onFinalFailure({ error: lastError });
-        } catch (callbackErr) {
-            console.error("fetchJsonWithRetry onFinalFailure failed", callbackErr);
-        }
-    }
+    safeInvokeRetryCallback(opts.onFinalFailure, { error: lastError }, "onFinalFailure");
 
     throw lastError || new Error("Request failed");
 }
