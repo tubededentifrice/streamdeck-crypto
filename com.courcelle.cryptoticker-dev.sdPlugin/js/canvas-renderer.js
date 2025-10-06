@@ -7,22 +7,24 @@
             require("./alert-manager"),
             require("./formatters"),
             require("./expression-evaluator"),
-            require("./constants")
+            require("./constants"),
+            require("./connection-status-icons")
         ]
         : [
             root === null || root === void 0 ? void 0 : root.CryptoTickerAlertManager,
             root === null || root === void 0 ? void 0 : root.CryptoTickerFormatters,
             root === null || root === void 0 ? void 0 : root.CryptoTickerExpressionEvaluator,
-            root === null || root === void 0 ? void 0 : root.CryptoTickerConstants
+            root === null || root === void 0 ? void 0 : root.CryptoTickerConstants,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerConnectionStatusIcons
         ];
-    const exportsValue = factory(dependencyArgs[0], dependencyArgs[1], dependencyArgs[2], dependencyArgs[3]);
+    const exportsValue = factory(dependencyArgs[0], dependencyArgs[1], dependencyArgs[2], dependencyArgs[3], dependencyArgs[4]);
     if (typeof module === "object" && module.exports) {
         module.exports = exportsValue;
     }
     if (root && typeof root === "object") {
         root.CryptoTickerCanvasRenderer = exportsValue;
     }
-}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator, constants) {
+}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator, constants, connectionStatusIcons) {
     if (!alertManager) {
         throw new Error("Alert manager dependency is missing");
     }
@@ -54,6 +56,10 @@
         });
     }
     const colorRuleEvaluator = createColorRuleEvaluator();
+    const connectionStatusIconsModule = connectionStatusIcons && typeof connectionStatusIcons === "object" ? connectionStatusIcons : null;
+    const renderConnectionStatusIcon = connectionStatusIconsModule && typeof connectionStatusIconsModule.renderConnectionStatusIcon === "function"
+        ? connectionStatusIconsModule.renderConnectionStatusIcon
+        : function renderConnectionStatusIconFallback() { };
     function getCanvasSizeMultiplier(canvasWidth, canvasHeight) {
         return Math.max(canvasWidth / 144, canvasHeight / 144);
     }
@@ -63,128 +69,6 @@
             return 20;
         }
         return Math.min(60, Math.max(5, parsed));
-    }
-    function renderConnectionStatusIcon(params) {
-        const canvasContext = params.canvasContext;
-        const canvas = params.canvas;
-        const state = params.state;
-        const color = params.color;
-        const sizeMultiplier = params.sizeMultiplier;
-        const position = params.position;
-        const connectionStates = params.connectionStates;
-        if (!state) {
-            return;
-        }
-        const pos = (position || "OFF").toUpperCase();
-        if (pos === "OFF") {
-            return;
-        }
-        const iconState = String(state).toLowerCase();
-        const iconSize = 20 * sizeMultiplier;
-        const margin = 4 * sizeMultiplier;
-        let x = canvas.width - iconSize - margin;
-        let y = margin;
-        if (pos === "BOTTOM_LEFT") {
-            x = margin;
-            y = canvas.height - iconSize - margin;
-        }
-        canvasContext.save();
-        canvasContext.translate(x, y);
-        canvasContext.lineWidth = Math.max(1.5 * sizeMultiplier, 1);
-        canvasContext.strokeStyle = color;
-        canvasContext.fillStyle = color;
-        function drawPolygon(points) {
-            if (!Array.isArray(points) || points.length === 0) {
-                return;
-            }
-            canvasContext.beginPath();
-            for (let i = 0; i < points.length; i++) {
-                const pt = points[i];
-                const px = pt[0] * iconSize;
-                const py = pt[1] * iconSize;
-                if (i === 0) {
-                    canvasContext.moveTo(px, py);
-                }
-                else {
-                    canvasContext.lineTo(px, py);
-                }
-            }
-            canvasContext.closePath();
-            canvasContext.fill();
-        }
-        if (iconState === connectionStates.LIVE) {
-            drawPolygon([
-                [0.7545784909869392, 0],
-                [0.18263591551829597, 0.5685964091677761],
-                [0.3947756629367107, 0.5685964091677761],
-                [0.23171302126434715, 1],
-                [0.8173281041988991, 0.43136761054941897],
-                [0.6051523764976793, 0.43136761054941897]
-            ]);
-        }
-        else if (iconState === connectionStates.DETACHED) {
-            drawPolygon([
-                [0.0, 0.45], [0.4, 0.45], [0.4, 0.6], [0.0, 0.6]
-            ]);
-            drawPolygon([
-                [0.6, 0.45], [1.0, 0.45], [1.0, 0.6], [0.6, 0.6]
-            ]);
-        }
-        else if (iconState === connectionStates.BACKUP) {
-            drawPolygon([
-                [0.0, 0.3], [0.4, 0.3], [0.4, 0.38], [0.0, 0.38]
-            ]);
-            drawPolygon([
-                [0.6, 0.3], [1.0, 0.3], [1.0, 0.38], [0.6, 0.38]
-            ]);
-            drawPolygon([
-                [0.0, 0.62], [0.4, 0.62], [0.4, 0.7], [0.0, 0.7]
-            ]);
-            drawPolygon([
-                [0.6, 0.62], [1.0, 0.62], [1.0, 0.7], [0.6, 0.7]
-            ]);
-        }
-        else if (iconState === connectionStates.BROKEN) {
-            // Draw a red broken heart icon with visible separation
-            canvasContext.save();
-            canvasContext.fillStyle = "#ff0000"; // Red color for broken state
-            // Draw left half of broken heart (shifted left and down)
-            canvasContext.beginPath();
-            // Start at jagged break edge
-            canvasContext.moveTo(iconSize * 0.46, iconSize * 0.32);
-            canvasContext.lineTo(iconSize * 0.42, iconSize * 0.38);
-            canvasContext.lineTo(iconSize * 0.46, iconSize * 0.44);
-            canvasContext.lineTo(iconSize * 0.41, iconSize * 0.50);
-            // Left bottom point
-            canvasContext.lineTo(iconSize * 0.43, iconSize * 0.88);
-            canvasContext.lineTo(iconSize * 0.30, iconSize * 0.73);
-            // Left outer curve
-            canvasContext.lineTo(iconSize * 0.18, iconSize * 0.62);
-            canvasContext.bezierCurveTo(iconSize * 0.08, iconSize * 0.52, iconSize * 0.08, iconSize * 0.38, iconSize * 0.15, iconSize * 0.28);
-            // Left top arc
-            canvasContext.bezierCurveTo(iconSize * 0.25, iconSize * 0.16, iconSize * 0.40, iconSize * 0.20, iconSize * 0.46, iconSize * 0.32);
-            canvasContext.closePath();
-            canvasContext.fill();
-            // Draw right half of broken heart (shifted right and up)
-            canvasContext.beginPath();
-            // Start at jagged break edge (offset from left)
-            canvasContext.moveTo(iconSize * 0.54, iconSize * 0.28);
-            canvasContext.lineTo(iconSize * 0.58, iconSize * 0.34);
-            canvasContext.lineTo(iconSize * 0.54, iconSize * 0.40);
-            canvasContext.lineTo(iconSize * 0.59, iconSize * 0.46);
-            // Right bottom point
-            canvasContext.lineTo(iconSize * 0.57, iconSize * 0.84);
-            canvasContext.lineTo(iconSize * 0.70, iconSize * 0.69);
-            // Right outer curve
-            canvasContext.lineTo(iconSize * 0.82, iconSize * 0.58);
-            canvasContext.bezierCurveTo(iconSize * 0.92, iconSize * 0.48, iconSize * 0.92, iconSize * 0.34, iconSize * 0.85, iconSize * 0.24);
-            // Right top arc
-            canvasContext.bezierCurveTo(iconSize * 0.75, iconSize * 0.12, iconSize * 0.60, iconSize * 0.16, iconSize * 0.54, iconSize * 0.28);
-            canvasContext.closePath();
-            canvasContext.fill();
-            canvasContext.restore();
-        }
-        canvasContext.restore();
     }
     /**
      * Draw the equilateral price cursor at the given anchor; uses equilateral geometry to center base and tip.

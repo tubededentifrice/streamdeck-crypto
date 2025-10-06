@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment, no-var, @typescript-eslint/no-this-alias */
 // @ts-nocheck
 // Global Stream Deck websocket plus plugin metadata snapshot.
-/* global CryptoTickerExpressionEvaluator */
+/* global CryptoTickerExpressionEvaluator, CryptoTickerConnectionStates, CryptoTickerConnectionStatusIcons */
 /* exported connectElgatoStreamDeckSocket */
 
 var websocket = null,
@@ -10,6 +10,13 @@ var websocket = null,
 
 
 const expressionEvaluatorModule = typeof CryptoTickerExpressionEvaluator !== "undefined" ? CryptoTickerExpressionEvaluator : null;
+const connectionStatesModule = typeof CryptoTickerConnectionStates !== "undefined" ? CryptoTickerConnectionStates : {
+    LIVE: "live",
+    DETACHED: "detached",
+    BACKUP: "backup",
+    BROKEN: "broken"
+};
+const connectionStatusIconsModule = typeof CryptoTickerConnectionStatusIcons !== "undefined" ? CryptoTickerConnectionStatusIcons : null;
 
 // Separate evaluator instances so alert + color allowlists stay isolated.
 const expressionEvaluatorInstances = (function() {
@@ -1165,6 +1172,7 @@ const pi = {
         this.setupNetworkStatusElements();
         this.initPairsDropDown();
         this.initCurrenciesDropDown();
+        this.renderConnectionStateHelp();
 
         const jThis = this;
         const callback = function() {
@@ -1178,6 +1186,53 @@ const pi = {
                 setting["value"].onchange = callback;
                 setting["value"].onkeyup = callback;
             }
+        }
+    },
+    renderConnectionStateHelp: function() {
+        if (!connectionStatusIconsModule || typeof connectionStatusIconsModule.renderConnectionStatusIcon !== "function") {
+            return;
+        }
+
+        const canvases = document.querySelectorAll("canvas.connection-state-icon");
+        if (!canvases || canvases.length === 0) {
+            return;
+        }
+
+        const fallbackStates = {
+            LIVE: "live",
+            DETACHED: "detached",
+            BACKUP: "backup",
+            BROKEN: "broken"
+        };
+        const states = connectionStatesModule || fallbackStates;
+
+        for (let i = 0; i < canvases.length; i++) {
+            const canvas = canvases[i] as HTMLCanvasElement;
+            if (!canvas) {
+                continue;
+            }
+
+            const stateKey = (canvas.getAttribute("data-connection-state") || "").toUpperCase();
+            const resolvedState = (states && states[stateKey]) ? states[stateKey] : stateKey.toLowerCase();
+            const context = canvas.getContext("2d");
+            if (!context || !resolvedState) {
+                continue;
+            }
+
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            const minDimension = Math.min(canvas.width || 0, canvas.height || 0);
+            const multiplier = Math.max(minDimension > 0 ? (minDimension / 32) : 1, 0.6);
+
+            connectionStatusIconsModule.renderConnectionStatusIcon({
+                canvas: canvas,
+                canvasContext: context,
+                state: resolvedState,
+                color: "#ffffff",
+                sizeMultiplier: multiplier,
+                position: "TOP_RIGHT",
+                connectionStates: states
+            });
         }
     },
     initPairsDropDown: async function() {

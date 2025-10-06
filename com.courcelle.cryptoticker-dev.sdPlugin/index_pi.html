@@ -206,8 +206,44 @@
             </select>
         </div>
 
+        <details class="connection-state-help">
+            <summary>What do connection states mean?</summary>
+            <div class="connection-state-help-content">
+                <div class="connection-state-entry">
+                    <canvas class="connection-state-icon" width="40" height="40" data-connection-state="LIVE" aria-hidden="true"></canvas>
+                    <div class="connection-state-text">
+                        <div class="connection-state-label">LIVE</div>
+                        <p>Connected to primary provider with live data (WebSocket, refresh in real time). Note: Yfinance doesn't have WebSocket, so can't be in this mode.</p>
+                    </div>
+                </div>
+                <div class="connection-state-entry">
+                    <canvas class="connection-state-icon" width="40" height="40" data-connection-state="DETACHED" aria-hidden="true"></canvas>
+                    <div class="connection-state-text">
+                        <div class="connection-state-label">DETACHED</div>
+                        <p>WebSocket failed, using the provider's REST API instead (refresh every minute). Note: We don't support direct Yfinance calls yet, so can't be in this mode.</p>
+                    </div>
+                </div>
+                <div class="connection-state-entry">
+                    <canvas class="connection-state-icon" width="40" height="40" data-connection-state="BACKUP" aria-hidden="true"></canvas>
+                    <div class="connection-state-text">
+                        <div class="connection-state-label">BACKUP</div>
+                        <p>Provider requests failed, using the legacy ticker proxy instead (refresh every 1-5 minutes).</p>
+                    </div>
+                </div>
+                <div class="connection-state-entry">
+                    <canvas class="connection-state-icon" width="40" height="40" data-connection-state="BROKEN" aria-hidden="true"></canvas>
+                    <div class="connection-state-text">
+                        <div class="connection-state-label">BROKEN</div>
+                        <p>Failed to retrieve price (connection is down, pair is invalid, etc.)</p>
+                    </div>
+                </div>
+            </div>
+        </details>
+
     </div>
 
+        <script src="js/providers/connection-states.js"></script>
+        <script src="js/connection-status-icons.js"></script>
         <script src="js/pi.bundle.js"></script>
 </body>
 

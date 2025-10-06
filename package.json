@@ -20,7 +20,7 @@
     "typescript": "^5.4.5"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node esbuild.config.mjs --mode=production",
+    "build": "node scripts/build.js",
     "build:watch": "concurrently -k --names \"tsc,bundle\" \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node esbuild.config.mjs --watch\"",
     "bundle": "node esbuild.config.mjs --mode=production",
     "bundle:watch": "node esbuild.config.mjs --watch",
@@ -32,7 +32,10 @@
     "lint": "eslint \"com.courcelle.cryptoticker-dev.sdPlugin/**/*.ts\" \"__tests__/**/*.{js,ts}\" preview-server.js",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write \"**/*.{ts,js,json,css,html}\"",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "release:patch": "node scripts/release.js patch",
+    "release:minor": "node scripts/release.js minor",
+    "release:major": "node scripts/release.js major"
   },
   "lint-staged": {
     "**/*.{ts,js}": [

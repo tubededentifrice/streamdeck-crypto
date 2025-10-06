@@ -10,7 +10,7 @@ This project is a Stream Deck plugin; The docs for the SDK are located at https:
 
 ## Build, Test, and Development Commands
 - `npm test`: runs Jest unit tests.
-- `npm run build`: transpile TypeScript sources and emit bundled runtime assets.
+- `npm run build`: transpile TypeScript and rebuild runtime bundles; append `-- --stage` to stage the production plugin under `dist/release/com.courcelle.cryptoticker.sdPlugin`, or `-- --package` to also create the `.streamDeckPlugin`.
 - `npm run build:watch`: keep the TypeScript compiler and bundler hot so other tooling rebuilds automatically.
 - `npm run bundle`: rebuild only the bundled assets (skips TypeScript compilation).
 - `npm run preview`: runs the TypeScript compiler in watch mode alongside the preview server (`npm run preview:serve` runs the server only).
@@ -19,6 +19,7 @@ This project is a Stream Deck plugin; The docs for the SDK are located at https:
 - `npm run format`: format sources with Prettier; run before committing changes that touch code or markup.
 - `npm run watch`: concurrently compile TypeScript changes and restart the dev plugin via `streamdeck restart`.
 - `npm test` automatically triggers the build to ensure generated JavaScript is in sync.
+- `npm run release:patch|minor|major`: bump versions, regenerate the changelog, build bundles, and package the plugin for distribution.
 
 ## Coding Style & Naming Conventions
 - Formatting is enforced by Prettier: 2-space indentation, single quotes for JavaScript, double quotes remain acceptable in HTML where appropriate.

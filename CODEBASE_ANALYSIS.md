@@ -11,6 +11,10 @@ The project is a plugin for the Elgato Stream Deck that displays real-time price
 - **Frontend**: The plugin's user interface is built with HTML, CSS, and JavaScript. TypeScript is used for the logic modules (compiled to JavaScript for the Stream Deck runtime).
 - **Backend**: Hybrid architecture with both direct exchange connections and proxy fallback
 - **Data Sources**: Direct WebSocket connections to Binance and Bitfinex, with fallback to proxy (`https://tproxyv8.opendle.com`) and Yahoo Finance for stocks
+- **Build & Release Tooling**:
+  - `scripts/build.js` orchestrates TypeScript compilation and bundle generation, optionally staging a production-ready plugin payload when invoked with `--stage`, and emitting the `.streamDeckPlugin` when called with `--package`.
+  - `scripts/release.js` bumps versions, regenerates the changelog from conventional commits, runs the build pipeline, and produces `com.courcelle.cryptoticker.streamDeckPlugin`.
+  - `RELEASE_CHECKLIST.md` documents the manual verification steps before and after running the automated release scripts.
 
 ---
 

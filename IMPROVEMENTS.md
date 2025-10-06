@@ -168,73 +168,37 @@ const attemptDelay = Math.min(
 
 ---
 
-    ## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
+## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
 
-    ### 8.1 Document Connection States and Troubleshooting
+### 8.1 Document Connection States and Troubleshooting
 
-    **Why?**
-    - **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
-    - **Support burden**: Repeated questions about connection issues
-    - **Self-service**: Users should be able to diagnose and fix common issues
+**Why?**
+- **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
+- **Support burden**: Repeated questions about connection issues
+- **Self-service**: Users should be able to diagnose and fix common issues
 
-    **What needs to be changed?**
-    - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-      - Add a collapsible panel below the dropdown allowing to select the state icon explaining the different states (same type of help as for the alerts, for example)
-    - **File**: `README.md`
-      - Document connection state meanings
-      - Common issues and solutions
-      - Diagnostic steps
-    - **Documentation content**:
-      - **LIVE**: Connected to primary provider with live data
-      - **BACKUP**: Primary provider failed, using backup/fallback provider
-      - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
-      - **BROKEN**: Connection failed and retries exhausted
-      - On the PI, show the corresponding icons: the corresponding logic to draw them will need to be moved to a place that is accessible by both the PI and the plugin, so we only define those icons in a single place
-      - Add troubleshooting steps:
-        - Check internet connection
-        - Verify exchange is accessible (not blocked by firewall/VPN)
-        - Check if API is experiencing outages
-        - Try different provider
-        - Check plugin logs for detailed errors
+**What needs to be changed?**
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
+  - Add a collapsible panel below the dropdown allowing to select the state icon explaining the different states (same type of help as for the alerts, for example)
+- **File**: `README.md`
+  - Document connection state meanings
+  - Common issues and solutions
+  - Diagnostic steps
+- **Documentation content**:
+  - **LIVE**: Connected to primary provider with live data
+  - **BACKUP**: Primary provider failed, using backup/fallback provider
+  - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
+  - **BROKEN**: Connection failed and retries exhausted
+  - On the PI, show the corresponding icons: the corresponding logic to draw them will need to be moved to a place that is accessible by both the PI and the plugin, so we only define those icons in a single place
+  - Add troubleshooting steps:
+    - Check internet connection
+    - Verify exchange is accessible (not blocked by firewall/VPN)
+    - Check if API is experiencing outages
+    - Try different provider
+    - Check plugin logs for detailed errors
 
-    **Risks & Considerations**:
-    - **Maintenance**: Keep docs updated as states/behavior changes
-
-    ---
-
-    ### 8.2 Improve Build and Release Process
-
-    **Why?**
-    - **Manual process**: Current rsync and copy commands are error-prone
-    - **Version management**: Manual version bumping is easy to forget
-    - **Changelog**: No automated changelog generation
-    - **Consistency**: Manual process leads to inconsistent releases
-
-    **What needs to be changed?**
-    - **New files to create**:
-      - `scripts/build.js`: Automated build script
-      - `scripts/release.js`: Automated release script
-      - `RELEASE_CHECKLIST.md`: Manual checklist for releases
-    - **Package.json scripts**:
-      - `npm run build`: Build plugin for production
-      - `npm run release:patch`: Bump patch version and release
-      - `npm run release:minor`: Bump minor version and release
-      - `npm run release:major`: Bump major version and release
-    - **Automation** (refer to README.md for the current commands used to build the plugin, as it needs to be done on a different plugin ID as the dev one -- make sure to update that file with the new commands once done):
-      1. Version bumping in `manifest.json` and `package.json`
-      2. Changelog generation from git commits (conventional commits)
-      3. Build and bundle for distribution
-      4. Create distribution `.streamDeckPlugin` file
-    - Review and update documentation and instructions (.md files, eg. README.md, AGENTS.md, CODEBASE_ANALYSIS.md, IMPROVEMENTS.md)
-
-    **Risks & Considerations**:
-    - **Initial setup**: Significant effort to create automation scripts
-    - **Testing**: Automation scripts themselves need testing
-    - **Git workflow**: Team needs to follow conventional commit format
-    - **Breaking**: Buggy release script could create bad releases
-    - **Rollback**: Need ability to roll back bad releases
-
-    ---
+**Risks & Considerations**:
+- **Maintenance**: Keep docs updated as states/behavior changes
 
 ## 9. USER EXPERIENCE IMPROVEMENTS
 
