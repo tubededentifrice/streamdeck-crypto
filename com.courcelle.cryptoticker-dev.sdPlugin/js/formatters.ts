@@ -8,7 +8,17 @@
         root.CryptoTickerFormatters = exports;
     }
 }(typeof self !== "undefined" ? self : this, function (): CryptoTickerFormatters {
-    type NumericFormatMode = "auto" | "full" | "compact" | "plain";
+    // Use const assertion for literal types
+    const NUMERIC_FORMATS = ["auto", "full", "compact", "plain"] as const;
+    type NumericFormatMode = typeof NUMERIC_FORMATS[number];
+
+    // Use readonly tuple for compact units
+    const COMPACT_UNITS = [
+        { value: 1000000000000, suffix: "T" },
+        { value: 1000000000, suffix: "B" },
+        { value: 1000000, suffix: "M" },
+        { value: 1000, suffix: "K" }
+    ] as const;
 
     // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
     function getRoundedValue(
@@ -56,15 +66,9 @@
             }
             case "compact": {
                 // T=trillion, B=billion, M=million, K=thousand; pick largest threshold that fits.
-                const units: Array<{ value: number; suffix: string }> = [
-                    { value: 1000000000000, suffix: "T" },
-                    { value: 1000000000, suffix: "B" },
-                    { value: 1000000, suffix: "M" },
-                    { value: 1000, suffix: "K" }
-                ];
                 let suffix = "";
                 let compactValue = absoluteValue;
-                for (const unit of units) {
+                for (const unit of COMPACT_UNITS) {
                     if (absoluteValue >= unit.value) {
                         suffix = unit.suffix;
                         compactValue = absoluteValue / unit.value;

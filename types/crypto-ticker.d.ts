@@ -1,5 +1,28 @@
 type CryptoTickerConnectionState = 'live' | 'detached' | 'backup' | 'broken';
 
+// Error types for better error handling
+declare class CryptoTickerError extends Error {
+  constructor(message: string, cause?: unknown);
+  readonly cause?: unknown;
+}
+
+declare class ProviderConnectionError extends CryptoTickerError {
+  constructor(providerId: string, message: string, cause?: unknown);
+  readonly providerId: string;
+}
+
+declare class TickerFetchError extends CryptoTickerError {
+  constructor(exchange: string, symbol: string, message: string, cause?: unknown);
+  readonly exchange: string;
+  readonly symbol: string;
+}
+
+declare class ConversionError extends CryptoTickerError {
+  constructor(fromCurrency: string, toCurrency: string, message: string, cause?: unknown);
+  readonly fromCurrency: string;
+  readonly toCurrency: string;
+}
+
 declare interface CryptoTickerSettings {
   title: string | null;
   exchange: string;
@@ -37,53 +60,77 @@ declare interface CryptoTickerMessageConfig {
   conversionError: string;
 }
 
-declare interface CryptoTickerTickerData {
-  pair?: string;
-  pairDisplay?: string;
-  last?: number;
-  high?: number;
-  low?: number;
-  open?: number;
-  close?: number;
-  volume?: number;
-  volumeQuote?: number;
-  changeDaily?: number;
-  changeDailyPercent?: number;
-  conversionRate?: number;
-  conversionToCurrency?: string | null;
-  conversionError?: boolean;
-  lastUpdated?: number;
-  connectionState?: CryptoTickerConnectionState | string;
+// Base ticker data with required fields
+declare interface CryptoTickerTickerDataBase {
+  readonly pair: string;
+  readonly pairDisplay?: string;
+  readonly lastUpdated: number;
+  readonly connectionState?: CryptoTickerConnectionState;
+}
+
+// Ticker data with price information (successful fetch)
+declare interface CryptoTickerTickerDataWithPrice extends CryptoTickerTickerDataBase {
+  readonly last: number;
+  readonly high?: number;
+  readonly low?: number;
+  readonly open?: number;
+  readonly close?: number;
+  readonly volume?: number;
+  readonly volumeQuote?: number;
+  readonly changeDaily?: number;
+  readonly changeDailyPercent?: number;
+  readonly conversionRate?: number;
+  readonly conversionToCurrency?: string | null;
+  readonly conversionError?: false;
   [key: string]: unknown;
 }
 
-declare interface CryptoTickerCandleData {
-  ts: number;
-  open: number;
-  close: number;
-  high: number;
-  low: number;
-  volumeQuote: number;
+// Ticker data with conversion error
+declare interface CryptoTickerTickerDataWithError extends CryptoTickerTickerDataBase {
+  readonly conversionError: true;
+  readonly conversionToCurrency: string;
   [key: string]: unknown;
+}
+
+// Union type for all ticker data states
+declare type CryptoTickerTickerData =
+  | CryptoTickerTickerDataWithPrice
+  | CryptoTickerTickerDataWithError
+  | (CryptoTickerTickerDataBase & Record<string, unknown>);
+
+declare interface CryptoTickerCandleData {
+  readonly ts: number;
+  readonly open: number;
+  readonly close: number;
+  readonly high: number;
+  readonly low: number;
+  readonly volumeQuote: number;
+  readonly [key: string]: unknown;
 }
 
 declare interface CryptoTickerNormalizedCandle extends CryptoTickerCandleData {
-  index: number;
-  timePercent: number;
-  openPercent: number;
-  closePercent: number;
-  highPercent: number;
-  lowPercent: number;
-  volumePercent: number;
+  readonly index: number;
+  readonly timePercent: number;
+  readonly openPercent: number;
+  readonly closePercent: number;
+  readonly highPercent: number;
+  readonly lowPercent: number;
+  readonly volumePercent: number;
 }
 
 declare interface CryptoTickerProviderOptions {
-  baseUrl?: string;
-  logger?: (...args: unknown[]) => void;
-  fallbackPollIntervalMs?: number;
-  staleTickerTimeoutMs?: number;
-  [key: string]: unknown;
+  readonly baseUrl?: string;
+  readonly logger?: (...args: readonly unknown[]) => void;
+  readonly fallbackPollIntervalMs?: number;
+  readonly staleTickerTimeoutMs?: number;
+  readonly [key: string]: unknown;
 }
+
+// Utility type for required provider options
+declare type RequiredProviderOptions = Required<Pick<CryptoTickerProviderOptions, 'baseUrl' | 'logger'>>;
+
+// Utility type for partial settings (for updates)
+declare type PartialSettings = Partial<CryptoTickerSettings>;
 
 declare interface CryptoTickerTickerParams {
   exchange: string;
@@ -105,8 +152,8 @@ declare interface CryptoTickerSubscriptionHandlers {
   ticker?: (ticker: CryptoTickerTickerData | null) => void;
   onData?: (ticker: CryptoTickerTickerData | null) => void;
   connectionState?: (state: CryptoTickerConnectionState | string | null) => void;
-  error?: (error: unknown) => void;
-  onError?: (error: unknown) => void;
+  error?: (error: CryptoTickerError | Error) => void;
+  onError?: (error: CryptoTickerError | Error) => void;
 }
 
 declare interface CryptoTickerSubscriptionHandle {
@@ -115,16 +162,16 @@ declare interface CryptoTickerSubscriptionHandle {
 }
 
 declare interface CryptoTickerProviderInterface {
-  baseUrl: string;
-  logger: (...args: unknown[]) => void;
+  readonly baseUrl: string;
+  readonly logger: (...args: readonly unknown[]) => void;
   getId(): string;
   subscribeTicker(
-    params: CryptoTickerTickerParams,
+    params: Readonly<CryptoTickerTickerParams>,
     handlers: CryptoTickerSubscriptionHandlers
   ): CryptoTickerSubscriptionHandle | null | undefined;
-  fetchTicker(params: CryptoTickerTickerParams): Promise<CryptoTickerTickerData | null>;
+  fetchTicker(params: Readonly<CryptoTickerTickerParams>): Promise<CryptoTickerTickerData | null>;
   getCachedTicker?(key: string): CryptoTickerTickerData | null | undefined;
-  fetchCandles?(params: CryptoTickerCandlesParams): Promise<CryptoTickerCandleData[] | null>;
+  fetchCandles?(params: Readonly<CryptoTickerCandlesParams>): Promise<readonly CryptoTickerCandleData[] | null>;
   ensureConnection?(): void;
   fetchConversionRate?(
     fromCurrency: string,
