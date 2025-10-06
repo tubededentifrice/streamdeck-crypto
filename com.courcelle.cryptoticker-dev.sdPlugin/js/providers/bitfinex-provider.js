@@ -112,6 +112,7 @@
             this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
 
             this.channelIdToSymbol = {};
+            // Bitfinex reuses one channel; store chanId metadata so unsubscribe works later.
             this.webSocketPool = new WebSocketConnectionPool({
                 logger: (...args) => {
                     this.logger(...args);
@@ -145,7 +146,7 @@
                     this.logger("BitfinexProvider: pooled WebSocket error", err);
                 },
                 onClose: () => {
-                    this.channelIdToSymbol = {};
+            this.channelIdToSymbol = {};
                 }
             });
         }

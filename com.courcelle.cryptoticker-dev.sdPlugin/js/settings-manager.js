@@ -7,6 +7,7 @@
         root.CryptoTickerSettingsManager = factory(root.CryptoTickerState, root);
     }
 }(typeof self !== "undefined" ? self : this, function (tickerState, globalRoot) {
+    // Helper tolerant of bundlers/tests: return module if present, otherwise null without throwing.
     function requireOrNull(modulePath) {
         if (typeof require === "function") {
             try {
@@ -19,6 +20,7 @@
         return null;
     }
 
+    // Resolve defaults via global (runtime) or disk (tests/preview) once to avoid repeated IO.
     function resolveDefaultSettingsModule() {
         if (globalRoot && typeof globalRoot.CryptoTickerDefaults !== "undefined") {
             return globalRoot.CryptoTickerDefaults;
@@ -35,6 +37,7 @@
         return defaultSettingsModule;
     }
 
+    // Merge partial settings with defaults via the module so schema changes stay encapsulated.
     function applyDefaultSettings(partial) {
         const moduleRef = ensureDefaultSettingsModule();
         if (typeof moduleRef.applyDefaults === "function") {
@@ -59,6 +62,7 @@
 
     const defaultSettings = getDefaultSettingsSnapshot();
 
+    // Refresh runs in action + PI; apply defaults, persist snapshot, and trigger subscription updates.
     function refreshSettings(options) {
         const context = options.context;
         const settings = options.settings;

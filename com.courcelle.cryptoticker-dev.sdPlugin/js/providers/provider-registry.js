@@ -25,6 +25,7 @@
     class ProviderRegistry {
         constructor(options) {
             const opts = options || {};
+            // Share logger/fallback timing so exchange swaps stay consistent.
             this.logger = typeof opts.logger === "function" ? opts.logger : function () {};
             this.baseUrl = opts.baseUrl || "";
             this.providers = {};
@@ -57,6 +58,7 @@
                 : new GenericProvider(genericOptions);
 
             this.register(this.genericProvider);
+            // Eager-load providers so `getProvider()` stays sync while still passing shared fallbacks + overrides.
             this.register(new BinanceProvider({
                 baseUrl: this.baseUrl,
                 logger: this.logger,

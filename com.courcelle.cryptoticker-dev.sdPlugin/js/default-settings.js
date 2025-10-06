@@ -5,6 +5,7 @@
         root.CryptoTickerDefaults = factory();
     }
 }(typeof self !== "undefined" ? self : this, function () {
+    // Minimal deep clone so defaults stay isolated between PI and action contexts.
     function clone(obj) {
         if (obj === null || typeof obj !== "object") {
             return obj;
@@ -21,6 +22,7 @@
         return copy;
     }
 
+    // Build schema-driven string normalizer handling trim/case/allow-lists in one place.
     function buildStringNormalizer(options) {
         const normalizeCase = options && options.case;
         const allowEmpty = options && options.allowEmptyString === true;
@@ -86,6 +88,7 @@
         };
     }
 
+    // Normalize numeric inputs consistently (slider/text/PI) with optional clamp + integer support.
     function buildNumberNormalizer(options) {
         const min = options && typeof options.min === "number" ? options.min : null;
         const max = options && typeof options.max === "number" ? options.max : null;
@@ -117,6 +120,7 @@
         };
     }
 
+    // Schema defines type, default, and normalize fn for each setting; drives validation + coercion.
     const settingsSchema = {
         title: {
             type: "string",
@@ -250,6 +254,7 @@
         }
     };
 
+    // Core coercion pipeline: normalize value and return optional error so callers can surface validation once.
     function coerceValue(schemaEntry, value, hasValue) {
         if (!schemaEntry || typeof schemaEntry !== "object") {
             return { value: value, error: null };
@@ -279,6 +284,7 @@
         };
     }
 
+    // Validate settings but keep unknown keys for forward compatibility.
     function validateSettings(input) {
         const provided = input && typeof input === "object" ? input : {};
         const normalized = {};
@@ -298,6 +304,7 @@
             }
         }
 
+        // Pass-through unknown keys so future settings remain after downgrade.
         for (const extraKey in provided) {
             if (!Object.prototype.hasOwnProperty.call(settingsSchema, extraKey) && Object.prototype.hasOwnProperty.call(provided, extraKey)) {
                 normalized[extraKey] = provided[extraKey];

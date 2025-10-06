@@ -63,6 +63,7 @@
             this.cache = {};
         }
 
+        // Subscribe entry: start streaming if possible and kick REST fetch so key paints immediately.
         subscribe(params, handlers) {
             const normalizedHandlers = normalizeHandlers(handlers);
             const entry = this.getOrCreateEntry(params);
@@ -277,6 +278,7 @@
             });
         }
 
+        // Poll only when streaming idle or stale to reduce backend load yet recover from socket hiccups.
         shouldPollEntry(entry) {
             if (!entry) {
                 return false;
@@ -335,6 +337,7 @@
             this.setEntryConnectionState(entry, state, ticker);
         }
 
+        // REST failure: mark BROKEN and cache placeholder so later subscribers see same status tile.
         handleFetchError(entry) {
             if (!entry) {
                 return;

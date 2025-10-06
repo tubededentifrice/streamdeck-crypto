@@ -7,6 +7,7 @@
         root.CryptoTickerFormatters = factory();
     }
 }(typeof self !== "undefined" ? self : this, function () {
+    // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
     function getRoundedValue(value, digits, multiplier, format) {
         const formatOption = format || "auto";
         let precision = parseInt(digits);
@@ -45,6 +46,7 @@
                 break;
             }
             case "compact": {
+                // T=trillion, B=billion, M=million, K=thousand; pick largest threshold that fits.
                 const units = [
                     { value: 1000000000000, suffix: "T" },
                     { value: 1000000000, suffix: "B" },
@@ -80,6 +82,7 @@
             }
             case "auto":
             default: {
+                // Legacy auto mode: add K suffix above 100k threshold only.
                 let autoSuffix = "";
                 let autoValue = absoluteValue;
                 if (absoluteValue > 100000) {
@@ -100,6 +103,7 @@
         return sign + formattedValue;
     }
 
+    // Normalize into [0,1] for price cursors; clamp to 0.5 when min==max prevents divide-by-zero.
     function normalizeValue(value, min, max) {
         if (max - min === 0) {
             return 0.5;

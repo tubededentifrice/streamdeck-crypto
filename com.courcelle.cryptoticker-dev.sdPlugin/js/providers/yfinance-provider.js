@@ -16,6 +16,7 @@
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
 
+    // Temporary GenericProvider wrapper so Yahoo wiring can ship later without breaking registry shape.
     class YFinanceProvider extends ProviderInterface {
         constructor(options) {
             super(options);

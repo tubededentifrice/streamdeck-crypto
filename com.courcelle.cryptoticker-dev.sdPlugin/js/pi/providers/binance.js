@@ -17,6 +17,7 @@
         const symbols = Array.isArray(json.symbols) ? json.symbols : [];
 
         return symbols
+            // Filter out delisted/maintenance symbols so the PI only lists live markets.
             .filter(function (item) {
                 if (!item) {
                     return false;

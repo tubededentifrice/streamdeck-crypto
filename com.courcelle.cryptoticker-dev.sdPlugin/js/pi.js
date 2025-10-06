@@ -1,5 +1,4 @@
-// this is our global websocket, used to communicate from/to Stream Deck software
-// and some info about our plugin, as sent by Stream Deck software
+// Global Stream Deck websocket plus plugin metadata snapshot.
 /* global CryptoTickerExpressionEvaluator */
 /* exported connectElgatoStreamDeckSocket */
 
@@ -10,6 +9,7 @@ var websocket = null,
 
 const expressionEvaluatorModule = typeof CryptoTickerExpressionEvaluator !== "undefined" ? CryptoTickerExpressionEvaluator : null;
 
+// Separate evaluator instances so alert + color allowlists stay isolated.
 const expressionEvaluatorInstances = (function() {
     if (!expressionEvaluatorModule) {
         return {
@@ -150,13 +150,13 @@ function clearAbortTimer(timerId) {
 }
 
 /**
- * Performs a fetch request to the specified URL and returns the parsed JSON response.
+ * Fetch JSON from `url`, honoring optional abort controller/config.
  *
- * @param {string} url - The URL to fetch.
- * @param {AbortController|null} controller - Optional AbortController to allow request cancellation. If null, no abort signal is used.
- * @param {Object} [baseFetchOptions] - Optional fetch options to merge with the request.
- * @returns {Promise<Object>} - A promise that resolves to the parsed JSON response.
- * @throws {Error} If the response is not OK (status not in the range 200-299), or if the fetch fails.
+ * @param {string} url Target URL.
+ * @param {AbortController|null} controller Abort hook or null.
+ * @param {Object} [baseFetchOptions] Extra fetch options.
+ * @returns {Promise<Object>} Parsed JSON payload.
+ * @throws {Error} When the response is not OK or fetch rejects.
  */
 async function performJsonFetch(url, controller, baseFetchOptions) {
     const fetchOptions = Object.assign({}, baseFetchOptions || {});
@@ -189,6 +189,7 @@ function buildStaleDataMessage(timestamp) {
     return "Showing cached data from " + formatted + ". Data may be outdated.";
 }
 
+// Centralize dropdown loading/warning UX for providers/pairs/currencies so fetch code stays lean.
 const networkStatusManager = (function() {
     const config = {
         providers: {
@@ -335,6 +336,7 @@ const networkStatusManager = (function() {
     };
 }());
 
+// Generic exponential backoff helper for PI fetches; smooths proxy hiccups.
 async function fetchJsonWithRetry(url, options) {
     const opts = options || {};
     const attempts = Math.max(1, opts.attempts || FETCH_MAX_ATTEMPTS);
@@ -376,6 +378,7 @@ async function fetchJsonWithRetry(url, options) {
     throw lastError || new Error("Request failed");
 }
 
+// Normalize pair payloads into {value, symbol, display} regardless of backend format.
 function normalizePairsList(pairs) {
     return (pairs || []).map(function(item) {
         if (!item) {
@@ -441,6 +444,7 @@ function getDefaultSettingsSnapshot() {
 }
 
 const defaultSettings = getDefaultSettingsSnapshot();
+// Maps setting keys to DOM elements, default values, and optional getValue/setValue overrides for non-standard controls.
 const settingsConfig = {
     "title": {
         "default": defaultSettings.title,
@@ -642,6 +646,7 @@ const pi = {
         }
     },
 
+    // Parse + evaluate expressions against sample context; report syntax, runtime, Inf/NaN errors.
     validateRuleExpressions: function(settings) {
         const result = {
             hasErrors: false,
@@ -1532,7 +1537,7 @@ const pi = {
 
         const incoming = settings ? Object.assign({}, settings) : {};
 
-        // Backward compatibility, to remove at some point
+        // Legacy pair pipe fallback; remove when PI drops combined value support.
         const pairElements = this.splitPairValue(incoming["pair"]);
         if (pairElements) {
             for (const k in pairElements) {
@@ -1541,8 +1546,6 @@ const pi = {
                 }
             }
         }
-        //
-
         setCurrentSettings(incoming);
         this.refreshValues();
         this.displayExpressionErrors({});
@@ -1550,7 +1553,7 @@ const pi = {
     checkNewSettings: function() {
         this.log("checkNewSettings");
 
-        // Retrieve values from HTML to put them to the current settings
+        // Pull DOM values into `currentSettings` snapshot.
         for (const k in settingsConfig) {
             const settingConfig = settingsConfig[k];
             if (settingConfig["getValue"]) {
@@ -1578,7 +1581,7 @@ const pi = {
             return;
         }
 
-        // Set values to the HTML
+        // Push stored settings into inputs.
         for (const k in settingsConfig) {
             const settingConfig = settingsConfig[k];
             if (settingConfig["setValue"]) {
@@ -1648,18 +1651,16 @@ pi.initDom();
 
 function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, infoJson, actionInfoJson) {
     uuid = inUUID;
-    // please note: the incoming arguments are of type STRING, so
-    // in case of the inActionInfo, we must parse it into JSON first
+    // Stream Deck passes strings; parse the JSON payloads before using them.
     actionInfo = JSON.parse(actionInfoJson); // cache the info
     const parsedInfo = JSON.parse(infoJson);
     websocket = new WebSocket('ws://127.0.0.1:' + inPort);
 
-    /** let's see, if we have some settings */
+    // Load saved PI settings if provided.
     pi.extractSettings(actionInfo.payload.settings);
     // console.log(actionInfo.payload.settings);
 
-    // if connection was established, the websocket sends
-    // an 'onopen' event, where we need to register our PI
+    // Register PI once the websocket reports `onopen`.
     websocket.onopen = function () {
         const json = {
             event: inRegisterEvent,

@@ -7,6 +7,7 @@
         root.CryptoTickerState = factory();
     }
 }(typeof self !== "undefined" ? self : this, function () {
+    // In-memory per runtime; keyed by action context so hotkeys, multi-actions, and dev preview share APIs safely.
     const contextDetails = {};
     const contextSubscriptions = {};
     const contextConnectionStates = {};
@@ -120,6 +121,7 @@
         });
     }
 
+    // Cache last successful payload so stale providers still render something useful.
     function setLastGoodTicker(context, values, timestamp) {
         if (!context || !values) {
             return;

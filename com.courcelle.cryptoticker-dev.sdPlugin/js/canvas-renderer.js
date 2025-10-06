@@ -186,18 +186,13 @@
     }
 
     /**
-     * Draws an equilateral triangle (used as a price cursor) on the canvas at the specified position.
+     * Draw the equilateral price cursor at the given anchor; uses equilateral geometry to center base and tip.
      *
-     * @param {CanvasRenderingContext2D} canvasContext - The canvas context to draw on.
-     * @param {number} cursorPositionX - The x-coordinate of the triangle's center.
-     * @param {number} lineY - The y-coordinate where the triangle is vertically centered.
-     * @param {number} triangleSide - The length of each side of the equilateral triangle.
-     * @param {string} fillStyle - The fill color/style for the triangle.
-     *
-     * The triangle's height is calculated using the formula for an equilateral triangle:
-     *   height = sqrt(3) / 2 * side = sqrt(0.75 * side^2)
-     * The triangle is positioned so that its base is parallel to the x-axis, with the base centered at (cursorPositionX, lineY - triangleHeight/3)
-     * and the apex pointing downward at (cursorPositionX, lineY + 2*triangleHeight/3).
+     * @param {CanvasRenderingContext2D} canvasContext Target context.
+     * @param {number} cursorPositionX Triangle center X.
+     * @param {number} lineY Baseline Y used for centering.
+     * @param {number} triangleSide Side length.
+     * @param {string} fillStyle Fill color.
      */
     function drawPriceCursorTriangle(canvasContext, cursorPositionX, lineY, triangleSide, fillStyle) {
         const triangleHeight = Math.sqrt(0.75 * Math.pow(triangleSide, 2));
@@ -430,12 +425,14 @@
         const changePercent = changeDailyPercentValue !== null ? changeDailyPercentValue * 100 : null;
 
         const dataState = typeof dataStateRaw === "string" ? dataStateRaw.toLowerCase() : "live";
+        // Add subtle dot for stale/missing so frozen price is explained.
         const degradedColor = dataState === "stale"
             ? "#f6a623"
             : dataState === "missing"
                 ? "#d9534f"
                 : null;
 
+        // Alerts may swap colors; do this before color rules so expressions see alert palette.
         const alertEvaluation = alertManager.evaluateAlert({
             context: context,
             settings: settings,
@@ -448,6 +445,7 @@
         backgroundColor = alertEvaluation.backgroundColor;
         textColor = alertEvaluation.textColor;
 
+        // Color rules read both values and palette (support `alert ? '#ff0000' : defaultBackgroundColor`).
         const baseColorContext = expressionEvaluator.buildContext(values, {
             alert: alert,
             backgroundColor: backgroundColor,
@@ -457,6 +455,7 @@
         });
 
         if (settings["backgroundColorRule"]) {
+            // Allow expressions to repaint background (e.g. change %); log but continue on errors.
             try {
                 const result = colorRuleEvaluator.evaluate(settings["backgroundColorRule"], baseColorContext);
                 const stringResult = String(result || "").trim();
@@ -505,6 +504,7 @@
 
         const pairBaselineY = 25 * sizeMultiplier;
         let pairTextX = textPadding;
+        // Degraded dot stays visible even under alert colors so user knows data is frozen.
         if (degradedColor) {
             const indicatorRadius = 5 * sizeMultiplier;
             const indicatorCenterX = textPadding + indicatorRadius;
@@ -671,10 +671,12 @@
     const backgroundColor = settings["backgroundColor"] || "#000000";
     const textColor = settings["textColor"] || "#ffffff";
 
+    // Upstream outputs normalized candles; keep newest N for 144x144 readability.
     const candlesToDisplay = candlesNormalized.slice(-getCandlesDisplayCount(settings));
     const candleCount = candlesToDisplay.length;
     const paddingWidth = canvasWidth - (2 * padding);
     const paddingHeight = canvasHeight - (2 * padding);
+    // Divide available width by candle count; wick/body ratios keep visuals balanced at small sizes.
     const candleWidth = candleCount > 0 ? paddingWidth / candleCount : paddingWidth;
     const wickWidth = Math.max(2 * sizeMultiplier, candleWidth * 0.15);
     const bodyWidth = Math.max(4 * sizeMultiplier, candleWidth * 0.6);
@@ -700,6 +702,7 @@
         canvasContext.moveTo(xPosition, highPosition);
         canvasContext.lineTo(xPosition, lowPosition);
         canvasContext.lineWidth = wickWidth;
+        // Classic green/up vs red/down; compare percents so flat candles still consistent.
         canvasContext.strokeStyle = candleNormalized.closePercent > candleNormalized.openPercent ? "#1c9900" : "#a10";
         canvasContext.stroke();
 

@@ -36,6 +36,7 @@ function resolveGlobalConfig() {
     return null;
 }
 
+// Normalize PI/runtime currency values; accept null/number so stale settings do not crash.
 function normalizeCurrencyCode(value) {
     if (typeof value === "string") {
         const trimmed = value.trim();
@@ -64,6 +65,7 @@ const messageConfig = Object.assign({}, DEFAULT_MESSAGE_CONFIG, (runtimeConfig &
 
 const subscriptionKeyModule = requireOrNull("./providers/subscription-key");
 const globalProviders = typeof CryptoTickerProviders !== "undefined" ? CryptoTickerProviders : null;
+// Local fallback keeps subscription key format stable when provider bundle missing (tests/preview).
 const buildSubscriptionKey = subscriptionKeyModule && subscriptionKeyModule.buildSubscriptionKey
     ? subscriptionKeyModule.buildSubscriptionKey
     : globalProviders && typeof globalProviders.buildSubscriptionKey === "function"
@@ -140,6 +142,7 @@ const tickerAction = {
 
     getProviderRegistry: function () {
         if (!providerRegistrySingleton) {
+            // Lazy-load to avoid pulling heavy providers in PI/tests yet keep runtime behavior.
             const providerRegistryModule = requireOrNull("./providers/provider-registry");
             const ProviderRegistryClass = providerRegistryModule && providerRegistryModule.ProviderRegistry
                 ? providerRegistryModule.ProviderRegistry
@@ -243,6 +246,7 @@ const tickerAction = {
         }
 
         if (current && typeof current.unsubscribe === "function") {
+            // Tear down previous sub; lingering sockets pile up when switching pairs.
             try {
                 current.unsubscribe();
             } catch (err) {
@@ -313,6 +317,7 @@ const tickerAction = {
         return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
     },
 
+    // Decide if conversion needed; empty/same override → `to:null`.
     resolveConversionCurrencies: function (fromCurrency, toCurrency) {
         const resolvedFrom = normalizeCurrencyCode(fromCurrency) || "USD";
         const resolvedTo = normalizeCurrencyCode(toCurrency);
@@ -347,6 +352,7 @@ const tickerAction = {
         }
 
         if (cacheEntry.promise) {
+            // Reuse pending fetch; swallow failure so next call can retry.
             try {
                 return await cacheEntry.promise;
             } catch (promiseErr) {
@@ -398,9 +404,7 @@ const tickerAction = {
                 return cacheEntry.rate;
             }
 
-            // Breaking change: Previously, this function returned 1 as a fallback on error.
-            // To preserve backward compatibility, we now return 1 instead of throwing.
-            // Consider making this behavior configurable in the future.
+            // Keep legacy fallback: surface cached rate else hardcode 1 so old flows keep working.
             return 1;
         }
     },
@@ -436,6 +440,7 @@ const tickerAction = {
         return this.applyTickerConversion(tickerValues, rate, currencies.from, currencies.to);
     },
 
+    // Strip numeric fields when conversion fails so UI shows metadata + error text only.
     createConversionErrorValues: function (tickerValues) {
         const errorValues = Object.assign({}, tickerValues);
         const numericKeys = [
@@ -461,6 +466,7 @@ const tickerAction = {
         return errorValues;
     },
 
+    // Multiply numeric fields; parse strings providers sometimes emit.
     applyTickerConversion: function (tickerValues, rate, fromCurrency, toCurrency) {
         if (!tickerValues || typeof tickerValues !== "object") {
             return tickerValues;
@@ -496,6 +502,7 @@ const tickerAction = {
         return converted;
     },
 
+    // Clone candles before scaling price/quote volume; keep shared cache untouched.
     applyCandlesConversion: function (candles, rate) {
         if (!Array.isArray(candles) || !rate || !isFinite(rate) || rate <= 0) {
             return candles;
@@ -560,19 +567,10 @@ const tickerAction = {
         }
     },
     /**
-     * Sanitizes and normalizes ticker values by parsing numeric fields, validating input, and extracting key metadata.
+     * Normalize raw ticker payload: parse numeric fields, flag basic metadata, align timestamp.
      *
-     * @param {Object} values - The raw ticker values object to sanitize. May contain price, volume, timestamp, and other fields.
-     * @returns {Object} An object with the following structure:
-     *   {
-     *     values: {Object} - The sanitized values with numeric fields parsed and normalized.
-     *     hasAny: {boolean} - True if any value is present after sanitization.
-     *     hasCritical: {boolean} - True if any critical value (e.g., price, close) is present and valid.
-     *     timestamp: {number|null} - The normalized timestamp (in ms since epoch) if available, otherwise null.
-     *   }
-     *
-     * The function handles parsing of numeric fields, checks for the presence of critical values,
-     * and normalizes the timestamp field if present. Used to ensure ticker data is in a consistent format.
+     * @param {Object} values Raw ticker payload.
+     * @returns {{values:Object, hasAny:boolean, hasCritical:boolean, timestamp:(number|null)}} Parsed summary consumed by renderers.
      */
     sanitizeTickerValues: function (values) {
         if (!values || typeof values !== "object") {
@@ -677,6 +675,7 @@ const tickerAction = {
         const isBroken = effectiveConnectionState === connectionStates.BROKEN;
         const liveLikeStates = [connectionStates.LIVE, connectionStates.BACKUP, connectionStates.DETACHED];
         const isConnectionLiveLike = liveLikeStates.indexOf(effectiveConnectionState) !== -1;
+        // Detect exchange "zero" payloads; mark misconfig only when link degraded so we still recover on open.
         const looksLikeEmptyTicker = sanitizedResult.hasCritical
             && Number.isFinite(sanitizedValues.last)
             && sanitizedValues.last === 0

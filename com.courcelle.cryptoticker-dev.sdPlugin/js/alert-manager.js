@@ -12,6 +12,7 @@
     }
 
     const alertRuleEvaluator = expressionEvaluator.createEvaluator();
+    // Context-keyed state keeps alerts alive through reconnects; armed flag powers press-to-ack UX.
     const alertStatuses = {};
     const alertArmedStates = {};
 
@@ -40,6 +41,7 @@
         delete alertArmedStates[context];
     }
 
+    // Evaluate rule, optionally swap colors, downgrade failures to "error" so PI can surface issues.
     function evaluateAlert(params) {
         const context = params.context;
         const settings = params.settings || {};

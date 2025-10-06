@@ -42,6 +42,7 @@
             this.connectionState = "Disconnected";
             this.startingConnection = false;
 
+            // Manager handles fallback polling + streaming so action code stays simple.
             const managerOptions = {
                 logger: (...args) => {
                     this.logger(...args);
@@ -157,6 +158,7 @@
             entry.meta = entry.meta || {};
 
             if (!this.connection) {
+                // Lazily boot SignalR on first subscriber to avoid sockets for idle keys.
                 this.ensureConnection();
                 entry.meta.pending = true;
                 entry.streamingActive = false;
@@ -262,6 +264,7 @@
                     cached.connectionState = cached.connectionState || ConnectionStates.BACKUP;
                     return cached;
                 }
+                // Fallback: return empty ticker so renderer shows BROKEN, not runtime error.
                 const fallback = self.buildEmptyTicker(symbol);
                 fallback.connectionState = ConnectionStates.BROKEN;
                 return fallback;
@@ -287,6 +290,7 @@
                 entry.streamingActive = true;
             }
 
+            // Notify all contexts; manager marks entry live and stops fallback polling.
             this.subscriptionManager.handleStreamingUpdate(key, ticker);
         }
 

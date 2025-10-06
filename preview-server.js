@@ -7,6 +7,8 @@ const child_process = require("child_process");
 const port = process.env.PORT || 34115;
 const baseDir = path.join(__dirname, "com.courcelle.cryptoticker-dev.sdPlugin");
 
+// Lightweight `open` implementation that works across macOS/Windows/Linux so
+// running `npm run preview` immediately surfaces the dev UI in a browser.
 function openBrowser(url) {
     let command;
     let args;
@@ -33,6 +35,7 @@ function openBrowser(url) {
 
 const server = http.createServer((req, res) => {
     const urlPath = req.url.split("?")[0];
+    // Default to the preview entry point when the user hits the root path.
     const relPath = urlPath === "/" ? "dev/preview.html" : urlPath.replace(/^\/+/g, "");
     const filePath = path.join(baseDir, relPath);
     fs.readFile(filePath, (err, data) => {

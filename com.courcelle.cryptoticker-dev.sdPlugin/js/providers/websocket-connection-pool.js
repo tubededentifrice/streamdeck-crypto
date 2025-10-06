@@ -45,6 +45,7 @@
             this.isConnecting = false;
         }
 
+        // Pool used by Binance/Bitfinex: multiplex symbols on one socket to stay under WebView limits.
         subscribe(symbol, subscriberOptions) {
             const normalizedSymbol = typeof symbol === "string" ? symbol : "";
             if (!normalizedSymbol) {
@@ -355,6 +356,7 @@
             }
         }
 
+        // Notify each subscriber; keep context so provider metadata (chanId etc.) sticks around.
         dispatch(symbol, payload, rawMessage) {
             const entry = this.symbolEntries[symbol];
             if (!entry) {
