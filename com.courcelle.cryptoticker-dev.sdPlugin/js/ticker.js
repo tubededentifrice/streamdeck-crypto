@@ -398,7 +398,10 @@ const tickerAction = {
                 return cacheEntry.rate;
             }
 
-            throw err;
+            // Breaking change: Previously, this function returned 1 as a fallback on error.
+            // To preserve backward compatibility, we now return 1 instead of throwing.
+            // Consider making this behavior configurable in the future.
+            return 1;
         }
     },
 
