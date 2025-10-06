@@ -1,11 +1,13 @@
+"use strict";
 (function (root, factory) {
     if (typeof module === "object" && module.exports) {
         module.exports = factory();
-    } else {
+    }
+    else {
         const config = factory();
         root.CryptoTickerConfig = Object.assign({}, root.CryptoTickerConfig || {}, config);
     }
-}(typeof self !== "undefined" ? self : this, function () {
+}(typeof self !== "undefined" ? self : this, function buildConfig() {
     return {
         tProxyBase: "https://tproxyv8.opendle.com",
         fallbackPollIntervalMs: 60000,

@@ -1,47 +1,43 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 "use strict";
-
 (function (root, factory) {
+    const expressionEvaluatorModule = typeof module === "object" && module.exports
+        ? require("./expression-evaluator")
+        : root === null || root === void 0 ? void 0 : root.CryptoTickerExpressionEvaluator;
+    const dependency = factory(expressionEvaluatorModule);
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./expression-evaluator"));
-    } else {
-        root.CryptoTickerAlertManager = factory(root.CryptoTickerExpressionEvaluator);
+        module.exports = dependency;
+    }
+    if (root && typeof root === "object") {
+        root.CryptoTickerAlertManager = dependency;
     }
 }(typeof self !== "undefined" ? self : this, function (expressionEvaluator) {
     if (!expressionEvaluator) {
         throw new Error("Expression evaluator dependency is missing");
     }
-
-    const alertRuleEvaluator = expressionEvaluator.createEvaluator();
-    // Context-keyed state keeps alerts alive through reconnects; armed flag powers press-to-ack UX.
+    const evaluator = expressionEvaluator;
+    const alertRuleEvaluator = evaluator.createEvaluator();
     const alertStatuses = {};
     const alertArmedStates = {};
-
     function getAlertStatus(context) {
         return alertStatuses[context] || "off";
     }
-
     function isAlertArmed(context) {
         return alertArmedStates[context] !== "off";
     }
-
     function disarmAlert(context) {
         alertArmedStates[context] = "off";
     }
-
     function armAlert(context) {
         alertArmedStates[context] = "on";
     }
-
     function shouldDisarmOnKeyPress(context) {
         return isAlertArmed(context) && getAlertStatus(context) === "on";
     }
-
     function clearContext(context) {
         delete alertStatuses[context];
         delete alertArmedStates[context];
     }
-
-    // Evaluate rule, optionally swap colors, downgrade failures to "error" so PI can surface issues.
     function evaluateAlert(params) {
         const context = params.context;
         const settings = params.settings || {};
@@ -49,7 +45,6 @@
         let backgroundColor = params.backgroundColor;
         let textColor = params.textColor;
         let alertMode = false;
-
         const alertRule = settings.alertRule;
         if (!alertRule) {
             alertStatuses[context] = "off";
@@ -59,11 +54,9 @@
                 textColor
             };
         }
-
         try {
-            const contextVariables = expressionEvaluator.buildBaseContext(values);
+            const contextVariables = evaluator.buildBaseContext(values);
             const evaluationResult = alertRuleEvaluator.evaluate(alertRule, contextVariables);
-
             if (evaluationResult) {
                 alertStatuses[context] = "on";
                 if (isAlertArmed(context)) {
@@ -72,27 +65,27 @@
                     backgroundColor = textColor;
                     textColor = tmp;
                 }
-            } else {
+            }
+            else {
                 alertStatuses[context] = "off";
                 armAlert(context);
             }
-        } catch (err) {
+        }
+        catch (err) {
             alertStatuses[context] = "error";
             console.error("Error evaluating alertRule", {
-                context: context,
-                settings: settings,
-                values: values,
+                context,
+                settings,
+                values,
                 error: err instanceof Error ? err.message : err
             });
         }
-
         return {
             alertMode,
             backgroundColor,
             textColor
         };
     }
-
     return {
         evaluateAlert,
         shouldDisarmOnKeyPress,

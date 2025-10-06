@@ -1,6 +1,6 @@
 # Crypto Ticker PRO - Improvement Plan
 
-This document consolidates proposed improvements from code reviews and analysis. Each improvement includes rationale, specific implementation details, and risk considerations.
+This document consolidates proposed improvements from code reviews and analysis. Each improvement includes rationale, specific implementation details, and risk considerations. Core runtime modules are now maintained in TypeScript (`.ts`), compiled to CommonJS for tests, and bundled into runtime assets (`plugin.bundle.js`, `pi.bundle.js`, `preview.bundle.js`) for the Stream Deck runtime, so the paths below reference the TypeScript sources.
 
 ---
 
@@ -18,7 +18,7 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 **Current behavior:**
 - Fixed 5-second delay: `DEFAULT_WS_RECONNECT_DELAY_MS = 5000`
-- Used in: binance-provider.js:30, bitfinex-provider.js:30, generic-provider.js:31
+- Used in: `binance-provider.ts:30`, `bitfinex-provider.ts:30`, `generic-provider.ts:31`
 - Reconnects indefinitely every 5 seconds
 
 **Proposed behavior:**
@@ -38,9 +38,9 @@ const attemptDelay = Math.min(
 
 **What needs to be changed:**
 - **Files**:
-  - `js/providers/binance-provider.js:322-340` (scheduleReconnect)
-  - `js/providers/bitfinex-provider.js:410-428` (scheduleReconnect)
-  - `js/providers/generic-provider.js:98-109` (onclose handler)
+  - `js/providers/binance-provider.ts:322-340` (scheduleReconnect)
+  - `js/providers/bitfinex-provider.ts:410-428` (scheduleReconnect)
+  - `js/providers/generic-provider.ts:98-109` (onclose handler)
 
 **Implementation**:
 1. Add `reconnectAttempts` counter to provider metadata
@@ -111,9 +111,9 @@ const attemptDelay = Math.min(
 - **Flexibility**: Different users need different log levels
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.ts`
   - Line 77: `loggingEnabled` is hardcoded to `false`
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.ts`
   - Line 12: `loggingEnabled` is also hardcoded
 - **Implementation**:
   1. Add "Enable Debugging" toggle in property inspector (advanced section)
@@ -141,9 +141,9 @@ const attemptDelay = Math.min(
 
 **What needs to be changed?**
 - **Files**:
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/binance-provider.js`
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/bitfinex-provider.js`
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/ticker-subscription-manager.js`
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/binance-provider.ts`
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/bitfinex-provider.ts`
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/ticker-subscription-manager.ts`
 - **Implementation**:
   1. Create connection pool manager per exchange
   2. Share single WebSocket per exchange across all subscriptions
@@ -165,152 +165,6 @@ const attemptDelay = Math.min(
 - **Message volume**: Single connection receives all messages (higher throughput)
 - **Testing**: Need to test with many simultaneous subscriptions
 - **Migration**: Ensure backward compatibility during transition
-
----
-
-    ## 7. FEATURE ENHANCEMENTS
-
-    ### 7.1 Add TypeScript Support
-
-    **Why?**
-    - **Type safety**: Catch type-related bugs at compile time
-    - **IDE support**: Better autocomplete, refactoring, and navigation
-    - **Documentation**: Types serve as inline documentation
-    - **Maintainability**: Easier to understand code and refactor safely
-
-    **What needs to be changed?**
-    - **All `.js` files** in `com.courcelle.cryptoticker-dev.sdPlugin/js/`
-    - **New files to create**:
-      - `tsconfig.json`: TypeScript configuration
-      - Type definition files for StreamDeck SDK (or use existing @types package)
-    - **Implementation approach**:
-      1. Add TypeScript compiler and build tools to `package.json`
-      2. Start with `.d.ts` declaration files for existing code (no conversion yet)
-      3. Incrementally convert modules to TypeScript, while ensuring comments and explanations stays in place (feel free to modify or add your own, if things aren't self explanatory, but stays concise):
-        - Start with utility modules (formatters, helpers)
-        - Then providers (define provider interface)
-        - Finally main plugin files
-      4. Define key interfaces:
-        - `Settings`: Plugin settings structure
-        - `TickerData`: Ticker data from providers
-        - `CandleData`: Candle data structure
-        - `ProviderInterface`: Provider contract
-        - etc., as needed
-      5. Update build process to compile TypeScript to JavaScript
-      6. Review and update documentation and instructions (.md files, eg. README.md, AGENTS.md, CODEBASE_ANALYSIS.md, IMPROVEMENTS.md)
-
-    **Risks & Considerations**:
-    - **Dependencies**: Some libraries may lack type definitions
-    - **Incremental approach**: Can use TypeScript's `allowJs` for gradual migration
-
-    ---
-
-    ### 7.2 Add Module Bundler
-
-    **Why?**
-    - **Plugin size**: Files loaded individually increase plugin size
-    - **Load performance**: Many small files slower than one bundle
-    - **Tree shaking**: Remove unused code to reduce size
-    - **Optimization**: Minification and compression
-    - **Development**: Enable modern JavaScript features and imports
-
-    **What needs to be changed?**
-    - **New files to create**:
-      - `webpack.config.js` or `rollup.config.js` or `esbuild.config.js`
-      - Update `package.json` with build scripts
-    - **Build outputs**:
-      - `plugin.bundle.js`: Main plugin code
-      - `pi.bundle.js`: Property inspector code
-      - `preview.bundle.js`: Preview server code
-    - **HTML files to update**:
-      - `index.html`: Load plugin bundle
-      - `index_pi.html`: Load PI bundle
-      - `dev/preview.html`: Load preview bundle
-    - **Implementation**:
-      1. Choose bundler (webpack = most features, rollup = smaller bundles, esbuild = fastest)
-      2. Configure entry points for each bundle
-      3. Set up development mode (source maps, watch mode)
-      4. Set up production mode (minification, tree shaking)
-      5. Update deployment process to use bundled files
-      6. Review and update documentation and instructions (.md files, eg. README.md, AGENTS.md, CODEBASE_ANALYSIS.md, IMPROVEMENTS.md)
-
-    **Risks & Considerations**:
-    - **Build complexity**: Adds significant complexity to build process
-    - **Debugging**: Source maps needed to debug bundled code
-    - **Development workflow**: Hot reload or watch mode needed for good DX
-    - **Compatibility**: Ensure bundled code works in StreamDeck environment
-    - **Dependencies**: Bundle size can grow with dependencies
-    - **Testing**: Tests may need to run on source files, not bundles
-
-    ---
-
-    ## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
-
-    ### 8.1 Document Connection States and Troubleshooting
-
-    **Why?**
-    - **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
-    - **Support burden**: Repeated questions about connection issues
-    - **Self-service**: Users should be able to diagnose and fix common issues
-
-    **What needs to be changed?**
-    - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-      - Add help section or tooltips explaining states
-    - **File**: `README.md`
-      - Document connection state meanings
-      - Common issues and solutions
-      - Diagnostic steps
-    - **Documentation content**:
-      - **LIVE**: Connected to primary provider with live data
-      - **BACKUP**: Primary provider failed, using backup/fallback provider
-      - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
-      - **BROKEN**: Connection failed and retries exhausted
-      - Add troubleshooting steps:
-        - Check internet connection
-        - Verify exchange is accessible (not blocked by firewall/VPN)
-        - Check if API is experiencing outages
-        - Try different provider
-        - Check plugin logs for detailed errors
-
-    **Risks & Considerations**:
-    - **Low risk**: Documentation-only change
-    - **Maintenance**: Keep docs updated as states/behavior changes
-
-    ---
-
-    ### 8.2 Improve Build and Release Process
-
-    **Why?**
-    - **Manual process**: Current rsync and copy commands are error-prone
-    - **Version management**: Manual version bumping is easy to forget
-    - **Changelog**: No automated changelog generation
-    - **Consistency**: Manual process leads to inconsistent releases
-
-    **What needs to be changed?**
-    - **New files to create**:
-      - `scripts/build.js`: Automated build script
-      - `scripts/release.js`: Automated release script
-      - `RELEASE_CHECKLIST.md`: Manual checklist for releases
-    - **Package.json scripts**:
-      - `npm run build`: Build plugin for production
-      - `npm run release:patch`: Bump patch version and release
-      - `npm run release:minor`: Bump minor version and release
-      - `npm run release:major`: Bump major version and release
-    - **Automation** (refer to README.md for the current build commands, as it needs to be done on a different plugin ID as the dev one -- make sure to update that file with the new commands once done):
-      1. Version bumping in `manifest.json` and `package.json`
-      2. Changelog generation from git commits (conventional commits)
-      3. Build and bundle for distribution
-      4. Create distribution `.streamDeckPlugin` file
-    - Review and update documentation and instructions (.md files, eg. README.md, AGENTS.md, CODEBASE_ANALYSIS.md, IMPROVEMENTS.md)
-
-    **Risks & Considerations**:
-    - **Initial setup**: Significant effort to create automation scripts
-    - **Testing**: Automation scripts themselves need testing
-    - **Git workflow**: Team needs to follow conventional commit format
-    - **Breaking**: Buggy release script could create bad releases
-    - **Rollback**: Need ability to roll back bad releases
-
-    ---
 
 ## 9. USER EXPERIENCE IMPROVEMENTS
 

@@ -2,18 +2,24 @@
 This project is a Stream Deck plugin; The docs for the SDK are located at https://docs.elgato.com/streamdeck/sdk/introduction/getting-started/ (and it's sub pages).
 
 ## Project Structure & Module Organization
-- Source: `com.courcelle.cryptoticker-dev.sdPlugin/` (plugin bundle).
-- Core files: `manifest.json`, `index.html`, modular plugin logic under `js/` (`ticker.js` orchestrator plus `canvas-renderer.js`, `settings-manager.js`, `alert-manager.js`, `formatters.js`, `ticker-state.js`), `js/pi.js` (property inspector), `css/`, `images/`.
+- Source: `com.courcelle.cryptoticker-dev.sdPlugin/` (plugin bundle). TypeScript sources live alongside compiled JavaScript and bundled runtime assets inside `js/`.
+- Core files: `manifest.json`, `index.html`, modular plugin logic under `js/` (`ticker.ts` orchestrator plus `canvas-renderer.ts`, `settings-manager.ts`, `alert-manager.ts`, `formatters.ts`, `ticker-state.ts`), `js/pi.ts` (property inspector, with entrypoint  `index_pi.html`), `css/`, `images/`.
 - Dev preview: `dev/preview.html` and `dev/preview.js` served by the local preview server.
 - Tests: `__tests__/` (e.g., `__tests__/ticker.test.js`).
+- Bundled runtime outputs: `js/plugin.bundle.js`, `js/pi.bundle.js`, `js/preview.bundle.js`.
 
 ## Build, Test, and Development Commands
 - `npm test`: runs Jest unit tests.
-- `npm run preview`: starts a local static server and opens `dev/preview.html` to iterate on UI/logic without installing the plugin in Stream Deck.
-- `npm run lint`: check JavaScript sources for issues; run after any code change.
+- `npm run build`: transpile TypeScript and rebuild runtime bundles; append `-- --stage` to stage the production plugin under `dist/release/com.courcelle.cryptoticker.sdPlugin`, or `-- --package` to also create the `.streamDeckPlugin`.
+- `npm run build:watch`: keep the TypeScript compiler and bundler hot so other tooling rebuilds automatically.
+- `npm run bundle`: rebuild only the bundled assets (skips TypeScript compilation).
+- `npm run preview`: runs the TypeScript compiler in watch mode alongside the preview server (`npm run preview:serve` runs the server only).
+- `npm run lint`: check TypeScript sources (and tests) for issues; run after any code change.
 - `npm run lint:fix`: auto-fix lint issues when possible; run if `npm run lint` reports violations.
 - `npm run format`: format sources with Prettier; run before committing changes that touch code or markup.
-- No build step required for development; Stream Deck reads files directly from the `.sdPlugin` folder.
+- `npm run watch`: concurrently compile TypeScript changes and restart the dev plugin via `streamdeck restart`.
+- `npm test` automatically triggers the build to ensure generated JavaScript is in sync.
+- `npm run release:patch|minor|major`: bump versions, regenerate the changelog, build bundles, and package the plugin for distribution.
 
 ## Coding Style & Naming Conventions
 - Formatting is enforced by Prettier: 2-space indentation, single quotes for JavaScript, double quotes remain acceptable in HTML where appropriate.

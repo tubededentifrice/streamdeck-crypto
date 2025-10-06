@@ -3,7 +3,7 @@
 `Crypto ticker PRO` is a plugin to watch crypto and stock rates. Crypto rates are provided by Bitfinex, Binance in real time and Stocks are provided by Yahoo Finance every 15mins.
 
 ## Features
-- Code written in pure JavaScript
+- Core modules authored in TypeScript (compiled to JavaScript for Stream Deck runtime)
 - Cross-platform (macOS, Windows)
 - All Bitfinex and Binance pairs are supported (~1500 pairs); All Yahoo Finance stocks are supported.
 - Real time updates of the ticker (WebSocket connection)
@@ -14,14 +14,43 @@
 - Can customize fonts, colors, which info to display, etc.
 - Fully open source!
 
+## Connection States
+
+| State | Meaning |
+| --- | --- |
+| **LIVE** | Connected to the primary market data provider and receiving live updates. |
+| **BACKUP** | The primary provider failed; the plugin automatically switched to a fallback provider. |
+| **DETACHED** | Direct provider requests failed, so the legacy ticker proxy is supplying data. |
+| **BROKEN** | All retry attempts exhausted and no provider is currently supplying data. |
+
+When the connection status icon is enabled, these states are rendered on the Stream Deck key and in the Property Inspector using the same icon shapes.
+
+## Troubleshooting Connection Issues
+
+### Common Issues & Quick Fixes
+- Local network interruptions or Wi-Fi dropouts → confirm connectivity and retry.
+- Corporate/VPN firewalls blocking exchange endpoints → allow-list the provider domains or disconnect the blocking service.
+- Temporary provider outages → review the exchange status page and wait for service restoration.
+- Provider-specific throttling or symbol availability gaps → try selecting a different provider or trading pair.
+
+### Diagnostic Checklist
+1. Check your internet connection (router, Wi-Fi, or Ethernet status).
+2. Verify the target exchange/API is reachable and not blocked by a firewall, proxy, or VPN.
+3. Review the provider's status page or community channels for outage notices.
+4. Switch to another supported provider in the Property Inspector to compare behaviour.
+5. Inspect the plugin logs (Stream Deck logs directory) for detailed error messages.
+
 ## Code Structure
-- `js/ticker.js` orchestrates Stream Deck lifecycle events and delegates to helper modules
-- `js/canvas-renderer.js` encapsulates ticker and candle canvas drawing logic
-- `js/settings-manager.js` normalizes defaults and drives subscription refresh
-- `js/alert-manager.js` evaluates alert rules and tracks arm/disarm state
-- `js/formatters.js` provides shared number/price formatting helpers
-- `js/ticker-state.js` owns context metadata, subscriptions, and cache storage
+- `js/ticker.ts` orchestrates Stream Deck lifecycle events and delegates to helper modules
+- `js/canvas-renderer.ts` encapsulates ticker and candle canvas drawing logic
+- `js/settings-manager.ts` normalizes defaults and drives subscription refresh
+- `js/alert-manager.ts` evaluates alert rules and tracks arm/disarm state
+- `js/formatters.ts` provides shared number/price formatting helpers
+- `js/ticker-state.ts` owns context metadata, subscriptions, and cache storage
 - Jest specs cover each helper module alongside the existing ticker/provider tests
+
+The TypeScript sources compile to CommonJS modules for tests and are bundled into
+`js/plugin.bundle.js`, `js/pi.bundle.js`, and `js/preview.bundle.js` for runtime use.
 
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot1.png" width="277" />
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
@@ -42,23 +71,32 @@ streamdeck unlink com.courcelle.cryptoticker-dev
 ```
 
 ## Packaging
-- Bump the version in `src/com.courcelle.cryptoticker-dev.sdPlugin/manifest.pub.json`.
 
-Run the following to create the "published" version of the plugin:
+Release automation handles version bumps, changelog updates, bundling, and creation of the `.streamDeckPlugin` bundle. Review `RELEASE_CHECKLIST.md` first, then run the appropriate release command:
+
 ```
-mkdir -p com.courcelle.cryptoticker.sdPlugin  # Make sure to never edit this, and only make changes to the -dev directory
-rsync -avh --delete ./com.courcelle.cryptoticker-dev.sdPlugin/ ./com.courcelle.cryptoticker.sdPlugin/
-cp -f ./com.courcelle.cryptoticker.sdPlugin/manifest.pub.json ./com.courcelle.cryptoticker.sdPlugin/manifest.json
-rm -f com.courcelle.cryptoticker.streamDeckPlugin
-streamdeck pack com.courcelle.cryptoticker.sdPlugin
-rm -rf com.courcelle.cryptoticker.sdPlugin
+npm run release:patch   # bug fixes and documentation-only changes
+npm run release:minor   # backwards-compatible features
+npm run release:major   # breaking changes
 ```
+
+Each release command:
+- bumps `package.json`, `manifest.json`, and `manifest.pub.json`
+- regenerates `CHANGELOG.md` from conventional commits since the previous release
+- compiles TypeScript, rebuilds runtime bundles, and stages the production plugin
+- outputs `com.courcelle.cryptoticker.streamDeckPlugin` at the repository root
+
+Run `npm run build` to refresh compiled assets. Append `-- --stage` to also prepare the production plugin folder, or `-- --package` (or `node scripts/build.js --package`) to create the `.streamDeckPlugin` directly.
 
 
 ## Development
 
 Use the following npm scripts during development:
 
-- `npm test` – run the Jest unit tests
-- `npm run watch` – watch for changes in the code and notify the Stream Deck UI to reload it whenever needed
-- `npm run preview` – start a lightweight server on port 34115 and open the preview page in the default browser
+- `npm run build` – transpile TypeScript and rebuild runtime bundles; add `-- --stage` to prepare `dist/release/com.courcelle.cryptoticker.sdPlugin`, or `-- --package` to also emit the `.streamDeckPlugin`
+- `npm run build:watch` – run the TypeScript compiler and esbuild bundler in watch mode (used by other scripts)
+- `npm run bundle` – rebuild only the bundled assets (skips TypeScript recompile)
+- `npm test` – run the Jest unit tests (automatically runs `npm run build` first)
+- `npm run watch` – concurrently run the TypeScript compiler in watch mode and restart the dev plugin via `streamdeck restart`
+- `npm run preview` – run the TypeScript compiler in watch mode alongside the preview server (`npm run preview:serve` if you only need the server)
+- `npm run release:patch|minor|major` – bump versions, regenerate the changelog, build bundles, and package the plugin for distribution

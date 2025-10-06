@@ -1,22 +1,29 @@
+"use strict";
+/* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
+// @ts-nocheck
 /* global signalR */
-
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) {
-        module.exports = factory(
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const args = typeof module === "object" && module.exports
+        ? [
             require("./provider-interface"),
             require("./subscription-key"),
             require("./ticker-subscription-manager"),
             require("./connection-states")
-        );
-    } else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerConnectionStates
-        );
-        root.CryptoTickerProviders.GenericProvider = exports.GenericProvider;
+        ]
+        : [
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerConnectionStates
+        ];
+    const exportsValue = factory(args[0], args[1], args[2], args[3]);
+    if (typeof module === "object" && module.exports) {
+        module.exports = exportsValue;
+    }
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.GenericProvider = exportsValue.GenericProvider;
     }
 }(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, subscriptionKeyModule, managerModule, connectionStatesModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
@@ -28,10 +35,8 @@
         BACKUP: "backup",
         BROKEN: "broken"
     };
-
     const CONNECTION_STATE_CONNECTED = "Connected";
     const DEFAULT_RETRY_DELAY_MS = 5000;
-
     class GenericProvider extends ProviderInterface {
         constructor(options) {
             super(options);
@@ -41,7 +46,6 @@
             this.shouldReconnect = true;
             this.connectionState = "Disconnected";
             this.startingConnection = false;
-
             // Manager handles fallback polling + streaming so action code stays simple.
             const managerOptions = {
                 logger: (...args) => {
@@ -57,39 +61,31 @@
                 fallbackPollIntervalMs: opts.fallbackPollIntervalMs,
                 staleTickerTimeoutMs: opts.staleTickerTimeoutMs
             };
-
             this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
         }
-
         getId() {
             return "GENERIC";
         }
-
         subscribeTicker(params, handlers) {
             return this.subscriptionManager.subscribe(params, handlers);
         }
-
         getCachedTicker(key) {
             return this.subscriptionManager.getCachedTicker(key);
         }
-
         ensureConnection() {
             if (this.connection && (this.connectionState === CONNECTION_STATE_CONNECTED || this.startingConnection)) {
                 return;
             }
-
             if (typeof signalR === "undefined" || !signalR.HubConnectionBuilder) {
                 this.logger("GenericProvider: SignalR not available, skipping WebSocket connection.");
                 return;
             }
-
             if (!this.connection) {
                 this.connection = new signalR.HubConnectionBuilder()
                     .withUrl(this.baseUrl + "/tickerhub")
                     .withAutomaticReconnect()
                     .configureLogging(signalR.LogLevel.Warning)
                     .build();
-
                 const self = this;
                 this.connection.on("ticker", function (ticker) {
                     self.handleTickerMessage(ticker);
@@ -107,15 +103,12 @@
                     }
                 });
             }
-
             this.startConnection();
         }
-
         startConnection() {
             if (!this.connection || this.startingConnection || this.connectionState === CONNECTION_STATE_CONNECTED) {
                 return;
             }
-
             const self = this;
             this.startingConnection = true;
             this.connection.start().then(function () {
@@ -131,11 +124,9 @@
                 }, self.retryDelayMs);
             });
         }
-
         isConnected() {
             return this.connection && this.connectionState === CONNECTION_STATE_CONNECTED;
         }
-
         onConnectionEstablished() {
             const self = this;
             this.subscriptionManager.forEachEntry(function (entry) {
@@ -149,14 +140,11 @@
                 }
             });
         }
-
         subscribeEntry(entry) {
             if (!entry) {
                 return false;
             }
-
             entry.meta = entry.meta || {};
-
             if (!this.connection) {
                 // Lazily boot SignalR on first subscriber to avoid sockets for idle keys.
                 this.ensureConnection();
@@ -164,30 +152,20 @@
                 entry.streamingActive = false;
                 return false;
             }
-
             if (!this.isConnected()) {
                 this.startConnection();
                 entry.meta.pending = true;
                 entry.streamingActive = false;
                 return false;
             }
-
             if (entry.meta.isSubscribed) {
                 entry.meta.pending = false;
                 return true;
             }
-
             entry.meta.pending = true;
             const params = entry.params;
             const self = this;
-
-            return this.connection.invoke(
-                "Subscribe",
-                params.exchange,
-                params.symbol,
-                params.fromCurrency,
-                params.toCurrency
-            ).then(function () {
+            return this.connection.invoke("Subscribe", params.exchange, params.symbol, params.fromCurrency, params.toCurrency).then(function () {
                 entry.meta.isSubscribed = true;
                 entry.meta.pending = false;
                 entry.streamingActive = true;
@@ -200,30 +178,19 @@
                 return false;
             });
         }
-
         unsubscribeEntry(entry) {
             if (!entry) {
                 return true;
             }
-
             entry.meta = entry.meta || {};
-
             if (!this.connection || !entry.meta.isSubscribed) {
                 entry.meta.isSubscribed = false;
                 entry.streamingActive = false;
                 return true;
             }
-
             const params = entry.params;
             const self = this;
-
-            return this.connection.invoke(
-                "Unsubscribe",
-                params.exchange,
-                params.symbol,
-                params.fromCurrency,
-                params.toCurrency
-            ).then(function () {
+            return this.connection.invoke("Unsubscribe", params.exchange, params.symbol, params.fromCurrency, params.toCurrency).then(function () {
                 entry.meta.isSubscribed = false;
                 entry.streamingActive = false;
                 return true;
@@ -234,11 +201,9 @@
                 return false;
             });
         }
-
         fetchTicker(params) {
             return this.rawFetchTicker(params);
         }
-
         rawFetchTicker(params) {
             const exchange = params.exchange;
             const symbol = params.symbol;
@@ -248,7 +213,6 @@
             if (toCurrency !== null) {
                 url += "&toCurrency=" + encodeURIComponent(toCurrency);
             }
-
             const self = this;
             return fetch(url).then(function (response) {
                 return response.json();
@@ -270,30 +234,25 @@
                 return fallback;
             });
         }
-
         handleTickerMessage(message) {
             if (!message) {
                 return;
             }
-
             const provider = message.provider || message["provider"];
             const symbol = message.symbol || message["symbol"];
             const fromCurrency = message.conversionFromCurrency || message["conversionFromCurrency"] || null;
             const toCurrency = message.conversionToCurrency || message["conversionToCurrency"] || null;
             const key = this.subscriptionManager.buildKey(provider, symbol, fromCurrency, toCurrency);
             const ticker = this.transformTickerResponse(message);
-
             const entry = this.subscriptionManager.getEntry(key);
             if (entry && entry.meta) {
                 entry.meta.isSubscribed = true;
                 entry.meta.pending = false;
                 entry.streamingActive = true;
             }
-
             // Notify all contexts; manager marks entry live and stops fallback polling.
             this.subscriptionManager.handleStreamingUpdate(key, ticker);
         }
-
         async fetchCandles(params) {
             const exchange = params.exchange;
             const symbol = params.symbol;
@@ -301,7 +260,6 @@
             const limit = typeof params.limit === "number" && params.limit > 0 ? params.limit : 24;
             const base = this.baseUrl.replace(/\/$/, "");
             const url = base + "/api/Candles/json/" + encodeURIComponent(exchange) + "/" + encodeURIComponent(symbol) + "/" + interval + "?limit=" + limit;
-
             try {
                 const response = await fetch(url);
                 if (!response || !response.ok) {
@@ -312,12 +270,12 @@
                     return json.candles;
                 }
                 return [];
-            } catch (err) {
+            }
+            catch (err) {
                 this.logger("GenericProvider: error fetching candles", err);
                 throw err;
             }
         }
-
         transformTickerResponse(responseJson) {
             const json = responseJson || {};
             return {
@@ -331,7 +289,6 @@
                 pairDisplay: json["symbolDisplay"] || json["symbol"] || json["pair"] || ""
             };
         }
-
         buildEmptyTicker(symbol) {
             const sym = symbol || "";
             return {
@@ -347,7 +304,6 @@
             };
         }
     }
-
     return {
         GenericProvider: GenericProvider
     };

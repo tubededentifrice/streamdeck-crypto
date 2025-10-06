@@ -198,6 +198,57 @@ progress.full {
     border-bottom-color: #4ebbe4;
 }
 
+.connection-state-help {
+    margin-top: 8px;
+}
+
+.connection-state-help-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.connection-state-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.connection-state-icon {
+    width: 40px;
+    height: 40px;
+    background: transparent;
+}
+
+.connection-state-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.connection-state-label {
+    font-weight: 600;
+    color: #d8d8d8;
+}
+
+.connection-state-text p {
+    margin: 0;
+}
+
+.connection-state-troubleshooting {
+    margin-top: 4px;
+}
+
+.connection-troubleshooting-list {
+    margin: 4px 0 0 16px;
+    padding: 0;
+}
+
+.connection-troubleshooting-list li {
+    margin: 0 0 2px;
+}
+
 select {
     -webkit-appearance: none;
     -moz-appearance: none;

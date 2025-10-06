@@ -1,54 +1,55 @@
 "use strict";
-
-(function (root, factory) {
+(function loadTickerState(root, factory) {
+    const exports = factory();
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
-    } else {
-        root.CryptoTickerState = factory();
+        module.exports = exports;
     }
-}(typeof self !== "undefined" ? self : this, function () {
-    // In-memory per runtime; keyed by action context so hotkeys, multi-actions, and dev preview share APIs safely.
+    if (root && typeof root === "object") {
+        root.CryptoTickerState = exports;
+    }
+})(typeof self !== "undefined" ? self : this, function buildTickerState() {
     const contextDetails = {};
     const contextSubscriptions = {};
     const contextConnectionStates = {};
     const conversionRatesCache = {};
     const candlesCache = {};
     const lastGoodTickerValues = {};
-
     function setContextDetails(context, settings) {
         contextDetails[context] = {
-            context: context,
-            settings: settings
+            context,
+            settings
         };
     }
-
     function getContextDetails(context) {
         return contextDetails[context] || null;
     }
-
     function forEachContext(callback) {
-        Object.keys(contextDetails).forEach(function (ctx) {
+        Object.keys(contextDetails).forEach((ctx) => {
             callback(contextDetails[ctx], ctx);
         });
     }
-
     function clearContextDetails(context) {
         delete contextDetails[context];
         delete lastGoodTickerValues[context];
     }
-
     function setSubscription(context, subscription) {
-        contextSubscriptions[context] = subscription;
+        if (!context) {
+            return;
+        }
+        contextSubscriptions[context] = subscription || null;
     }
-
     function getSubscription(context) {
+        if (!context) {
+            return null;
+        }
         return contextSubscriptions[context] || null;
     }
-
     function clearSubscription(context) {
+        if (!context) {
+            return;
+        }
         delete contextSubscriptions[context];
     }
-
     function setConnectionState(context, state) {
         if (!context) {
             return;
@@ -57,14 +58,12 @@
             contextConnectionStates[context] = state;
         }
     }
-
     function getConnectionState(context) {
         if (!context) {
             return null;
         }
         return contextConnectionStates[context] || null;
     }
-
     function clearConnectionState(context) {
         if (!context) {
             return;
@@ -72,84 +71,72 @@
         delete contextConnectionStates[context];
         delete lastGoodTickerValues[context];
     }
-
     function getOrCreateConversionRateEntry(key) {
         if (!conversionRatesCache[key]) {
             conversionRatesCache[key] = {};
         }
         return conversionRatesCache[key];
     }
-
     function setConversionRateEntry(key, entry) {
         conversionRatesCache[key] = entry;
     }
-
     function getCandlesCacheEntry(key) {
         return candlesCache[key];
     }
-
     function setCandlesCacheEntry(key, entry) {
         candlesCache[key] = entry;
     }
-
     function resetAllState() {
-        Object.keys(contextDetails).forEach(function (key) {
+        Object.keys(contextDetails).forEach((key) => {
             delete contextDetails[key];
         });
-        Object.keys(contextSubscriptions).forEach(function (key) {
+        Object.keys(contextSubscriptions).forEach((key) => {
             const sub = contextSubscriptions[key];
             if (sub && typeof sub.unsubscribe === "function") {
                 try {
                     sub.unsubscribe();
-                } catch (err) {
-                    // noop in reset
+                }
+                catch (err) {
+                    // ignore errors while resetting state
                 }
             }
             delete contextSubscriptions[key];
         });
-        Object.keys(contextConnectionStates).forEach(function (key) {
+        Object.keys(contextConnectionStates).forEach((key) => {
             delete contextConnectionStates[key];
         });
-        Object.keys(conversionRatesCache).forEach(function (key) {
+        Object.keys(conversionRatesCache).forEach((key) => {
             delete conversionRatesCache[key];
         });
-        Object.keys(candlesCache).forEach(function (key) {
+        Object.keys(candlesCache).forEach((key) => {
             delete candlesCache[key];
         });
-        Object.keys(lastGoodTickerValues).forEach(function (key) {
+        Object.keys(lastGoodTickerValues).forEach((key) => {
             delete lastGoodTickerValues[key];
         });
     }
-
-    // Cache last successful payload so stale providers still render something useful.
     function setLastGoodTicker(context, values, timestamp) {
         if (!context || !values) {
             return;
         }
-
         const safeTimestamp = typeof timestamp === "number" ? timestamp : Date.now();
         lastGoodTickerValues[context] = {
             values: Object.assign({}, values),
             timestamp: safeTimestamp
         };
     }
-
     function getLastGoodTicker(context) {
         if (!context) {
             return null;
         }
-
         return lastGoodTickerValues[context] || null;
     }
-
     function clearLastGoodTicker(context) {
         if (!context) {
             return;
         }
-
         delete lastGoodTickerValues[context];
     }
-
     return {
         setContextDetails,
         getContextDetails,
@@ -170,4 +157,4 @@
         getLastGoodTicker,
         clearLastGoodTicker
     };
-}));
+});

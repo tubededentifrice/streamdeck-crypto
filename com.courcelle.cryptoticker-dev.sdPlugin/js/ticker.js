@@ -1,8 +1,7 @@
-/// <reference path="../libs/js/action.js" />
-/// <reference path="../libs/js/stream-deck.js" />
-
+"use strict";
+/* eslint-disable @typescript-eslint/ban-ts-comment, no-var, @typescript-eslint/no-this-alias */
+// @ts-nocheck
 /* global DestinationEnum, CryptoTickerConstants */
-
 const defaultConfig = {
     "tProxyBase": "https://tproxyv8.opendle.com",
     "fallbackPollIntervalMs": 60000,
@@ -15,27 +14,23 @@ const defaultConfig = {
         "conversionError": "CONVERSION ERROR"
     }
 };
-
 function requireOrNull(modulePath) {
     if (typeof require === "function") {
         try {
             return require(modulePath);
-        } catch (err) {
+        }
+        catch (err) {
             return null;
         }
     }
-
     return null;
 }
-
 function resolveGlobalConfig() {
     if (typeof CryptoTickerConfig !== "undefined") {
         return CryptoTickerConfig;
     }
-
     return null;
 }
-
 // Normalize PI/runtime currency values; accept null/number so stale settings do not crash.
 function normalizeCurrencyCode(value) {
     if (typeof value === "string") {
@@ -45,14 +40,11 @@ function normalizeCurrencyCode(value) {
         }
         return trimmed.toUpperCase();
     }
-
     if (value === null || value === undefined) {
         return null;
     }
-
     return String(value).trim().toUpperCase() || null;
 }
-
 const moduleConfig = requireOrNull("./config");
 const constantsModule = requireOrNull("./constants");
 const globalConfig = resolveGlobalConfig();
@@ -62,7 +54,6 @@ const TIMESTAMP_SECONDS_THRESHOLD = typeof constants.TIMESTAMP_SECONDS_THRESHOLD
 const tProxyBase = runtimeConfig.tProxyBase;
 const DEFAULT_MESSAGE_CONFIG = defaultConfig.messages;
 const messageConfig = Object.assign({}, DEFAULT_MESSAGE_CONFIG, (runtimeConfig && runtimeConfig.messages) || {});
-
 const subscriptionKeyModule = requireOrNull("./providers/subscription-key");
 const globalProviders = typeof CryptoTickerProviders !== "undefined" ? CryptoTickerProviders : null;
 // Local fallback keeps subscription key format stable when provider bundle missing (tests/preview).
@@ -81,7 +72,6 @@ const buildSubscriptionKey = subscriptionKeyModule && subscriptionKeyModule.buil
             }
             return exchangePart + "__" + symbolPart + convertPart;
         };
-
 const connectionStatesModule = requireOrNull("./providers/connection-states");
 const connectionStates = connectionStatesModule || (typeof CryptoTickerConnectionStates !== "undefined" ? CryptoTickerConnectionStates : {
     LIVE: "live",
@@ -89,37 +79,30 @@ const connectionStates = connectionStatesModule || (typeof CryptoTickerConnectio
     BACKUP: "backup",
     BROKEN: "broken"
 });
-
 const canvasRendererModule = requireOrNull("./canvas-renderer");
 const alertManagerModule = requireOrNull("./alert-manager");
 const formattersModule = requireOrNull("./formatters");
 const tickerStateModule = requireOrNull("./ticker-state");
 const settingsManagerModule = requireOrNull("./settings-manager");
-
 const canvasRenderer = canvasRendererModule || (typeof CryptoTickerCanvasRenderer !== "undefined" ? CryptoTickerCanvasRenderer : null);
 const alertManager = alertManagerModule || (typeof CryptoTickerAlertManager !== "undefined" ? CryptoTickerAlertManager : null);
 const formatters = formattersModule || (typeof CryptoTickerFormatters !== "undefined" ? CryptoTickerFormatters : null);
 const tickerState = tickerStateModule || (typeof CryptoTickerState !== "undefined" ? CryptoTickerState : null);
 const settingsManager = settingsManagerModule || (typeof CryptoTickerSettingsManager !== "undefined" ? CryptoTickerSettingsManager : null);
-
 if (!canvasRenderer || !alertManager || !formatters || !tickerState || !settingsManager) {
     throw new Error("CryptoTicker dependencies are not available");
 }
-
 let loggingEnabled = false;
 let websocket = null;
 let canvas;
 let canvasContext;
 const screenshotMode = false; // Allows rendering the canvas in an external preview
-
 const CONVERSION_CACHE_TTL_MS = 60 * 60 * 1000;
 let providerRegistrySingleton = null;
-
 const applyDefaultSettings = settingsManager.applyDefaultSettings;
 const defaultSettings = settingsManager.defaultSettings;
 const getDefaultSettingsSnapshot = settingsManager.getDefaultSettingsSnapshot;
 const settingsSchema = settingsManager.settingsSchema;
-
 const tickerAction = {
     type: "com.courcelle.cryptoticker.ticker",
     log: function (...data) {
@@ -127,19 +110,15 @@ const tickerAction = {
             console.log(...data);
         }
     },
-
     setContextConnectionState: function (context, state) {
         tickerState.setConnectionState(context, state);
     },
-
     getContextConnectionState: function (context) {
         return tickerState.getConnectionState(context);
     },
-
     clearContextConnectionState: function (context) {
         tickerState.clearConnectionState(context);
     },
-
     getProviderRegistry: function () {
         if (!providerRegistrySingleton) {
             // Lazy-load to avoid pulling heavy providers in PI/tests yet keep runtime behavior.
@@ -149,11 +128,9 @@ const tickerAction = {
                 : globalProviders && globalProviders.ProviderRegistry
                     ? globalProviders.ProviderRegistry
                     : null;
-
             if (!ProviderRegistryClass) {
                 throw new Error("ProviderRegistry is not available");
             }
-
             providerRegistrySingleton = new ProviderRegistryClass({
                 baseUrl: tProxyBase,
                 logger: (...args) => {
@@ -169,16 +146,13 @@ const tickerAction = {
                 bitfinexSymbolOverrides: runtimeConfig.bitfinexSymbolOverrides
             });
         }
-
         return providerRegistrySingleton;
     },
-
     websocketSend: function (object) {
         if (websocket) {
             websocket.send(object);
         }
     },
-
     onKeyDown: async function (context, settings, _coordinates, _userDesiredState) {
         // State machine between modes
         switch (settings.mode) {
@@ -189,20 +163,19 @@ const tickerAction = {
             default:
                 if (alertManager.shouldDisarmOnKeyPress(context)) {
                     alertManager.disarmAlert(context);
-                } else {
+                }
+                else {
                     // Switch mode by default
                     settings.mode = "candles";
                 }
                 break;
         }
-
         // Update settings with current mode
         this.websocketSend(JSON.stringify({
             "event": "setSettings",
             "context": context,
             "payload": settings
         }));
-
         this.refreshTimer(context, settings);
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
@@ -210,22 +183,17 @@ const tickerAction = {
     },
     onWillAppear: async function (context, settings, _coordinates) {
         this.initCanvas();
-
         this.refreshTimer(context, settings);
         // this.updateTicker(context, settings); // Already done by refreshTimer
     },
     refreshTimers: async function () {
         // Make sure everybody is connected
         tickerState.forEachContext((details) => {
-            this.refreshTimer(
-                details["context"],
-                details["settings"]
-            );
+            this.refreshTimer(details["context"], details["settings"]);
         });
     },
     refreshTimer: async function (context, settings) {
         const normalizedSettings = this.refreshSettings(context, settings);
-
         // Force refresh of the display (in case WebSockets doesn't work and to update the candles)
         this.updateTicker(context, normalizedSettings);
     },
@@ -244,18 +212,17 @@ const tickerAction = {
         if (current && current.key === subscriptionKey) {
             return current;
         }
-
         if (current && typeof current.unsubscribe === "function") {
             // Tear down previous sub; lingering sockets pile up when switching pairs.
             try {
                 current.unsubscribe();
-            } catch (err) {
+            }
+            catch (err) {
                 this.log("Error unsubscribing from provider", err);
             }
             tickerState.clearSubscription(context);
             this.clearContextConnectionState(context);
         }
-
         const registry = this.getProviderRegistry();
         const provider = registry.getProvider(exchange);
         const params = {
@@ -265,7 +232,6 @@ const tickerAction = {
             toCurrency: null
         };
         const self = this;
-
         try {
             const handle = provider.subscribeTicker(params, {
                 onData: async function (tickerValues) {
@@ -273,16 +239,12 @@ const tickerAction = {
                     if (!details) {
                         return;
                     }
-
                     self.setContextConnectionState(details.context, tickerValues && tickerValues.connectionState);
                     try {
-                        const convertedTicker = await self.convertTickerValues(
-                            tickerValues,
-                            details.settings && details.settings.fromCurrency,
-                            details.settings && details.settings.currency
-                        );
+                        const convertedTicker = await self.convertTickerValues(tickerValues, details.settings && details.settings.fromCurrency, details.settings && details.settings.currency);
                         await self.updateCanvas(details.context, details.settings, convertedTicker);
-                    } catch (err) {
+                    }
+                    catch (err) {
                         self.log("Error updating canvas from subscription", err);
                     }
                 },
@@ -291,17 +253,16 @@ const tickerAction = {
                     self.setContextConnectionState(context, connectionStates.BROKEN);
                 }
             });
-
             tickerState.setSubscription(context, {
                 key: subscriptionKey,
-                unsubscribe: handle && typeof handle.unsubscribe === "function" ? handle.unsubscribe : function () {},
+                unsubscribe: handle && typeof handle.unsubscribe === "function" ? handle.unsubscribe : function () { },
                 providerId: provider.getId ? provider.getId() : null
             });
             return tickerState.getSubscription(context);
-        } catch (err) {
+        }
+        catch (err) {
             this.log("Error subscribing to provider", err);
         }
-
         return null;
     },
     refreshSettings: function (context, settings) {
@@ -316,130 +277,112 @@ const tickerAction = {
     getSubscriptionContextKey: function (exchange, pair, fromCurrency, toCurrency) {
         return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
     },
-
     // Decide if conversion needed; empty/same override → `to:null`.
     resolveConversionCurrencies: function (fromCurrency, toCurrency) {
         const resolvedFrom = normalizeCurrencyCode(fromCurrency) || "USD";
         const resolvedTo = normalizeCurrencyCode(toCurrency);
-
         if (!resolvedTo || resolvedTo === resolvedFrom) {
             return {
                 from: resolvedFrom,
                 to: null
             };
         }
-
         return {
             from: resolvedFrom,
             to: resolvedTo
         };
     },
-
     getConversionRate: async function (fromCurrency, toCurrency) {
         const from = normalizeCurrencyCode(fromCurrency);
         const to = normalizeCurrencyCode(toCurrency);
-
         if (!from || !to || from === to) {
             return 1;
         }
-
         const key = from + "_" + to;
         const now = Date.now();
         const cacheEntry = tickerState.getOrCreateConversionRateEntry(key);
-
         if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0 && cacheEntry.fetchedAt && (now - cacheEntry.fetchedAt) < CONVERSION_CACHE_TTL_MS) {
             return cacheEntry.rate;
         }
-
         if (cacheEntry.promise) {
             // Reuse pending fetch; swallow failure so next call can retry.
             try {
                 return await cacheEntry.promise;
-            } catch (promiseErr) {
+            }
+            catch (promiseErr) {
                 this.log("Conversion rate promise failed", promiseErr);
             }
         }
-
         const fetchFn = typeof fetch === "function" ? fetch : null;
         if (!fetchFn) {
             return typeof cacheEntry.rate === "number" && cacheEntry.rate > 0 ? cacheEntry.rate : 1;
         }
-
         const baseUrl = (tProxyBase || "").replace(/\/$/, "");
         if (!baseUrl) {
             return typeof cacheEntry.rate === "number" && cacheEntry.rate > 0 ? cacheEntry.rate : 1;
         }
-
         const url = baseUrl + "/api/ticker/json/currency/" + encodeURIComponent(from) + "/" + encodeURIComponent(to);
         const self = this;
-
         cacheEntry.promise = (async function () {
             try {
                 const response = await fetchFn(url);
                 if (!response || !response.ok) {
                     throw new Error("Conversion rate response not ok");
                 }
-
                 const json = await response.json();
                 const parsedRate = json && json.rate !== undefined ? parseFloat(json.rate) : NaN;
                 if (!parsedRate || !isFinite(parsedRate) || parsedRate <= 0) {
                     throw new Error("Invalid conversion rate");
                 }
-
                 cacheEntry.rate = parsedRate;
                 cacheEntry.fetchedAt = Date.now();
                 return parsedRate;
-            } catch (err) {
+            }
+            catch (err) {
                 self.log("Error fetching conversion rate", err);
                 throw err;
-            } finally {
+            }
+            finally {
                 delete cacheEntry.promise;
             }
         })();
-
         try {
             return await cacheEntry.promise;
-        } catch (err) {
+        }
+        catch (err) {
             if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0) {
                 return cacheEntry.rate;
             }
-
             // Keep legacy fallback: surface cached rate else hardcode 1 so old flows keep working.
             return 1;
         }
     },
-
     convertTickerValues: async function (tickerValues, fromCurrency, toCurrency) {
         if (!tickerValues) {
             return tickerValues;
         }
-
         const currencies = this.resolveConversionCurrencies(fromCurrency, toCurrency);
         if (!currencies.to) {
             return tickerValues;
         }
-
         const existingTo = normalizeCurrencyCode(tickerValues.conversionToCurrency);
         const existingFrom = normalizeCurrencyCode(tickerValues.conversionFromCurrency);
         if (existingTo === currencies.to && existingFrom === currencies.from) {
             return tickerValues;
         }
-
         let rate = null;
         try {
             rate = await this.getConversionRate(currencies.from, currencies.to);
-        } catch (err) {
+        }
+        catch (err) {
             this.log("Conversion rate error", err);
             return this.createConversionErrorValues(tickerValues);
         }
-
         if (!rate || !isFinite(rate) || rate <= 0) {
             return this.createConversionErrorValues(tickerValues);
         }
-
         return this.applyTickerConversion(tickerValues, rate, currencies.from, currencies.to);
     },
-
     // Strip numeric fields when conversion fails so UI shows metadata + error text only.
     createConversionErrorValues: function (tickerValues) {
         const errorValues = Object.assign({}, tickerValues);
@@ -453,25 +396,21 @@ const tickerAction = {
             "changeDailyPercent",
             "volume"
         ];
-
         for (let i = 0; i < numericKeys.length; i++) {
             const key = numericKeys[i];
             if (Object.prototype.hasOwnProperty.call(errorValues, key)) {
                 delete errorValues[key];
             }
         }
-
         errorValues.conversionRate = null;
         errorValues.conversionError = true;
         return errorValues;
     },
-
     // Multiply numeric fields; parse strings providers sometimes emit.
     applyTickerConversion: function (tickerValues, rate, fromCurrency, toCurrency) {
         if (!tickerValues || typeof tickerValues !== "object") {
             return tickerValues;
         }
-
         const converted = Object.assign({}, tickerValues);
         const keysToConvert = [
             "last",
@@ -481,38 +420,31 @@ const tickerAction = {
             "close",
             "changeDaily"
         ];
-
         for (let i = 0; i < keysToConvert.length; i++) {
             const key = keysToConvert[i];
             if (!Object.prototype.hasOwnProperty.call(tickerValues, key)) {
                 continue;
             }
-
             const value = tickerValues[key];
             const numeric = typeof value === "number" ? value : parseFloat(value);
             if (!isNaN(numeric)) {
                 converted[key] = numeric * rate;
             }
         }
-
         converted.conversionRate = rate;
         converted.conversionFromCurrency = fromCurrency;
         converted.conversionToCurrency = toCurrency;
-
         return converted;
     },
-
     // Clone candles before scaling price/quote volume; keep shared cache untouched.
     applyCandlesConversion: function (candles, rate) {
         if (!Array.isArray(candles) || !rate || !isFinite(rate) || rate <= 0) {
             return candles;
         }
-
         return candles.map(function (candle) {
             if (!candle || typeof candle !== "object") {
                 return candle;
             }
-
             const converted = Object.assign({}, candle);
             const priceKeys = ["open", "close", "high", "low"];
             for (let i = 0; i < priceKeys.length; i++) {
@@ -526,7 +458,6 @@ const tickerAction = {
                     converted[key] = numeric * rate;
                 }
             }
-
             if (Object.prototype.hasOwnProperty.call(candle, "volumeQuote")) {
                 const volumeValue = candle["volumeQuote"];
                 const volumeNumeric = typeof volumeValue === "number" ? volumeValue : parseFloat(volumeValue);
@@ -534,11 +465,9 @@ const tickerAction = {
                     converted["volumeQuote"] = volumeNumeric * rate;
                 }
             }
-
             return converted;
         });
     },
-
     updateTicker: async function (context, settings) {
         const pair = settings["pair"];
         const values = await this.getTickerValue(pair, settings.currency, settings.exchange, settings.fromCurrency);
@@ -551,9 +480,7 @@ const tickerAction = {
     },
     updateCanvas: async function (context, settings, tickerValues) {
         this.log("updateCanvas", context, settings, tickerValues);
-
         const connectionState = (tickerValues && tickerValues.connectionState) || this.getContextConnectionState(context);
-
         switch (settings.mode) {
             case "candles": {
                 const candleValues = await this.getCandles(settings);
@@ -581,9 +508,7 @@ const tickerAction = {
                 timestamp: null
             };
         }
-
         const sanitized = Object.assign({}, values);
-
         function parseNumeric(value, fallback, roundInteger) {
             if (typeof value === "number" && Number.isFinite(value)) {
                 return roundInteger ? Math.round(value) : value;
@@ -599,14 +524,13 @@ const tickerAction = {
             }
             return fallback;
         }
-
         const last = parseNumeric(values.last, null, false);
         if (last === null) {
             delete sanitized.last;
-        } else {
+        }
+        else {
             sanitized.last = last;
         }
-
         const numericDefaults = {
             high: null,
             low: null,
@@ -614,23 +538,24 @@ const tickerAction = {
             changeDaily: 0,
             changeDailyPercent: 0
         };
-
         Object.keys(numericDefaults).forEach((key) => {
             const fallback = numericDefaults[key];
             const parsed = parseNumeric(values[key], fallback, false);
             if (parsed === null || parsed === undefined || !Number.isFinite(parsed)) {
                 delete sanitized[key];
-            } else if (parsed === fallback && values[key] === undefined) {
+            }
+            else if (parsed === fallback && values[key] === undefined) {
                 if (fallback === null) {
                     delete sanitized[key];
-                } else {
+                }
+                else {
                     sanitized[key] = fallback;
                 }
-            } else {
+            }
+            else {
                 sanitized[key] = parsed;
             }
         });
-
         const timestampCandidateKeys = ["lastUpdated", "timestamp", "time", "updatedAt"];
         let timestamp = null;
         for (let i = 0; i < timestampCandidateKeys.length; i++) {
@@ -647,12 +572,10 @@ const tickerAction = {
                 break;
             }
         }
-
         // Ensure we do not keep NaN/undefined strings for textual fields
         if (typeof sanitized.pairDisplay !== "string") {
             delete sanitized.pairDisplay;
         }
-
         return {
             values: sanitized,
             hasAny: Object.keys(values).length > 0,
@@ -669,7 +592,6 @@ const tickerAction = {
         let lastValidTimestamp = null;
         let renderValues = sanitizedValues;
         let degradedReason = null;
-
         const effectiveConnectionState = connectionState || sanitizedValues.connectionState || null;
         const cached = tickerState.getLastGoodTicker(context);
         const isBroken = effectiveConnectionState === connectionStates.BROKEN;
@@ -685,7 +607,6 @@ const tickerAction = {
             && sanitizedResult.timestamp === null;
         const treatAsMisconfigured = sanitizedResult.hasCritical && (!isConnectionLiveLike || isBroken) && looksLikeEmptyTicker;
         const hasConversionError = !!sanitizedValues.conversionError;
-
         if (hasConversionError) {
             dataState = "missing";
             renderValues = Object.assign({}, sanitizedValues);
@@ -695,7 +616,6 @@ const tickerAction = {
             }
             infoMessage = messageConfig.conversionError || "CONVERSION ERROR";
             degradedReason = "conversion_error";
-
             return {
                 values: renderValues,
                 dataState: dataState,
@@ -704,7 +624,6 @@ const tickerAction = {
                 degradedReason: degradedReason
             };
         }
-
         if (sanitizedResult.hasCritical && !isBroken && !treatAsMisconfigured) {
             const recordedAt = sanitizedResult.timestamp || now;
             sanitizedValues.lastUpdated = recordedAt;
@@ -712,7 +631,8 @@ const tickerAction = {
             lastValidTimestamp = recordedAt;
             dataState = "live";
             renderValues = Object.assign({}, sanitizedValues);
-        } else if (cached && cached.values && typeof cached.values === "object" && Number.isFinite(cached.values.last)) {
+        }
+        else if (cached && cached.values && typeof cached.values === "object" && Number.isFinite(cached.values.last)) {
             dataState = "stale";
             renderValues = Object.assign({}, cached.values);
             lastValidTimestamp = cached.timestamp;
@@ -721,23 +641,23 @@ const tickerAction = {
             }
             infoMessage = messageConfig.stale;
             degradedReason = sanitizedResult.hasAny ? "partial" : "missing";
-        } else {
+        }
+        else {
             dataState = "missing";
             renderValues = Object.assign({}, sanitizedValues);
             const fallbackPair = settings["title"] || sanitizedValues["pairDisplay"] || sanitizedValues["pair"] || settings["pair"] || "";
             if (!renderValues.pairDisplay && fallbackPair) {
                 renderValues.pairDisplay = fallbackPair;
             }
-
             if (treatAsMisconfigured || isBroken) {
                 infoMessage = messageConfig.misconfigured || messageConfig.noData;
                 degradedReason = "misconfigured";
-            } else {
+            }
+            else {
                 infoMessage = messageConfig.loading;
                 degradedReason = sanitizedResult.hasAny ? "partial" : "none";
             }
         }
-
         if (!infoMessage && dataState === "missing") {
             infoMessage = isBroken ? (messageConfig.misconfigured || messageConfig.noData) : messageConfig.loading;
         }
@@ -747,7 +667,6 @@ const tickerAction = {
         if (!infoMessage && dataState === "stale" && !messageConfig.stale) {
             infoMessage = "STALE";
         }
-
         return {
             values: renderValues,
             dataState: dataState,
@@ -758,7 +677,6 @@ const tickerAction = {
     },
     displayMessage: function (context, message, options) {
         this.initCanvas();
-
         const opts = options || {};
         const normalizedSettings = applyDefaultSettings(opts.settings || {});
         const backgroundColor = opts.backgroundColor || normalizedSettings.backgroundColor || "#000000";
@@ -767,11 +685,9 @@ const tickerAction = {
         const fontSize = opts.fontSize || null;
         const desiredConnectionState = opts.connectionState || null;
         const displayConnectionIcon = opts.displayConnectionStatusIcon || normalizedSettings.displayConnectionStatusIcon || "OFF";
-
         if (desiredConnectionState) {
             this.setContextConnectionState(context, desiredConnectionState);
         }
-
         canvasRenderer.renderMessageCanvas({
             canvas: canvas,
             canvasContext: canvasContext,
@@ -784,10 +700,9 @@ const tickerAction = {
             connectionState: desiredConnectionState || this.getContextConnectionState(context),
             displayConnectionStatusIcon: displayConnectionIcon
         });
-
         this.sendCanvas(context);
     },
-    getCanvasSizeMultiplier: function(canvasWidth, canvasHeight) {
+    getCanvasSizeMultiplier: function (canvasWidth, canvasHeight) {
         return canvasRenderer.getCanvasSizeMultiplier(canvasWidth, canvasHeight);
     },
     getCandlesDisplayCount: function (settings) {
@@ -795,9 +710,7 @@ const tickerAction = {
     },
     updateCanvasTicker: function (context, settings, values, connectionState) {
         this.log("updateCanvasTicker", context, settings, values);
-
         const renderContext = this.buildTickerRenderContext(context, settings, values, connectionState);
-
         canvasRenderer.renderTickerCanvas({
             canvas: canvas,
             canvasContext: canvasContext,
@@ -811,12 +724,10 @@ const tickerAction = {
             lastValidTimestamp: renderContext.lastValidTimestamp,
             degradedReason: renderContext.degradedReason
         });
-
         this.sendCanvas(context);
     },
     updateCanvasCandles: function (context, settings, candlesNormalized, connectionState) {
         this.log("updateCanvasCandles", context, settings, candlesNormalized);
-
         canvasRenderer.renderCandlesCanvas({
             canvas: canvas,
             canvasContext: canvasContext,
@@ -825,7 +736,6 @@ const tickerAction = {
             connectionStates: connectionStates,
             connectionState: connectionState || this.getContextConnectionState(context)
         });
-
         this.sendCanvas(context);
     },
     sendCanvas: function (context) {
@@ -836,14 +746,12 @@ const tickerAction = {
                 "image": canvas.toDataURL(),
                 "target": DestinationEnum.HARDWARE_AND_SOFTWARE
             }
-        }
-
+        };
         this.websocketSend(JSON.stringify(json));
     },
     getRoundedValue: function (value, digits, multiplier, format) {
         return formatters.getRoundedValue(value, digits, multiplier, format);
     },
-
     getTickerValue: async function (pair, toCurrency, exchange, fromCurrency) {
         const registry = this.getProviderRegistry();
         const provider = registry.getProvider(exchange);
@@ -854,7 +762,6 @@ const tickerAction = {
             fromCurrency: currencies.from,
             toCurrency: null
         };
-
         try {
             const ticker = await provider.fetchTicker(params);
             const convertedTicker = await this.convertTickerValues(ticker, currencies.from, currencies.to);
@@ -863,7 +770,8 @@ const tickerAction = {
                 finalTicker.connectionState = connectionStates.DETACHED;
             }
             return finalTicker;
-        } catch (err) {
+        }
+        catch (err) {
             this.log("Error fetching ticker", err);
             const subscriptionKey = this.getSubscriptionContextKey(exchange, pair, currencies.from, null);
             if (provider && typeof provider.getCachedTicker === "function") {
@@ -877,7 +785,6 @@ const tickerAction = {
                     return finalCached;
                 }
             }
-
             return {
                 "changeDaily": 0,
                 "changeDailyPercent": 0,
@@ -893,7 +800,6 @@ const tickerAction = {
     },
     getCandles: async function (settings) {
         this.log("getCandles");
-
         const exchange = settings["exchange"];
         const pair = settings["pair"];
         const interval = this.convertCandlesInterval(settings["candlesInterval"] || "1h");
@@ -909,32 +815,26 @@ const tickerAction = {
         const now = new Date().getTime();
         const t = "time";
         const c = "candles";
-
         // Refresh at most every minute
         if (cache[t] && cache[t] > now - 60 * 1000) {
             return cache[c];
         }
-
         const fetchParams = {
             exchange: exchange,
             symbol: pair,
             interval: interval,
             limit: 24
         };
-
         let rawCandles = null;
-
         try {
             const registry = this.getProviderRegistry();
             const provider = registry.getProvider(exchange);
             if (provider && typeof provider.fetchCandles === "function") {
                 rawCandles = await provider.fetchCandles(fetchParams);
             }
-
             if (!Array.isArray(rawCandles)) {
                 rawCandles = null;
             }
-
             if (rawCandles === null) {
                 const genericProvider = registry.getGenericProvider();
                 if (genericProvider && typeof genericProvider.fetchCandles === "function") {
@@ -944,31 +844,27 @@ const tickerAction = {
                     }
                 }
             }
-        } catch (err) {
+        }
+        catch (err) {
             this.log("Error fetching provider candles", err);
             rawCandles = null;
         }
-
         if (rawCandles === null) {
             try {
-                const response = await fetch(
-                    tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24"
-                );
+                const response = await fetch(tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24");
                 const responseJson = await response.json();
                 if (responseJson && Array.isArray(responseJson.candles)) {
                     rawCandles = responseJson.candles;
                 }
-            } catch (e) {
+            }
+            catch (e) {
                 this.log("Error fetching candles from proxy", e);
             }
         }
-
         if (!Array.isArray(rawCandles)) {
             return cache[c] || [];
         }
-
         const preparedCandles = this.prepareCandlesForDisplay(rawCandles, candlesCount);
-
         let candlesForDisplay = preparedCandles;
         if (currencies.to) {
             try {
@@ -976,11 +872,11 @@ const tickerAction = {
                 if (rate && isFinite(rate) && rate > 0) {
                     candlesForDisplay = this.applyCandlesConversion(preparedCandles, rate);
                 }
-            } catch (err) {
+            }
+            catch (err) {
                 this.log("Conversion rate error for candles", err);
             }
         }
-
         const val = this.getCandlesNormalized(candlesForDisplay);
         cache[t] = now;
         cache[c] = val;
@@ -1007,60 +903,52 @@ const tickerAction = {
             case "1M":
                 return "MONTHS_1";
         }
-
         return interval;
     },
     prepareCandlesForDisplay: function (candles, maxCount) {
         if (!Array.isArray(candles) || candles.length === 0) {
             return [];
         }
-
         const sanitized = candles
             .map(function (candle) {
-                if (!candle) {
-                    return null;
-                }
-
-                let ts = candle["ts"];
-                if (typeof ts !== "number") {
-                    const openTime = candle["openTime"];
-                    if (openTime) {
-                        const parsedOpenTime = Date.parse(openTime);
-                        if (!isNaN(parsedOpenTime)) {
-                            ts = Math.floor(parsedOpenTime / 1000);
-                        }
+            if (!candle) {
+                return null;
+            }
+            let ts = candle["ts"];
+            if (typeof ts !== "number") {
+                const openTime = candle["openTime"];
+                if (openTime) {
+                    const parsedOpenTime = Date.parse(openTime);
+                    if (!isNaN(parsedOpenTime)) {
+                        ts = Math.floor(parsedOpenTime / 1000);
                     }
                 }
-
-                if (typeof ts !== "number" || isNaN(ts)) {
-                    return null;
-                }
-
-                return {
-                    candle: candle,
-                    ts: ts
-                };
-            })
+            }
+            if (typeof ts !== "number" || isNaN(ts)) {
+                return null;
+            }
+            return {
+                candle: candle,
+                ts: ts
+            };
+        })
             .filter(function (item) {
-                return item !== null;
-            })
+            return item !== null;
+        })
             .sort(function (a, b) {
-                return a.ts - b.ts;
-            })
+            return a.ts - b.ts;
+        })
             .map(function (item) {
-                if (item.candle["ts"] === item.ts) {
-                    return item.candle;
-                }
-
-                return Object.assign({}, item.candle, {
-                    "ts": item.ts
-                });
+            if (item.candle["ts"] === item.ts) {
+                return item.candle;
+            }
+            return Object.assign({}, item.candle, {
+                "ts": item.ts
             });
-
+        });
         if (typeof maxCount === "number" && maxCount > 0 && sanitized.length > maxCount) {
             return sanitized.slice(-maxCount);
         }
-
         return sanitized;
     },
     getCandlesNormalized: function (candles) {
@@ -1073,22 +961,18 @@ const tickerAction = {
         (candles || []).forEach(function (candle) {
             timeMin = Math.min(timeMin, candle["ts"]);
             timeMax = Math.max(timeMax, candle["ts"]);
-
             // Some shouldn't be necessary, but doesn't cost much and avoid mistakes
             min = Math.min(min, candle["open"]);
             min = Math.min(min, candle["close"]);
             min = Math.min(min, candle["high"]);
             min = Math.min(min, candle["low"]);
-
             max = Math.max(max, candle["open"]);
             max = Math.max(max, candle["close"]);
             max = Math.max(max, candle["high"]);
             max = Math.max(max, candle["low"]);
-
             volumeMin = Math.min(volumeMin, candle["volumeQuote"]);
             volumeMax = Math.max(volumeMax, candle["volumeQuote"]);
         });
-
         const jThis = this;
         const candlesNormalized = [];
         (candles || []).forEach(function (candle) {
@@ -1101,7 +985,6 @@ const tickerAction = {
                 volumePercent: jThis.normalizeValue(candle["volumeQuote"], volumeMin, volumeMax)
             });
         });
-
         this.log("getCandlesNormalized", candlesNormalized);
         return candlesNormalized;
     },
@@ -1109,119 +992,102 @@ const tickerAction = {
         return formatters.normalizeValue(value, min, max);
     },
 };
-
 tickerAction.defaultSettings = defaultSettings;
 tickerAction.applyDefaultSettings = applyDefaultSettings;
 tickerAction.getDefaultSettings = function () {
     return getDefaultSettingsSnapshot();
 };
 tickerAction.settingsSchema = settingsSchema;
-
 function connectElgatoStreamDeckSocket(inPort, pluginUUID, inRegisterEvent, _inApplicationInfo, _inActionInfo) {
     // Open the web socket
     websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-
     function registerPlugin(inPluginUUID) {
         var json = {
             "event": inRegisterEvent,
             "uuid": inPluginUUID
         };
-
         tickerAction.websocketSend(JSON.stringify(json));
-    };
-
+    }
+    ;
     websocket.onopen = function () {
         // WebSocket is connected, send message
         registerPlugin(pluginUUID);
     };
-
     websocket.onmessage = async function (evt) {
         //this.log("Message received", evt);
-
         // Received message from Stream Deck
         var jsonObj = JSON.parse(evt.data);
         const event = jsonObj["event"];
         const context = jsonObj["context"];
-
         const jsonPayload = jsonObj["payload"] || {};
         let settingsPayload = jsonPayload["settings"];
         if (!settingsPayload && event === "sendToPlugin") {
             settingsPayload = jsonPayload;
         }
-
         let settings = settingsPayload;
         const coordinates = jsonPayload["coordinates"];
         const userDesiredState = jsonPayload["userDesiredState"];
         // const title = jsonPayload["title"];
-
         const ignoredEvents = [
             "deviceDidConnect",
             "titleParametersDidChange"
         ];
-
         if (ignoredEvents.indexOf(event) >= 0) {
             // Ignore
             return;
         }
-
         if (settings != null) {
             settings = applyDefaultSettings(settings);
         }
-
         if (event == "keyDown") {
             await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
-        } else if (event == "keyUp") {
+        }
+        else if (event == "keyUp") {
             await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
-        } else if (event == "willAppear") {
+        }
+        else if (event == "willAppear") {
             await tickerAction.onWillAppear(context, settings, coordinates);
-        } else if (settings != null) {
+        }
+        else if (settings != null) {
             //this.log("Received settings", settings);
             tickerAction.refreshSettings(context, settings);
             tickerAction.refreshTimer(context, settings);
             // tickerAction.updateTicker(context, settings);    // Already done by refreshTimer
         }
     };
-
     websocket.onclose = function () {
         // Websocket is closed
     };
-
     setInterval(async function () {
         await tickerAction.refreshTimers();
     }, 300000);
-};
-
+}
+;
 if (screenshotMode) {
     loggingEnabled = true;
     tickerAction.connect();
-
     const settings = applyDefaultSettings({
         digits: 0,
         pair: "LTCUSD",
         mode: "ticker"
     });
-
     const context = "test";
     const coordinates = {
         "column": 1,
         "row": 1
     };
     const userDesiredState = null;
-
-    setTimeout(function() {
+    setTimeout(function () {
         tickerAction.onWillAppear(context, settings, coordinates);
-
-        setInterval(async function() {
+        setInterval(async function () {
             await tickerAction.onKeyDown(context, settings, coordinates, userDesiredState);
             await tickerAction.onKeyUp(context, settings, coordinates, userDesiredState);
         }, 5000);
     }, 1000);
 }
-
 if (typeof module !== "undefined") {
     module.exports = tickerAction;
 }
-
 if (typeof window !== "undefined") {
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
 }

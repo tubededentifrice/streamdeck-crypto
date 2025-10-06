@@ -28,9 +28,35 @@
     "com.courcelle.cryptoticker.streamDeckPlugin/",
     "com.courcelle.cryptoticker-dev.sdPlugin/js/signalr_v8.0.0.min.js",
     "com.courcelle.cryptoticker-dev.sdPlugin/libs/",
-    "com.courcelle.cryptoticker-dev.sdPlugin/dev/libs/"
+    "com.courcelle.cryptoticker-dev.sdPlugin/dev/libs/",
+    "com.courcelle.cryptoticker-dev.sdPlugin/**/*.js"
   ],
   "overrides": [
+    {
+      "files": ["**/*.ts"],
+      "parser": "@typescript-eslint/parser",
+      "parserOptions": {
+        "project": "./tsconfig.json",
+        "tsconfigRootDir": "./"
+      },
+      "plugins": ["@typescript-eslint"],
+      "extends": [
+        "plugin:@typescript-eslint/recommended",
+        "prettier"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "warn",
+        "@typescript-eslint/no-unused-vars": [
+          "warn",
+          { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+        ],
+        "@typescript-eslint/explicit-function-return-type": "off",
+        "@typescript-eslint/ban-ts-comment": [
+          "warn",
+          { "ts-ignore": "allow-with-description" }
+        ]
+      }
+    },
     {
       "files": ["**/__tests__/**/*.js"],
       "env": {
