@@ -1204,7 +1204,7 @@ const pi = {
 
         const candidateExchange = currentSettings["exchange"] || settingsConfig["exchange"]["default"] || "";
         if (candidateExchange) {
-            const hasCandidate = Array.prototype.some.call(exchangeDropdown.options, function(option) {
+            const hasCandidate = Array.from(exchangeDropdown.options).some(function(option) {
                 return (option.value || "").toUpperCase() === candidateExchange.toUpperCase();
             });
             if (hasCandidate) {
