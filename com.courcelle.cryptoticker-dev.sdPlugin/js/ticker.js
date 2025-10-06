@@ -1,12 +1,19 @@
 /// <reference path="../libs/js/action.js" />
 /// <reference path="../libs/js/stream-deck.js" />
 
-/* global DestinationEnum */
+/* global DestinationEnum, CryptoTickerConstants */
 
 const defaultConfig = {
     "tProxyBase": "https://tproxyv8.opendle.com",
     "fallbackPollIntervalMs": 60000,
-    "staleTickerTimeoutMs": 6 * 60 * 1000
+    "staleTickerTimeoutMs": 6 * 60 * 1000,
+    "messages": {
+        "loading": "LOADING...",
+        "stale": "STALE",
+        "noData": "NO DATA",
+        "misconfigured": "INVALID PAIR",
+        "conversionError": "CONVERSION ERROR"
+    }
 };
 
 function requireOrNull(modulePath) {
@@ -46,9 +53,14 @@ function normalizeCurrencyCode(value) {
 }
 
 const moduleConfig = requireOrNull("./config");
+const constantsModule = requireOrNull("./constants");
 const globalConfig = resolveGlobalConfig();
 const runtimeConfig = Object.assign({}, defaultConfig, moduleConfig || {}, globalConfig || {});
+const constants = constantsModule || (typeof CryptoTickerConstants !== "undefined" ? CryptoTickerConstants : null) || {};
+const TIMESTAMP_SECONDS_THRESHOLD = typeof constants.TIMESTAMP_SECONDS_THRESHOLD === "number" ? constants.TIMESTAMP_SECONDS_THRESHOLD : 9999999999;
 const tProxyBase = runtimeConfig.tProxyBase;
+const DEFAULT_MESSAGE_CONFIG = defaultConfig.messages;
+const messageConfig = Object.assign({}, DEFAULT_MESSAGE_CONFIG, (runtimeConfig && runtimeConfig.messages) || {});
 
 const subscriptionKeyModule = requireOrNull("./providers/subscription-key");
 const globalProviders = typeof CryptoTickerProviders !== "undefined" ? CryptoTickerProviders : null;
@@ -386,6 +398,9 @@ const tickerAction = {
                 return cacheEntry.rate;
             }
 
+            // Breaking change: Previously, this function returned 1 as a fallback on error.
+            // To preserve backward compatibility, we now return 1 instead of throwing.
+            // Consider making this behavior configurable in the future.
             return 1;
         }
     },
@@ -406,12 +421,44 @@ const tickerAction = {
             return tickerValues;
         }
 
-        const rate = await this.getConversionRate(currencies.from, currencies.to);
+        let rate = null;
+        try {
+            rate = await this.getConversionRate(currencies.from, currencies.to);
+        } catch (err) {
+            this.log("Conversion rate error", err);
+            return this.createConversionErrorValues(tickerValues);
+        }
+
         if (!rate || !isFinite(rate) || rate <= 0) {
-            return tickerValues;
+            return this.createConversionErrorValues(tickerValues);
         }
 
         return this.applyTickerConversion(tickerValues, rate, currencies.from, currencies.to);
+    },
+
+    createConversionErrorValues: function (tickerValues) {
+        const errorValues = Object.assign({}, tickerValues);
+        const numericKeys = [
+            "last",
+            "high",
+            "low",
+            "open",
+            "close",
+            "changeDaily",
+            "changeDailyPercent",
+            "volume"
+        ];
+
+        for (let i = 0; i < numericKeys.length; i++) {
+            const key = numericKeys[i];
+            if (Object.prototype.hasOwnProperty.call(errorValues, key)) {
+                delete errorValues[key];
+            }
+        }
+
+        errorValues.conversionRate = null;
+        errorValues.conversionError = true;
+        return errorValues;
     },
 
     applyTickerConversion: function (tickerValues, rate, fromCurrency, toCurrency) {
@@ -512,6 +559,204 @@ const tickerAction = {
                 break;
         }
     },
+    /**
+     * Sanitizes and normalizes ticker values by parsing numeric fields, validating input, and extracting key metadata.
+     *
+     * @param {Object} values - The raw ticker values object to sanitize. May contain price, volume, timestamp, and other fields.
+     * @returns {Object} An object with the following structure:
+     *   {
+     *     values: {Object} - The sanitized values with numeric fields parsed and normalized.
+     *     hasAny: {boolean} - True if any value is present after sanitization.
+     *     hasCritical: {boolean} - True if any critical value (e.g., price, close) is present and valid.
+     *     timestamp: {number|null} - The normalized timestamp (in ms since epoch) if available, otherwise null.
+     *   }
+     *
+     * The function handles parsing of numeric fields, checks for the presence of critical values,
+     * and normalizes the timestamp field if present. Used to ensure ticker data is in a consistent format.
+     */
+    sanitizeTickerValues: function (values) {
+        if (!values || typeof values !== "object") {
+            return {
+                values: {},
+                hasAny: false,
+                hasCritical: false,
+                timestamp: null
+            };
+        }
+
+        const sanitized = Object.assign({}, values);
+
+        function parseNumeric(value, fallback, roundInteger) {
+            if (typeof value === "number" && Number.isFinite(value)) {
+                return roundInteger ? Math.round(value) : value;
+            }
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                if (trimmed) {
+                    const parsed = roundInteger ? parseInt(trimmed, 10) : parseFloat(trimmed);
+                    if (!isNaN(parsed) && Number.isFinite(parsed)) {
+                        return roundInteger ? Math.round(parsed) : parsed;
+                    }
+                }
+            }
+            return fallback;
+        }
+
+        const last = parseNumeric(values.last, null, false);
+        if (last === null) {
+            delete sanitized.last;
+        } else {
+            sanitized.last = last;
+        }
+
+        const numericDefaults = {
+            high: null,
+            low: null,
+            volume: 0,
+            changeDaily: 0,
+            changeDailyPercent: 0
+        };
+
+        Object.keys(numericDefaults).forEach((key) => {
+            const fallback = numericDefaults[key];
+            const parsed = parseNumeric(values[key], fallback, false);
+            if (parsed === null || parsed === undefined || !Number.isFinite(parsed)) {
+                delete sanitized[key];
+            } else if (parsed === fallback && values[key] === undefined) {
+                if (fallback === null) {
+                    delete sanitized[key];
+                } else {
+                    sanitized[key] = fallback;
+                }
+            } else {
+                sanitized[key] = parsed;
+            }
+        });
+
+        const timestampCandidateKeys = ["lastUpdated", "timestamp", "time", "updatedAt"];
+        let timestamp = null;
+        for (let i = 0; i < timestampCandidateKeys.length; i++) {
+            const key = timestampCandidateKeys[i];
+            const hasValueKey = Object.prototype.hasOwnProperty.call(values, key);
+            if (!hasValueKey) {
+                continue;
+            }
+            const parsed = parseNumeric(values[key], null, true);
+            if (parsed !== null && parsed !== undefined) {
+                const normalizedTimestamp = parsed > TIMESTAMP_SECONDS_THRESHOLD ? parsed : parsed * 1000;
+                timestamp = normalizedTimestamp;
+                sanitized.lastUpdated = normalizedTimestamp;
+                break;
+            }
+        }
+
+        // Ensure we do not keep NaN/undefined strings for textual fields
+        if (typeof sanitized.pairDisplay !== "string") {
+            delete sanitized.pairDisplay;
+        }
+
+        return {
+            values: sanitized,
+            hasAny: Object.keys(values).length > 0,
+            hasCritical: last !== null,
+            timestamp: timestamp
+        };
+    },
+    buildTickerRenderContext: function (context, settings, rawValues, connectionState) {
+        const sanitizedResult = this.sanitizeTickerValues(rawValues);
+        const sanitizedValues = sanitizedResult.values;
+        const now = Date.now();
+        let dataState = "missing";
+        let infoMessage = null;
+        let lastValidTimestamp = null;
+        let renderValues = sanitizedValues;
+        let degradedReason = null;
+
+        const effectiveConnectionState = connectionState || sanitizedValues.connectionState || null;
+        const cached = tickerState.getLastGoodTicker(context);
+        const isBroken = effectiveConnectionState === connectionStates.BROKEN;
+        const liveLikeStates = [connectionStates.LIVE, connectionStates.BACKUP, connectionStates.DETACHED];
+        const isConnectionLiveLike = liveLikeStates.indexOf(effectiveConnectionState) !== -1;
+        const looksLikeEmptyTicker = sanitizedResult.hasCritical
+            && Number.isFinite(sanitizedValues.last)
+            && sanitizedValues.last === 0
+            && (!Number.isFinite(sanitizedValues.high) || sanitizedValues.high === 0)
+            && (!Number.isFinite(sanitizedValues.low) || sanitizedValues.low === 0)
+            && (!Number.isFinite(sanitizedValues.volume) || sanitizedValues.volume === 0)
+            && sanitizedResult.timestamp === null;
+        const treatAsMisconfigured = sanitizedResult.hasCritical && (!isConnectionLiveLike || isBroken) && looksLikeEmptyTicker;
+        const hasConversionError = !!sanitizedValues.conversionError;
+
+        if (hasConversionError) {
+            dataState = "missing";
+            renderValues = Object.assign({}, sanitizedValues);
+            const fallbackPair = settings["title"] || sanitizedValues["pairDisplay"] || sanitizedValues["pair"] || settings["pair"] || "";
+            if (!renderValues.pairDisplay && fallbackPair) {
+                renderValues.pairDisplay = fallbackPair;
+            }
+            infoMessage = messageConfig.conversionError || "CONVERSION ERROR";
+            degradedReason = "conversion_error";
+
+            return {
+                values: renderValues,
+                dataState: dataState,
+                infoMessage: infoMessage,
+                lastValidTimestamp: lastValidTimestamp,
+                degradedReason: degradedReason
+            };
+        }
+
+        if (sanitizedResult.hasCritical && !isBroken && !treatAsMisconfigured) {
+            const recordedAt = sanitizedResult.timestamp || now;
+            sanitizedValues.lastUpdated = recordedAt;
+            tickerState.setLastGoodTicker(context, sanitizedValues, recordedAt);
+            lastValidTimestamp = recordedAt;
+            dataState = "live";
+            renderValues = Object.assign({}, sanitizedValues);
+        } else if (cached && cached.values && typeof cached.values === "object" && Number.isFinite(cached.values.last)) {
+            dataState = "stale";
+            renderValues = Object.assign({}, cached.values);
+            lastValidTimestamp = cached.timestamp;
+            if (!renderValues.lastUpdated) {
+                renderValues.lastUpdated = cached.timestamp;
+            }
+            infoMessage = messageConfig.stale;
+            degradedReason = sanitizedResult.hasAny ? "partial" : "missing";
+        } else {
+            dataState = "missing";
+            renderValues = Object.assign({}, sanitizedValues);
+            const fallbackPair = settings["title"] || sanitizedValues["pairDisplay"] || sanitizedValues["pair"] || settings["pair"] || "";
+            if (!renderValues.pairDisplay && fallbackPair) {
+                renderValues.pairDisplay = fallbackPair;
+            }
+
+            if (treatAsMisconfigured || isBroken) {
+                infoMessage = messageConfig.misconfigured || messageConfig.noData;
+                degradedReason = "misconfigured";
+            } else {
+                infoMessage = messageConfig.loading;
+                degradedReason = sanitizedResult.hasAny ? "partial" : "none";
+            }
+        }
+
+        if (!infoMessage && dataState === "missing") {
+            infoMessage = isBroken ? (messageConfig.misconfigured || messageConfig.noData) : messageConfig.loading;
+        }
+        if (!infoMessage && dataState === "live" && isBroken) {
+            infoMessage = messageConfig.misconfigured || messageConfig.noData;
+        }
+        if (!infoMessage && dataState === "stale" && !messageConfig.stale) {
+            infoMessage = "STALE";
+        }
+
+        return {
+            values: renderValues,
+            dataState: dataState,
+            infoMessage: infoMessage,
+            lastValidTimestamp: lastValidTimestamp,
+            degradedReason: degradedReason
+        };
+    },
     displayMessage: function (context, message, options) {
         this.initCanvas();
 
@@ -552,14 +797,20 @@ const tickerAction = {
     updateCanvasTicker: function (context, settings, values, connectionState) {
         this.log("updateCanvasTicker", context, settings, values);
 
+        const renderContext = this.buildTickerRenderContext(context, settings, values, connectionState);
+
         canvasRenderer.renderTickerCanvas({
             canvas: canvas,
             canvasContext: canvasContext,
             settings: settings,
-            values: values,
+            values: renderContext.values,
             context: context,
             connectionStates: connectionStates,
-            connectionState: connectionState || (values && values.connectionState) || null
+            connectionState: connectionState || (values && values.connectionState) || null,
+            dataState: renderContext.dataState,
+            infoMessage: renderContext.infoMessage,
+            lastValidTimestamp: renderContext.lastValidTimestamp,
+            degradedReason: renderContext.degradedReason
         });
 
         this.sendCanvas(context);
@@ -721,9 +972,13 @@ const tickerAction = {
 
         let candlesForDisplay = preparedCandles;
         if (currencies.to) {
-            const rate = await this.getConversionRate(currencies.from, currencies.to);
-            if (rate && isFinite(rate) && rate > 0) {
-                candlesForDisplay = this.applyCandlesConversion(preparedCandles, rate);
+            try {
+                const rate = await this.getConversionRate(currencies.from, currencies.to);
+                if (rate && isFinite(rate) && rate > 0) {
+                    candlesForDisplay = this.applyCandlesConversion(preparedCandles, rate);
+                }
+            } catch (err) {
+                this.log("Conversion rate error for candles", err);
             }
         }
 

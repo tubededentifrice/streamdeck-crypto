@@ -1,5 +1,10 @@
 const ticker = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js");
 const defaultSettingsModule = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/default-settings.js");
+const tickerState = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/ticker-state.js");
+const connectionStates = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/providers/connection-states.js");
+const runtimeConfig = require("../com.courcelle.cryptoticker-dev.sdPlugin/js/config.js");
+const messageConfig = runtimeConfig.messages || {};
+const EXPIRED_CACHE_OFFSET_MS = 61 * 60 * 1000;
 
 test("subscription key builds with conversion", () => {
     const key = ticker.getSubscriptionContextKey("BITFINEX", "BTCUSD", "USD", "EUR");
@@ -112,6 +117,91 @@ test("getConversionRate caches results for an hour", async () => {
     }
 });
 
+test("getConversionRate coalesces concurrent requests", async () => {
+    tickerState.resetAllState();
+    const originalFetch = global.fetch;
+    const fetchSpy = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({ rate: 1.5 })
+    }));
+    global.fetch = fetchSpy;
+
+    try {
+        const [rateA, rateB] = await Promise.all([
+            ticker.getConversionRate("USD", "JPY"),
+            ticker.getConversionRate("usd", "jpy")
+        ]);
+
+        expect(rateA).toBeCloseTo(1.5);
+        expect(rateB).toBeCloseTo(1.5);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
+test("getConversionRate refreshes after cache expiry", async () => {
+    tickerState.resetAllState();
+    const originalFetch = global.fetch;
+    const responses = [{ rate: 2.0 }, { rate: 3.0 }];
+    global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => responses.shift() || { rate: 3.0 }
+    }));
+
+    try {
+        const first = await ticker.getConversionRate("USD", "JPY");
+        expect(first).toBeCloseTo(2.0);
+
+        const cacheEntry = tickerState.getOrCreateConversionRateEntry("USD_JPY");
+        cacheEntry.fetchedAt = Date.now() - EXPIRED_CACHE_OFFSET_MS;
+
+        const second = await ticker.getConversionRate("USD", "JPY");
+        expect(second).toBeCloseTo(3.0);
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
+test("resolveConversionCurrencies defaults and avoids redundant conversions", () => {
+    const same = ticker.resolveConversionCurrencies("usd", "USD");
+    expect(same.to).toBeNull();
+    expect(same.from).toBe("USD");
+
+    const toOnly = ticker.resolveConversionCurrencies(null, "eur");
+    expect(toOnly.from).toBe("USD");
+    expect(toOnly.to).toBe("EUR");
+});
+
+test("applyCandlesConversion scales price and volume fields", () => {
+    const source = [
+        { open: 1, close: 2, high: 3, low: 0.5, volumeQuote: 10 }
+    ];
+
+    const converted = ticker.applyCandlesConversion(source, 2);
+
+    expect(converted[0].open).toBeCloseTo(2);
+    expect(converted[0].close).toBeCloseTo(4);
+    expect(converted[0].high).toBeCloseTo(6);
+    expect(converted[0].low).toBeCloseTo(1);
+    expect(converted[0].volumeQuote).toBeCloseTo(20);
+    expect(source[0].open).toBe(1);
+});
+
+test("createConversionErrorValues removes numeric fields", () => {
+    const result = ticker.createConversionErrorValues({
+        last: 100,
+        volume: 10,
+        pair: "BTC/USD"
+    });
+
+    expect(result.last).toBeUndefined();
+    expect(result.volume).toBeUndefined();
+    expect(result.conversionError).toBe(true);
+    expect(result.pair).toBe("BTC/USD");
+});
+
 test("default settings validation normalizes values", () => {
     const normalized = defaultSettingsModule.applyDefaults({
         exchange: "bitfinex",
@@ -124,4 +214,129 @@ test("default settings validation normalizes values", () => {
     expect(normalized.displayHighLow).toBe("off");
     expect(normalized.digits).toBe(7);
     expect(normalized.mode).toBe("ticker");
+});
+
+describe("ticker data fallbacks", () => {
+    beforeEach(() => {
+        tickerState.resetAllState();
+        jest.restoreAllMocks();
+    });
+
+    afterEach(() => {
+        tickerState.resetAllState();
+        jest.restoreAllMocks();
+    });
+
+    test("sanitizeTickerValues normalizes numeric and timestamp fields", () => {
+        const source = {
+            last: "123.45",
+            high: "130",
+            low: "",
+            changeDailyPercent: "0.123",
+            lastUpdated: 1700000000
+        };
+
+        const result = ticker.sanitizeTickerValues(source);
+
+        expect(result.hasCritical).toBe(true);
+        expect(result.values.last).toBeCloseTo(123.45);
+        expect(result.values.high).toBeCloseTo(130);
+        expect(result.values.low).toBeUndefined();
+        expect(result.values.changeDailyPercent).toBeCloseTo(0.123);
+        expect(result.timestamp).toBe(1700000000 * 1000);
+        expect(result.values.lastUpdated).toBe(1700000000 * 1000);
+    });
+
+    test("buildTickerRenderContext caches last good values and returns stale when data disappears", () => {
+        const settings = { pair: "BTC/USD" };
+        const lastUpdatedSeconds = 1700000000;
+
+        const live = ticker.buildTickerRenderContext("ctx", settings, {
+            pairDisplay: "BTC/USD",
+            last: 27123.45,
+            high: 28000,
+            low: 26000,
+            changeDailyPercent: 0.012,
+            lastUpdated: lastUpdatedSeconds
+        }, null);
+
+        expect(live.dataState).toBe("live");
+        expect(live.lastValidTimestamp).toBe(lastUpdatedSeconds * 1000);
+
+        const cached = tickerState.getLastGoodTicker("ctx");
+        expect(cached).not.toBeNull();
+        expect(cached.values.last).toBeCloseTo(27123.45);
+
+        const fallback = ticker.buildTickerRenderContext("ctx", settings, null, null);
+        expect(fallback.dataState).toBe("stale");
+        expect(fallback.infoMessage).toBe(messageConfig.stale);
+        expect(fallback.values.last).toBeCloseTo(27123.45);
+        expect(fallback.lastValidTimestamp).toBe(lastUpdatedSeconds * 1000);
+    });
+
+    test("buildTickerRenderContext reports loading when no data has ever arrived", () => {
+        const settings = { pair: "ETH/USD", title: "ETH" };
+
+        const result = ticker.buildTickerRenderContext("empty", settings, {}, null);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe(messageConfig.loading);
+        expect(result.values.pairDisplay).toBe("ETH");
+    });
+
+    test("buildTickerRenderContext reports no data when connection is broken", () => {
+        const settings = { pair: "BTC/USD" };
+
+        const result = ticker.buildTickerRenderContext("broken", settings, {}, connectionStates.BROKEN);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe(messageConfig.misconfigured || messageConfig.noData);
+    });
+
+    test("buildTickerRenderContext flags misconfigured pairs returning zero data", () => {
+        const settings = { pair: "DOGE/MOON" };
+
+        const result = ticker.buildTickerRenderContext("misconfigured", settings, {
+            pair: "DOGE/MOON",
+            pairDisplay: "DOGE/MOON",
+            last: 0,
+            high: 0,
+            low: 0,
+            volume: 0
+        }, connectionStates.BROKEN);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe(messageConfig.misconfigured || messageConfig.noData);
+        expect(result.values.pairDisplay).toBe("DOGE/MOON");
+    });
+
+    test("convertTickerValues flags conversion errors when rate fetch fails", async () => {
+        const originalGetConversionRate = ticker.getConversionRate;
+        ticker.getConversionRate = jest.fn().mockRejectedValue(new Error("network down"));
+
+        try {
+            const result = await ticker.convertTickerValues({
+                pair: "BTC/USD",
+                pairDisplay: "BTC/USD",
+                last: 60000
+            }, "USD", "EUR");
+
+            expect(result.conversionError).toBe(true);
+            expect(result.last).toBeUndefined();
+        } finally {
+            ticker.getConversionRate = originalGetConversionRate;
+        }
+    });
+
+    test("buildTickerRenderContext shows conversion error message", () => {
+        const settings = { pair: "BTC/USD" };
+
+        const result = ticker.buildTickerRenderContext("conversionError", settings, {
+            pair: "BTC/USD",
+            conversionError: true
+        }, null);
+
+        expect(result.dataState).toBe("missing");
+        expect(result.infoMessage).toBe(messageConfig.conversionError || "CONVERSION ERROR");
+    });
 });

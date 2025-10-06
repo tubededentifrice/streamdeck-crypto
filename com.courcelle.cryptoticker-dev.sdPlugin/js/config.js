@@ -15,6 +15,13 @@
         binanceSymbolOverrides: {},
         bitfinexRestBaseUrl: "https://api-pub.bitfinex.com",
         bitfinexWsBaseUrl: "wss://api-pub.bitfinex.com/ws/2",
-        bitfinexSymbolOverrides: {}
+        bitfinexSymbolOverrides: {},
+        messages: {
+            loading: "LOADING...",
+            stale: "STALE",
+            noData: "NO DATA",
+            misconfigured: "INVALID PAIR",
+            conversionError: "CONVERT ERROR"
+        }
     };
 }));

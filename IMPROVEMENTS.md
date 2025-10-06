@@ -4,124 +4,7 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 ---
 
-## 1. CRITICAL SECURITY & STABILITY
-
-### 1.4 Harden Canvas Rendering Against Missing Data
-
-**Why?**
-- **User experience**: Button goes blank when provider has transient issues
-- **Robustness**: Plugin should degrade gracefully, not fail completely
-- **Error recovery**: Users see "stale" or "error" state instead of blank button
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js`
-  - Canvas rendering logic in rendering functions
-- **Implementation**:
-  1. Add null/undefined checks before using ticker values
-  2. Provide sensible defaults (0 for numbers, empty string for text)
-  3. Display fallback text like "LOADING..." or "NO DATA" when values missing
-  4. Show timestamp of last valid data when using stale values
-  5. Add visual indicator (icon, color) for degraded state
-
-**Risks & Considerations**:
-- **UX decision**: Determine what to show when data is missing (blank vs. stale vs. error message)
-- **Performance**: Check guards don't slow down frequent renders
-- **State management**: Track "last known good" values for fallback
-- **Testing**: Mock provider failures to verify graceful degradation
-
----
-
-### 1.8 Improve Missing Data Handling
-
-**Why?**
-- **Current behavior**: Missing ticker values default to 0, making button display "0.00"
-- **User confusion**: "BTC/USD: 0.00" looks like price crash, not missing data
-- **Better UX**: Show clear indication of missing/unavailable data
-
-**What needs to be changed?**
-- **Files**:
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js` - `updateCanvasTicker` function
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js` - Add null/missing data checks to rendering functions
-- **Implementation**:
-  1. Check if critical values are missing/invalid: `!values || !Number.isFinite(values.last)`
-  2. Display "N/A", "---", or "LOADING..." when data missing
-  3. Consider showing last known valid value with "STALE" indicator
-  4. Add visual indicator (color, icon) for degraded state
-
-**Example scenarios:**
-- Exchange API temporary glitch returns incomplete data
-- New trading pair with no historical data yet
-- Network timeout returns partial response
-
-**Risks & Considerations**:
-- **UX decision**: What to show? Options: blank, "N/A", stale data with indicator
-- **Performance**: Validation checks on every render
-- **State management**: Need to track "last known good" values
-
----
-
-### 1.9 Fix Currency Conversion Fallback Behavior
-
-**Why?**
-- **Current behavior**: When currency conversion fails, code defaults to rate = 1.0 (ticker.js:422)
-- **Problem**: If EUR→USD conversion fails, displays EUR prices as if they were USD
-- **User impact**: Misleading prices with no error indication
-
-**Example:**
-- User requests EUR display for BTC/USD
-- Conversion API fails
-- BTC shows as €60,000 when it should be ~€54,000 (1.0 fallback applied)
-- User has no idea conversion failed
-
-**What needs to be changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:415-423`
-- **Implementation options**:
-  1. Show error state/indicator when conversion unavailable
-  2. Clearly label as original currency (e.g., "USD") when conversion fails
-  3. Add "CONVERSION ERROR" text on button
-  4. Use connection state icon to show BROKEN state
-  5. Call `tickerAction.displayMessage()` to render a clear, single-message fallback on the key surface
-
-**Current code:**
-```javascript
-} catch (err) {
-    if (typeof cacheEntry.rate === "number" && cacheEntry.rate > 0) {
-        return cacheEntry.rate;  // Use cached rate
-    }
-    return 1;  // ⚠️ Silent 1:1 fallback
-}
-```
-
-**Risks & Considerations**:
-- **Error visibility**: Must be obvious to user without being intrusive
-- **Cached rates**: Current code uses cached rate first (good), only 1.0 as last resort
-- **Button space**: Limited room for error messages on small buttons
-
----
-
 ## 2. CODE ARCHITECTURE & MAINTAINABILITY
-
-### 2.4 Expand Test Coverage
-
-**Status:** Significantly improved in improvements2 branch
-
-**What was done:**
-- Created comprehensive test suite with 7 test files and 24 tests
-- Test files for all new modules: canvas-renderer, formatters, alert-manager, settings-manager, ticker-state
-- Tests are passing and integrated into development workflow
-
-**What remains:**
-- Increase coverage for provider modules (Binance, Bitfinex, provider registry)
-- Add integration tests for full plugin workflows
-- Add tests for subscription management and caching
-- Target: >80% code coverage
-
-**Impact:**
-- Much better test coverage than before (~5% → ~40%)
-- Regression prevention for refactored modules
-- Foundation for future test expansion
-
----
 
 ### 2.5 Implement Exponential Backoff for Reconnections
 
@@ -184,76 +67,7 @@ const attemptDelay = Math.min(
 
 ---
 
-## 4. Testing
-
-### 4.1 Expand Test Coverage
-
-**Why?**
-- **Current state**: Only 57 lines of tests in `__tests__/ticker.test.js` (~5% coverage)
-- **Risk**: Refactoring and new features break existing functionality
-- **Confidence**: Can't confidently make changes without tests
-- **Regressions**: Bugs like the preview volume issue could have been caught
-
-**What needs to be changed?**
-- **File**: `__tests__/ticker.test.js` (expand significantly)
-- **New test files to create**:
-  1. `__tests__/canvas-renderer.test.js`: Test canvas drawing functions
-  2. `__tests__/providers/binance-provider.test.js`: Test Binance WebSocket handling
-  3. `__tests__/providers/bitfinex-provider.test.js`: Test Bitfinex WebSocket handling
-  4. `__tests__/providers/provider-registry.test.js`: Test failover logic
-  5. `__tests__/subscription-manager.test.js`: Test cache expiration
-  6. `__tests__/pi-helpers.test.js`: Test property inspector utilities
-  7. `__tests__/formatters.test.js`: Test price/number formatting
-  8. Others as you deem appropriate
-- **Coverage areas**:
-  - WebSocket reconnection logic
-  - Provider failover when primary fails
-  - Conversion rate caching and expiration
-  - Alert rule evaluation (post-eval replacement)
-  - Canvas rendering with various settings combinations
-  - Settings validation and defaults
-- **Target**: >80% code coverage
-
-**Risks & Considerations**:
-- **Effort**: Significant time investment to write comprehensive tests
-- **Mocking**: Need to mock WebSocket, fetch, StreamDeck SDK, canvas
-- **Test infrastructure**: May need to add testing utilities and helpers
-- **CI/CD**: Tests should run automatically on every commit
-- **Maintenance**: Tests need updates when code changes
-
----
-
 ## 5. ERROR HANDLING & USER FEEDBACK
-
-### 5.1 Graceful Network Error Handling in Property Inspector
-
-**Why?**
-- **User experience**: Failures when fetching provider lists/pairs result in empty dropdowns with no feedback
-- **Debugging**: Users don't know if issue is network, proxy, or API rate limiting
-- **Reliability**: Slow networks or temporary outages make plugin appear broken
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Lines 265-338: Provider/pair/currency fetching functions
-- **Implementation**:
-  1. Wrap all `fetch()` calls in try-catch with timeout (e.g., 10 seconds)
-  2. Add retry logic with exponential backoff (3 attempts)
-  3. Show loading spinner while fetching data
-  4. Display user-friendly error messages in UI:
-     - "Loading pairs..." → "Failed to load pairs. Retrying..."
-     - "Network error. Please check connection and try again."
-  5. Add "Retry" button for manual retry
-  6. Cache last successful fetch to show stale data with warning
-  7. Log detailed errors to console for support/debugging
-
-**Risks & Considerations**:
-- **UX design**: Need to design error message UI in property inspector
-- **Timeout tuning**: Balance between patience and responsiveness
-- **Retry logic**: Avoid hammering APIs with rapid retries (respect rate limits)
-- **Testing**: Mock network failures and slow responses
-- **Internationalization**: Error messages should be localizable
-
----
 
 ### 5.2 Improved Error Handling Throughout Plugin
 
@@ -317,44 +131,6 @@ const attemptDelay = Math.min(
 
 ---
 
-## 5. PERFORMANCE OPTIMIZATION
-
-### 5.1 Optimize Canvas Rendering
-
-**Why?**
-- **CPU usage**: Canvas redraws on every ticker update, even when values unchanged
-- **Battery drain**: Unnecessary rendering wastes energy on laptops
-- **Smoothness**: Rapid updates can cause visual glitches
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/canvas-renderer.js`
-  - Canvas rendering functions
-- **Implementation**:
-  1. Implement dirty checking:
-     - Store previous values for each context
-     - Compare new values with previous before redrawing
-     - Skip render if no significant change (configurable threshold)
-  2. Debounce rapid updates:
-     - Queue render requests and execute at most once per frame (16ms)
-     - Use `requestAnimationFrame` instead of immediate rendering
-  3. Cache canvas operations:
-     - Pre-render static elements (background, grid) to offscreen canvas
-     - Only redraw dynamic text/data on top
-     - Cache font measurements
-  4. Optimize drawing operations:
-     - Minimize canvas state changes (save/restore)
-     - Batch similar operations
-     - Avoid unnecessary clearRect calls
-
-**Risks & Considerations**:
-- **Complexity**: Dirty checking adds code complexity
-- **Lag perception**: Debouncing might feel laggy if threshold too high
-- **Memory**: Offscreen canvases use additional memory
-- **Testing**: Verify rendering still works correctly with optimizations
-- **Configuration**: May need to tune thresholds based on user feedback
-
----
-
 ### 6.2 WebSocket Connection Pooling
 
 **Why?**
@@ -394,152 +170,145 @@ const attemptDelay = Math.min(
 
 ## 7. FEATURE ENHANCEMENTS
 
-### 7.1 Add TypeScript Support
+            ### 7.1 Add TypeScript Support
 
-**Why?**
-- **Type safety**: Catch type-related bugs at compile time
-- **IDE support**: Better autocomplete, refactoring, and navigation
-- **Documentation**: Types serve as inline documentation
-- **Maintainability**: Easier to understand code and refactor safely
+            **Why?**
+            - **Type safety**: Catch type-related bugs at compile time
+            - **IDE support**: Better autocomplete, refactoring, and navigation
+            - **Documentation**: Types serve as inline documentation
+            - **Maintainability**: Easier to understand code and refactor safely
 
-**What needs to be changed?**
-- **All `.js` files** in `com.courcelle.cryptoticker-dev.sdPlugin/js/`
-- **New files to create**:
-  - `tsconfig.json`: TypeScript configuration
-  - Type definition files for StreamDeck SDK (or use existing @types package)
-- **Implementation approach**:
-  1. Add TypeScript compiler and build tools to `package.json`
-  2. Start with `.d.ts` declaration files for existing code (no conversion yet)
-  3. Incrementally convert modules to TypeScript:
-     - Start with utility modules (formatters, helpers)
-     - Then providers (define provider interface)
-     - Finally main plugin files
-  4. Define key interfaces:
-     - `Settings`: Plugin settings structure
-     - `TickerData`: Ticker data from providers
-     - `CandleData`: Candle data structure
-     - `ProviderInterface`: Provider contract
-  5. Update build process to compile TypeScript to JavaScript
+            **What needs to be changed?**
+            - **All `.js` files** in `com.courcelle.cryptoticker-dev.sdPlugin/js/`
+            - **New files to create**:
+              - `tsconfig.json`: TypeScript configuration
+              - Type definition files for StreamDeck SDK (or use existing @types package)
+            - **Implementation approach**:
+              1. Add TypeScript compiler and build tools to `package.json`
+              2. Start with `.d.ts` declaration files for existing code (no conversion yet)
+              3. Incrementally convert modules to TypeScript:
+                - Start with utility modules (formatters, helpers)
+                - Then providers (define provider interface)
+                - Finally main plugin files
+              4. Define key interfaces:
+                - `Settings`: Plugin settings structure
+                - `TickerData`: Ticker data from providers
+                - `CandleData`: Candle data structure
+                - `ProviderInterface`: Provider contract
+              5. Update build process to compile TypeScript to JavaScript
 
-**Risks & Considerations**:
-- **Learning curve**: Team needs TypeScript knowledge
-- **Build complexity**: Adds compilation step to development workflow
-- **Migration effort**: Converting existing code is time-consuming
-- **Strictness**: Need to decide on strict mode settings (balance safety vs. effort)
-- **Dependencies**: Some libraries may lack type definitions
-- **Incremental approach**: Can use TypeScript's `allowJs` for gradual migration
+            **Risks & Considerations**:
+            - **Learning curve**: Team needs TypeScript knowledge
+            - **Build complexity**: Adds compilation step to development workflow
+            - **Migration effort**: Converting existing code is time-consuming
+            - **Strictness**: Need to decide on strict mode settings (balance safety vs. effort)
+            - **Dependencies**: Some libraries may lack type definitions
+            - **Incremental approach**: Can use TypeScript's `allowJs` for gradual migration
 
 ---
 
-### 7.2 Add Module Bundler
+            ### 7.2 Add Module Bundler
 
-**Why?**
-- **Plugin size**: Files loaded individually increase plugin size
-- **Load performance**: Many small files slower than one bundle
-- **Tree shaking**: Remove unused code to reduce size
-- **Optimization**: Minification and compression
-- **Development**: Enable modern JavaScript features and imports
+            **Why?**
+            - **Plugin size**: Files loaded individually increase plugin size
+            - **Load performance**: Many small files slower than one bundle
+            - **Tree shaking**: Remove unused code to reduce size
+            - **Optimization**: Minification and compression
+            - **Development**: Enable modern JavaScript features and imports
 
-**What needs to be changed?**
-- **New files to create**:
-  - `webpack.config.js` or `rollup.config.js` or `esbuild.config.js`
-  - Update `package.json` with build scripts
-- **Build outputs**:
-  - `plugin.bundle.js`: Main plugin code
-  - `pi.bundle.js`: Property inspector code
-  - `preview.bundle.js`: Preview server code
-- **HTML files to update**:
-  - `index.html`: Load plugin bundle
-  - `index_pi.html`: Load PI bundle
-  - `dev/preview.html`: Load preview bundle
-- **Implementation**:
-  1. Choose bundler (webpack = most features, rollup = smaller bundles, esbuild = fastest)
-  2. Configure entry points for each bundle
-  3. Set up development mode (source maps, watch mode)
-  4. Set up production mode (minification, tree shaking)
-  5. Update deployment process to use bundled files
+            **What needs to be changed?**
+            - **New files to create**:
+              - `webpack.config.js` or `rollup.config.js` or `esbuild.config.js`
+              - Update `package.json` with build scripts
+            - **Build outputs**:
+              - `plugin.bundle.js`: Main plugin code
+              - `pi.bundle.js`: Property inspector code
+              - `preview.bundle.js`: Preview server code
+            - **HTML files to update**:
+              - `index.html`: Load plugin bundle
+              - `index_pi.html`: Load PI bundle
+              - `dev/preview.html`: Load preview bundle
+            - **Implementation**:
+              1. Choose bundler (webpack = most features, rollup = smaller bundles, esbuild = fastest)
+              2. Configure entry points for each bundle
+              3. Set up development mode (source maps, watch mode)
+              4. Set up production mode (minification, tree shaking)
+              5. Update deployment process to use bundled files
 
-**Risks & Considerations**:
-- **Build complexity**: Adds significant complexity to build process
-- **Debugging**: Source maps needed to debug bundled code
-- **Development workflow**: Hot reload or watch mode needed for good DX
-- **Compatibility**: Ensure bundled code works in StreamDeck environment
-- **Dependencies**: Bundle size can grow with dependencies
-- **Testing**: Tests may need to run on source files, not bundles
+            **Risks & Considerations**:
+            - **Build complexity**: Adds significant complexity to build process
+            - **Debugging**: Source maps needed to debug bundled code
+            - **Development workflow**: Hot reload or watch mode needed for good DX
+            - **Compatibility**: Ensure bundled code works in StreamDeck environment
+            - **Dependencies**: Bundle size can grow with dependencies
+            - **Testing**: Tests may need to run on source files, not bundles
 
 ---
 
 ## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
 
-### 8.1 Document Connection States and Troubleshooting
+          ### 8.1 Document Connection States and Troubleshooting
 
-**Why?**
-- **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
-- **Support burden**: Repeated questions about connection issues
-- **Self-service**: Users should be able to diagnose and fix common issues
+          **Why?**
+          - **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
+          - **Support burden**: Repeated questions about connection issues
+          - **Self-service**: Users should be able to diagnose and fix common issues
 
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-  - Add help section or tooltips explaining states
-- **File**: `README.md` or create `TROUBLESHOOTING.md`
-  - Document connection state meanings
-  - Common issues and solutions
-  - Diagnostic steps
-- **Documentation content**:
-  - **LIVE**: Connected to primary provider with live data
-  - **BACKUP**: Primary provider failed, using backup/fallback provider
-  - **DETACHED**: Intentionally disconnected (settings changed, button removed)
-  - **BROKEN**: Connection failed and retries exhausted
-  - Add troubleshooting steps:
-    - Check internet connection
-    - Verify exchange is accessible (not blocked by firewall/VPN)
-    - Check if API is experiencing outages
-    - Try different provider
-    - Check plugin logs for detailed errors
+          **What needs to be changed?**
+          - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
+            - Add help section or tooltips explaining states
+          - **File**: `README.md`
+            - Document connection state meanings
+            - Common issues and solutions
+            - Diagnostic steps
+          - **Documentation content**:
+            - **LIVE**: Connected to primary provider with live data
+            - **BACKUP**: Primary provider failed, using backup/fallback provider
+            - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
+            - **BROKEN**: Connection failed and retries exhausted
+            - Add troubleshooting steps:
+              - Check internet connection
+              - Verify exchange is accessible (not blocked by firewall/VPN)
+              - Check if API is experiencing outages
+              - Try different provider
+              - Check plugin logs for detailed errors
 
-**Risks & Considerations**:
-- **Low risk**: Documentation-only change
-- **Maintenance**: Keep docs updated as states/behavior changes
-- **Localization**: Consider translating for non-English users
+          **Risks & Considerations**:
+          - **Low risk**: Documentation-only change
+          - **Maintenance**: Keep docs updated as states/behavior changes
 
 ---
 
-### 8.2 Improve Build and Release Process
+          ### 8.2 Improve Build and Release Process
 
-**Why?**
-- **Manual process**: Current rsync and copy commands are error-prone
-- **Version management**: Manual version bumping is easy to forget
-- **Changelog**: No automated changelog generation
-- **Consistency**: Manual process leads to inconsistent releases
+          **Why?**
+          - **Manual process**: Current rsync and copy commands are error-prone
+          - **Version management**: Manual version bumping is easy to forget
+          - **Changelog**: No automated changelog generation
+          - **Consistency**: Manual process leads to inconsistent releases
 
-**What needs to be changed?**
-- **New files to create**:
-  - `scripts/build.js`: Automated build script
-  - `scripts/release.js`: Automated release script
-  - `RELEASE_CHECKLIST.md`: Manual checklist for releases
-- **Package.json scripts**:
-  - `npm run build`: Build plugin for production
-  - `npm run release:patch`: Bump patch version and release
-  - `npm run release:minor`: Bump minor version and release
-  - `npm run release:major`: Bump major version and release
-- **Automation**:
-  1. Version bumping in `manifest.json` and `package.json`
-  2. Changelog generation from git commits (conventional commits)
-  3. Build and bundle for distribution
-  4. Create distribution `.streamDeckPlugin` file
-  5. Git tag and push
-  6. GitHub release creation (if applicable)
-- **CI/CD**:
-  - GitHub Actions or similar for automated testing
-  - Automated builds on every commit
-  - Automated releases on git tags
+          **What needs to be changed?**
+          - **New files to create**:
+            - `scripts/build.js`: Automated build script
+            - `scripts/release.js`: Automated release script
+            - `RELEASE_CHECKLIST.md`: Manual checklist for releases
+          - **Package.json scripts**:
+            - `npm run build`: Build plugin for production
+            - `npm run release:patch`: Bump patch version and release
+            - `npm run release:minor`: Bump minor version and release
+            - `npm run release:major`: Bump major version and release
+          - **Automation** (refer to README.md for the current build commands, as it needs to be done on a different plugin ID as the dev one -- make sure to update that file with the new commands once done):
+            1. Version bumping in `manifest.json` and `package.json`
+            2. Changelog generation from git commits (conventional commits)
+            3. Build and bundle for distribution
+            4. Create distribution `.streamDeckPlugin` file
 
-**Risks & Considerations**:
-- **Initial setup**: Significant effort to create automation scripts
-- **Testing**: Automation scripts themselves need testing
-- **Git workflow**: Team needs to follow conventional commit format
-- **Breaking**: Buggy release script could create bad releases
-- **Rollback**: Need ability to roll back bad releases
+          **Risks & Considerations**:
+          - **Initial setup**: Significant effort to create automation scripts
+          - **Testing**: Automation scripts themselves need testing
+          - **Git workflow**: Team needs to follow conventional commit format
+          - **Breaking**: Buggy release script could create bad releases
+          - **Rollback**: Need ability to roll back bad releases
 
 ---
 
@@ -577,60 +346,6 @@ const attemptDelay = Math.min(
 
 ---
 
-### 9.2 Improve Pair Selection UX
-
-**Why?**
-- **Scale**: Binance has ~1500 pairs, making dropdown unusable
-- **Speed**: Users waste time scrolling through long list
-- **Favorites**: Power users repeatedly select same pairs
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-  - Replace simple `<select>` with searchable dropdown
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Add search/filter logic, favorites management
-- **Implementation**:
-  1. Add search input above pair dropdown
-  2. Filter pairs as user types
-  3. Add "Favorites" section at top of dropdown
-  4. Add star/favorite button next to each pair
-  5. Store favorites per provider
-  6. Show recently used pairs
-  7. Support keyboard navigation (arrow keys, enter)
-  8. Add pair categories (BTC pairs, ETH pairs, Stablecoins, etc.)
-
-**Risks & Considerations**:
-- **Performance**: Filtering 1500 items in real-time needs optimization
-- **Storage**: Favorites stored in plugin settings or separate storage
-- **Sync**: Consider syncing favorites across devices (future enhancement)
-- **UI**: Custom dropdown may have accessibility challenges
-
----
-
-## 10. CONFIGURATION & DATA MANAGEMENT
-
-### 10.1 Implement Configuration Validation ✅ PARTIALLY COMPLETED
-
-**Status:** Basic validation completed in improvements1 branch
-
-**What was done:**
-- Created comprehensive settings schema in `js/default-settings.js`
-- Automatic validation and normalization on settings load
-- Type checking, range clamping, enum validation
-- Graceful fallback to defaults for invalid values
-
-**What remains:**
-- Settings migration for version upgrades
-- Show validation errors in property inspector UI
-- Add JSON Schema export for documentation
-
-**Impact:**
-- Invalid settings no longer crash plugin
-- Automatic correction of out-of-range values
-- Foundation for better error messages
-
----
-
 ### 10.2 Implement Configuration Validation (Enhanced)
 
 **Why?**
@@ -663,165 +378,6 @@ const attemptDelay = Math.min(
 - **User data**: Don't lose user settings, fall back to defaults with warning
 - **Performance**: Validation on every setting load (should be fast)
 - **Maintenance**: Schema needs updates when settings change
-
----
-
-### 10.3 Export/Import Configuration
-
-**Why?**
-- **Backup**: Users want to backup their settings
-- **Sync**: Users want to share settings across devices
-- **Version control**: Power users want to version settings in git
-- **Migration**: Easy to transfer settings to new computer
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-  - Add "Export Settings" and "Import Settings" buttons
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-  - Implement export/import logic
-- **Implementation**:
-  1. Export settings to JSON or YAML file:
-     - Include all button settings
-     - Include plugin version for migration
-     - Include timestamp for reference
-  2. Import settings from file:
-     - Validate file format and version
-     - Migrate old format if needed
-     - Apply settings to current action
-  3. Add "Export All" feature (all buttons in profile)
-  4. Add "Import to Multiple Buttons" feature
-  5. Consider cloud backup (optional, with encryption)
-
-**Risks & Considerations**:
-- **File format**: Choose format that's human-readable and git-friendly
-- **Privacy**: Settings may contain API keys or sensitive data (warn user)
-- **Version compatibility**: Handle settings from different plugin versions
-- **User education**: Document export/import workflow
-
----
-
-### 10.4 Adjust Polling and Timeout Defaults
-
-**Priority:** 🟡 Medium (affects user experience)
-
-**Why?**
-- **Current values may not be optimal for crypto**:
-  - `fallbackPollIntervalMs`: 60 seconds (ticker.js:6)
-  - `staleTickerTimeoutMs`: 6 minutes (ticker.js:7)
-- **Crypto moves fast**: 60-second updates feel very slow for volatile markets
-- **Stale data danger**: 6 minutes without updates before fallback triggers is too long
-
-**Issues with current settings:**
-
-**Fallback Polling (60 seconds):**
-- When WebSocket fails, updates only every minute
-- Crypto can move 5-10% in 60 seconds during volatile periods
-- Users expecting "real-time" see outdated data
-- Competitors update every 5-15 seconds
-
-**Stale Timeout (6 minutes):**
-- Users see "LIVE" status but data is actually stale for up to 6 minutes
-- Could lead to bad trading decisions based on outdated prices
-- By the time BROKEN state shows, opportunity/danger has passed
-
-**Proposed changes:**
-```javascript
-const defaultConfig = {
-    "fallbackPollIntervalMs": 10000,      // 10 sec instead of 60 sec
-    "staleTickerTimeoutMs": 90000         // 90 sec instead of 6 min
-};
-```
-
-**Rationale:**
-- **10-second polling**: Balance between freshness and API load
-  - Still slower than WebSocket (sub-second)
-  - Fast enough for most trading decisions
-  - Respects exchange rate limits (6 requests/min)
-
-- **90-second stale timeout**: Faster failover to backup
-  - If no WebSocket update in 90 sec, something is wrong
-  - Triggers fallback polling quickly
-  - Users see BACKUP state sooner
-
-**Trade-offs:**
-- ⚠️ More API requests (6x increase: 60s → 10s)
-- ⚠️ More frequent fallback triggers (might be noisy)
-- ✅ Better user experience during degraded service
-- ✅ More accurate connection state reporting
-
-**Configuration:**
-- Make these configurable in advanced settings
-- Allow users to tune for their needs:
-  - Day traders: 5-second polling
-  - Long-term holders: 60-second polling fine
-
-**What needs to be changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js:4-8`
-- Update default values
-- Consider adding UI controls in property inspector
-- Document impact on API rate limits
-
----
-
-### 10.5 Document Symbol Transformation Rules
-
-**Priority:** 🟢 Low (documentation)
-
-**Why?**
-- **Hidden behavior**: Binance provider auto-converts USD pairs to USDT
-- **Example**: User enters "BTC/USD" → actually gets "BTC/USDT" data
-- **User confusion**: Prices might not match expectations
-- **Debugging difficulty**: Users searching logs for "BTCUSD" won't find "BTCUSDT"
-
-**Current transformation logic:**
-- **Binance** (binance-provider.js:251-252):
-  ```javascript
-  if (original.endsWith("USD")) {
-      return original.slice(0, -3) + "USDT";
-  }
-  ```
-
-- **Bitfinex** (bitfinex-provider.js:257-264):
-  ```javascript
-  const sanitized = original.replace(/[:/]/g, "");
-  const upper = sanitized.toUpperCase();
-  const withoutLeadingT = upper.startsWith("T") ? upper.substring(1) : upper;
-  return "t" + withoutLeadingT;
-  ```
-
-**Issues:**
-- No user-facing documentation of these rules
-- No indication in UI that symbol was transformed
-- No way for user to see what symbol is actually being used
-- Could lead to price confusion (USDT ≠ USD, usually within 1% but not always)
-
-**Proposed solutions:**
-
-**Option 1: Show transformed symbol in UI**
-- Property inspector shows: "Symbol: BTCUSD → BTCUSDT (Binance)"
-- Connection status tooltip shows actual symbol used
-- Helps users understand what they're actually tracking
-
-**Option 2: Documentation + Troubleshooting**
-- Add help text in property inspector
-- "Note: Binance converts USD pairs to USDT automatically"
-- Link to documentation explaining why
-
-**Option 3: User control**
-- Add "Override Symbol" advanced setting
-- Let users specify exact symbol if auto-detection wrong
-- Use `binanceSymbolOverrides` / `bitfinexSymbolOverrides` config
-
-**What needs to be changed:**
-- **Documentation**:
-  - Add section to README explaining symbol resolution
-  - Document transformation rules per exchange
-  - Provide troubleshooting guide for "wrong symbol" issues
-
-- **UI Enhancement** (optional):
-  - Show transformed symbol in property inspector
-  - Add tooltip explaining transformation
-  - Log transformation in debug mode
 
 ---
 
@@ -1014,90 +570,6 @@ const RATE_LIMITS = {
 - **Complexity**: Adds overhead to every request
 - **Configuration**: Limits might need tuning based on actual usage
 - **Testing**: Need to simulate rate limit scenarios
-
----
-
-### 11.2 Improve Connection Status Communication
-
-**Priority:** 🔴 High (user experience critical)
-
-**Why?**
-- **Users need to know**: When connection degrades from LIVE → BACKUP
-- **Trading implications**: Backup provider may have higher latency or stale data
-- **Current limitation**: Only small icon shows state (if enabled)
-- **User confusion**: No notification when failover occurs
-
-**Current status display:**
-- Small icon in corner of button (if `displayConnectionStatusIcon` enabled)
-- States: LIVE, DETACHED, BACKUP, BROKEN
-- No notifications or state change alerts
-- Icon might be hard to see on small displays
-
-**Proposed enhancements:**
-
-**1. Transient State Change Notification:**
-```javascript
-function onConnectionStateChange(context, oldState, newState) {
-    if (oldState === "live" && newState === "backup") {
-        // Flash button briefly
-        flashButton(context, "#FFA500", 2000);  // Orange flash for 2 sec
-
-        // Optional: system notification
-        if (settings.notifyOnDegradation) {
-            showSystemNotification("Connection degraded to backup provider");
-        }
-    }
-}
-```
-
-**2. Enhanced Visual Indicators:**
-- **Color pulse**: Button border pulses when state changes
-- **Temporary overlay**: Show "BACKUP MODE" text for 3 seconds
-- **Icon animation**: Icon grows/shrinks briefly on state change
-- **Background color**: Subtle background tint based on state
-  - LIVE: no tint (normal)
-  - DETACHED: subtle yellow tint
-  - BACKUP: subtle orange tint
-  - BROKEN: subtle red tint
-
-**3. Connection Status Details:**
-- Add tooltip/hover info in property inspector
-- Show: "Connected via Binance WebSocket (LIVE)" or "Using backup proxy (BACKUP)"
-- Display last successful update timestamp
-- Show retry countdown when BROKEN
-
-**4. User Preferences:**
-```javascript
-// Add to settings
-{
-    "connectionStatusDisplay": "icon",  // Options: "icon", "text", "color", "all", "none"
-    "notifyOnDegradation": false,       // System notification
-    "flashOnStateChange": true          // Brief visual flash
-}
-```
-
-**What needs to be changed:**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
-  - Add state change detection
-  - Implement visual feedback mechanisms
-  - Add notification system
-
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-  - Add connection status display settings
-  - Show current connection details in UI
-
-- **Implementation**:
-  1. Track previous connection state per context
-  2. Detect state transitions (LIVE → BACKUP, BACKUP → BROKEN, etc.)
-  3. Trigger appropriate visual feedback
-  4. Add configurable notification preferences
-  5. Consider temporary text overlay on button
-
-**Risks & Considerations**:
-- **Distraction**: Too much visual feedback might be annoying
-- **Button space**: Limited room for additional indicators
-- **Performance**: Animations might impact canvas rendering
-- **User preference**: Make notifications opt-in to avoid surprises
 
 ---
 

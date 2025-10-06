@@ -2,11 +2,16 @@
 
 (function (root, factory) {
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./alert-manager"), require("./formatters"), require("./expression-evaluator"));
+        module.exports = factory(require("./alert-manager"), require("./formatters"), require("./expression-evaluator"), require("./constants"));
     } else {
-        root.CryptoTickerCanvasRenderer = factory(root.CryptoTickerAlertManager, root.CryptoTickerFormatters, root.CryptoTickerExpressionEvaluator);
+        root.CryptoTickerCanvasRenderer = factory(
+            root.CryptoTickerAlertManager,
+            root.CryptoTickerFormatters,
+            root.CryptoTickerExpressionEvaluator,
+            root.CryptoTickerConstants
+        );
     }
-}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator) {
+}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator, constants) {
     if (!alertManager) {
         throw new Error("Alert manager dependency is missing");
     }
@@ -16,6 +21,10 @@
     if (!expressionEvaluator) {
         throw new Error("Expression evaluator dependency is missing");
     }
+
+    const sharedConstants = constants || {};
+    const TIMESTAMP_SECONDS_THRESHOLD = typeof sharedConstants.TIMESTAMP_SECONDS_THRESHOLD === "number" ? sharedConstants.TIMESTAMP_SECONDS_THRESHOLD : 9999999999;
+    const DEFAULT_PRICE_BAR_POSITION = typeof sharedConstants.DEFAULT_PRICE_BAR_POSITION === "number" ? sharedConstants.DEFAULT_PRICE_BAR_POSITION : 0.5;
 
     function createColorRuleEvaluator() {
         const allowed = expressionEvaluator.allowedVariables.slice(0);
@@ -176,6 +185,30 @@
     canvasContext.restore();
     }
 
+    /**
+     * Draws an equilateral triangle (used as a price cursor) on the canvas at the specified position.
+     *
+     * @param {CanvasRenderingContext2D} canvasContext - The canvas context to draw on.
+     * @param {number} cursorPositionX - The x-coordinate of the triangle's center.
+     * @param {number} lineY - The y-coordinate where the triangle is vertically centered.
+     * @param {number} triangleSide - The length of each side of the equilateral triangle.
+     * @param {string} fillStyle - The fill color/style for the triangle.
+     *
+     * The triangle's height is calculated using the formula for an equilateral triangle:
+     *   height = sqrt(3) / 2 * side = sqrt(0.75 * side^2)
+     * The triangle is positioned so that its base is parallel to the x-axis, with the base centered at (cursorPositionX, lineY - triangleHeight/3)
+     * and the apex pointing downward at (cursorPositionX, lineY + 2*triangleHeight/3).
+     */
+    function drawPriceCursorTriangle(canvasContext, cursorPositionX, lineY, triangleSide, fillStyle) {
+        const triangleHeight = Math.sqrt(0.75 * Math.pow(triangleSide, 2));
+        canvasContext.beginPath();
+        canvasContext.moveTo(cursorPositionX - (triangleSide / 2), lineY - (triangleHeight / 3));
+        canvasContext.lineTo(cursorPositionX + (triangleSide / 2), lineY - (triangleHeight / 3));
+        canvasContext.lineTo(cursorPositionX, lineY + (triangleHeight * 2 / 3));
+        canvasContext.fillStyle = fillStyle;
+        canvasContext.fill();
+    }
+
     function splitMessageIntoLines(canvasContext, message, maxWidth, font) {
         if (!message && message !== 0) {
             return [""];
@@ -251,6 +284,29 @@
         return lines;
     }
 
+    function formatTimestampForDisplay(timestamp) {
+        if (timestamp === null || timestamp === undefined) {
+            return null;
+        }
+
+        const numericTimestamp = typeof timestamp === "number" ? timestamp : parseFloat(timestamp);
+        if (!Number.isFinite(numericTimestamp)) {
+            return null;
+        }
+
+        const normalized = numericTimestamp > TIMESTAMP_SECONDS_THRESHOLD ? numericTimestamp : numericTimestamp * 1000;
+        const date = new Date(normalized);
+        if (isNaN(date.getTime())) {
+            return null;
+        }
+
+        try {
+            return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        } catch (err) {
+            return date.toISOString();
+        }
+    }
+
     function renderMessageCanvas(params) {
         const canvas = params.canvas;
         const canvasContext = params.canvasContext;
@@ -315,224 +371,286 @@
     }
 
     function renderTickerCanvas(params) {
-    const canvas = params.canvas;
-    const canvasContext = params.canvasContext;
-    const settings = params.settings || {};
-    const values = params.values || {};
-    const context = params.context;
-    const connectionStates = params.connectionStates;
-    const connectionState = params.connectionState;
+        const canvas = params.canvas;
+        const canvasContext = params.canvasContext;
+        const settings = params.settings || {};
+        const values = params.values || {};
+        const context = params.context;
+        const connectionStates = params.connectionStates;
+        const connectionState = params.connectionState;
+        const dataStateRaw = params.dataState || "live";
+        const infoMessage = params.infoMessage || "";
+        const lastValidTimestamp = params.lastValidTimestamp || values.lastUpdated || null;
 
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    const sizeMultiplier = getCanvasSizeMultiplier(canvasWidth, canvasHeight);
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const sizeMultiplier = getCanvasSizeMultiplier(canvasWidth, canvasHeight);
 
-    const textPadding = 10 * sizeMultiplier;
+        const textPadding = 10 * sizeMultiplier;
 
-    const pair = settings["pair"];
-    const pairDisplay = settings["title"] || values["pairDisplay"] || pair;
-    const multiplier = settings["multiplier"] || 1;
-    const priceFormat = settings["priceFormat"] || "compact";
+        const pair = settings["pair"];
+        const pairDisplay = settings["title"] || values["pairDisplay"] || values["pair"] || pair || "";
+        const multiplier = settings["multiplier"] || 1;
+        const priceFormat = settings["priceFormat"] || "compact";
 
-    function parseNumberSetting(value, fallback) {
-        const parsed = parseFloat(value);
-        if (isNaN(parsed) || parsed <= 0) {
-            return fallback;
-        }
-        return parsed;
-    }
-
-    function parseDigitsSetting(value, fallback) {
-        const parsed = parseInt(value, 10);
-        if (isNaN(parsed) || parsed < 0) {
-            return fallback;
-        }
-        return parsed;
-    }
-
-    const digits = parseDigitsSetting(settings["digits"], 2);
-    const highLowDigits = parseDigitsSetting(settings["highLowDigits"], digits);
-    const baseFontSize = parseNumberSetting(settings["fontSizeBase"], 25);
-    const priceFontSize = parseNumberSetting(settings["fontSizePrice"], baseFontSize * 35 / 25);
-    const highLowFontSize = parseNumberSetting(settings["fontSizeHighLow"], baseFontSize);
-    const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
-    const defaultBackgroundColor = settings["backgroundColor"] || "#000000";
-    const defaultTextColor = settings["textColor"] || "#ffffff";
-    let backgroundColor = defaultBackgroundColor;
-    let textColor = defaultTextColor;
-    const effectiveConnectionState = connectionState || values.connectionState || null;
-
-    const changeDailyPercent = values.changeDailyPercent || 0;
-    const changePercent = changeDailyPercent * 100;
-
-    const alertEvaluation = alertManager.evaluateAlert({
-        context: context,
-        settings: settings,
-        values: values,
-        backgroundColor: backgroundColor,
-        textColor: textColor
-    });
-
-    const alert = alertEvaluation.alertMode;
-    backgroundColor = alertEvaluation.backgroundColor;
-    textColor = alertEvaluation.textColor;
-
-    const baseColorContext = expressionEvaluator.buildContext(values, {
-        alert: alert,
-        backgroundColor: backgroundColor,
-        textColor: textColor,
-        defaultBackgroundColor: defaultBackgroundColor,
-        defaultTextColor: defaultTextColor
-    });
-
-    if (settings["backgroundColorRule"]) {
-        try {
-            const result = colorRuleEvaluator.evaluate(settings["backgroundColorRule"], baseColorContext);
-            const stringResult = String(result || "").trim();
-            if (stringResult) {
-                backgroundColor = stringResult;
-                baseColorContext.backgroundColor = backgroundColor;
+        function parseNumberSetting(value, fallback) {
+            const parsed = parseFloat(value);
+            if (isNaN(parsed) || parsed <= 0) {
+                return fallback;
             }
-        } catch (err) {
-            console.error("Error evaluating backgroundColorRule", {
-                context: context,
-                expression: settings["backgroundColorRule"],
-                values: values,
-                error: err instanceof Error ? err.message : err
-            });
+            return parsed;
         }
-    }
-    if (settings["textColorRule"]) {
-        try {
-            baseColorContext.textColor = textColor;
-            const result = colorRuleEvaluator.evaluate(settings["textColorRule"], baseColorContext);
-            const stringResult = String(result || "").trim();
-            if (stringResult) {
-                textColor = stringResult;
-                baseColorContext.textColor = textColor;
+
+        function parseDigitsSetting(value, fallback) {
+            const parsed = parseInt(value, 10);
+            if (isNaN(parsed) || parsed < 0) {
+                return fallback;
             }
-        } catch (err) {
-            console.error("Error evaluating textColorRule", {
-                context: context,
-                expression: settings["textColorRule"],
-                values: values,
-                error: err instanceof Error ? err.message : err
-            });
-        }
-    }
-
-    canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
-    canvasContext.fillStyle = backgroundColor;
-    canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    const font = settings["font"] || "Lato";
-    canvasContext.font = (baseFontSize * sizeMultiplier) + "px " + font;
-    canvasContext.fillStyle = textColor;
-
-    canvasContext.textAlign = "left";
-    canvasContext.fillText(pairDisplay, 10 * sizeMultiplier, 25 * sizeMultiplier);
-
-    canvasContext.font = "bold " + (priceFontSize * sizeMultiplier) + "px " + font;
-    canvasContext.fillText(
-        formatters.getRoundedValue(values["last"] || 0, digits, multiplier, priceFormat),
-        textPadding,
-        60 * sizeMultiplier
-    );
-
-    if (settings["displayHighLow"] !== "off") {
-        canvasContext.font = (highLowFontSize * sizeMultiplier) + "px " + font;
-        canvasContext.fillText(
-            formatters.getRoundedValue(values["low"] || 0, highLowDigits, multiplier, priceFormat),
-            textPadding,
-            90 * sizeMultiplier
-        );
-
-        canvasContext.textAlign = "right";
-        canvasContext.fillText(
-            formatters.getRoundedValue(values["high"] || 0, highLowDigits, multiplier, priceFormat),
-            canvasWidth - textPadding,
-            135 * sizeMultiplier
-        );
-    }
-
-    if (settings["displayDailyChange"] !== "off") {
-        const originalFillColor = canvasContext.fillStyle;
-
-        let digitsPercent = 2;
-        if (Math.abs(changePercent) >= 100) {
-            digitsPercent = 0;
-        } else if (Math.abs(changePercent) >= 10) {
-            digitsPercent = 1;
-        }
-        let changePercentDisplay = formatters.getRoundedValue(changePercent, digitsPercent, 1, "plain");
-        if (changePercent > 0) {
-            changePercentDisplay = "+" + changePercentDisplay;
-            canvasContext.fillStyle = "green";
-        } else {
-            canvasContext.fillStyle = "red";
+            return parsed;
         }
 
-        canvasContext.font = (changeFontSize * sizeMultiplier) + "px " + font;
-        canvasContext.textAlign = "right";
-        canvasContext.fillText(
-            changePercentDisplay,
-            canvasWidth - textPadding,
-            90 * sizeMultiplier
-        );
+        const digits = parseDigitsSetting(settings["digits"], 2);
+        const highLowDigits = parseDigitsSetting(settings["highLowDigits"], digits);
+        const baseFontSize = parseNumberSetting(settings["fontSizeBase"], 25);
+        const priceFontSize = parseNumberSetting(settings["fontSizePrice"], baseFontSize * 35 / 25);
+        const highLowFontSize = parseNumberSetting(settings["fontSizeHighLow"], baseFontSize);
+        const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
+        const defaultBackgroundColor = settings["backgroundColor"] || "#000000";
+        const defaultTextColor = settings["textColor"] || "#ffffff";
+        let backgroundColor = defaultBackgroundColor;
+        let textColor = defaultTextColor;
+        const effectiveConnectionState = connectionState || values.connectionState || null;
 
-        canvasContext.fillStyle = originalFillColor;
-    }
+        const priceValue = typeof values.last === "number" && Number.isFinite(values.last) ? values.last : null;
+        const highValue = typeof values.high === "number" && Number.isFinite(values.high) ? values.high : null;
+        const lowValue = typeof values.low === "number" && Number.isFinite(values.low) ? values.low : null;
+        const changeDailyPercentValue = typeof values.changeDailyPercent === "number" && Number.isFinite(values.changeDailyPercent)
+            ? values.changeDailyPercent
+            : null;
+        const changePercent = changeDailyPercentValue !== null ? changeDailyPercentValue * 100 : null;
 
-    if (settings["displayHighLowBar"] !== "off") {
-        const lineY = 104 * sizeMultiplier;
-        const padding = 5 * sizeMultiplier;
-        const lineWidth = 6 * sizeMultiplier;
+        const dataState = typeof dataStateRaw === "string" ? dataStateRaw.toLowerCase() : "live";
+        const degradedColor = dataState === "stale"
+            ? "#f6a623"
+            : dataState === "missing"
+                ? "#d9534f"
+                : null;
 
-        const high = values.high || 0;
-        const low = values.low || 0;
-        const last = values.last || 0;
-        const range = high - low;
-        const percent = range > 0 ? (last - low) / range : 0.5;
-        const lineLength = canvasWidth - padding * 2;
-        const cursorPositionX = padding + Math.round(lineLength * percent);
-
-        const triangleSide = 12 * sizeMultiplier;
-        const triangleHeight = Math.sqrt(3 / 4 * Math.pow(triangleSide, 2));
-
-        canvasContext.beginPath();
-        canvasContext.moveTo(padding, lineY);
-        canvasContext.lineTo(cursorPositionX, lineY);
-        canvasContext.lineWidth = lineWidth;
-        canvasContext.strokeStyle = "green";
-        canvasContext.stroke();
-
-        canvasContext.beginPath();
-        canvasContext.moveTo(cursorPositionX, lineY);
-        canvasContext.lineTo(canvasWidth - padding, lineY);
-        canvasContext.lineWidth = lineWidth;
-        canvasContext.strokeStyle = "red";
-        canvasContext.stroke();
-
-        canvasContext.beginPath();
-        canvasContext.moveTo(cursorPositionX - triangleSide / 2, lineY - triangleHeight / 3);
-        canvasContext.lineTo(cursorPositionX + triangleSide / 2, lineY - triangleHeight / 3);
-        canvasContext.lineTo(cursorPositionX, lineY + triangleHeight * 2 / 3);
-        canvasContext.fillStyle = textColor;
-        canvasContext.fill();
-    }
-
-    const connectionIconSetting = (settings["displayConnectionStatusIcon"] || "OFF").toUpperCase();
-    if (connectionIconSetting !== "OFF") {
-        renderConnectionStatusIcon({
-            canvas: canvas,
-            canvasContext: canvasContext,
-            state: effectiveConnectionState,
-            color: textColor,
-            sizeMultiplier: sizeMultiplier,
-            position: connectionIconSetting,
-            connectionStates: connectionStates
+        const alertEvaluation = alertManager.evaluateAlert({
+            context: context,
+            settings: settings,
+            values: values,
+            backgroundColor: backgroundColor,
+            textColor: textColor
         });
-    }
+
+        const alert = alertEvaluation.alertMode;
+        backgroundColor = alertEvaluation.backgroundColor;
+        textColor = alertEvaluation.textColor;
+
+        const baseColorContext = expressionEvaluator.buildContext(values, {
+            alert: alert,
+            backgroundColor: backgroundColor,
+            textColor: textColor,
+            defaultBackgroundColor: defaultBackgroundColor,
+            defaultTextColor: defaultTextColor
+        });
+
+        if (settings["backgroundColorRule"]) {
+            try {
+                const result = colorRuleEvaluator.evaluate(settings["backgroundColorRule"], baseColorContext);
+                const stringResult = String(result || "").trim();
+                if (stringResult) {
+                    backgroundColor = stringResult;
+                    baseColorContext.backgroundColor = backgroundColor;
+                }
+            } catch (err) {
+                console.error("Error evaluating backgroundColorRule", {
+                    context: context,
+                    expression: settings["backgroundColorRule"],
+                    values: values,
+                    error: err instanceof Error ? err.message : err
+                });
+            }
+        }
+        if (settings["textColorRule"]) {
+            try {
+                baseColorContext.textColor = textColor;
+                const result = colorRuleEvaluator.evaluate(settings["textColorRule"], baseColorContext);
+                const stringResult = String(result || "").trim();
+                if (stringResult) {
+                    textColor = stringResult;
+                    baseColorContext.textColor = textColor;
+                }
+            } catch (err) {
+                console.error("Error evaluating textColorRule", {
+                    context: context,
+                    expression: settings["textColorRule"],
+                    values: values,
+                    error: err instanceof Error ? err.message : err
+                });
+            }
+        }
+
+        canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
+        canvasContext.fillStyle = backgroundColor;
+        canvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        const font = settings["font"] || "Lato";
+        const baseFont = (baseFontSize * sizeMultiplier) + "px " + font;
+        canvasContext.font = baseFont;
+        canvasContext.fillStyle = textColor;
+        canvasContext.textAlign = "left";
+        canvasContext.textBaseline = "alphabetic";
+
+        const pairBaselineY = 25 * sizeMultiplier;
+        let pairTextX = textPadding;
+        if (degradedColor) {
+            const indicatorRadius = 5 * sizeMultiplier;
+            const indicatorCenterX = textPadding + indicatorRadius;
+            const indicatorCenterY = pairBaselineY - (baseFontSize * sizeMultiplier * 0.4);
+            canvasContext.beginPath();
+            canvasContext.fillStyle = degradedColor;
+            canvasContext.arc(indicatorCenterX, indicatorCenterY, indicatorRadius, 0, Math.PI * 2);
+            canvasContext.fill();
+            canvasContext.fillStyle = textColor;
+            pairTextX += (indicatorRadius * 2) + (6 * sizeMultiplier);
+        }
+
+        if (pairDisplay) {
+            canvasContext.fillText(pairDisplay, pairTextX, pairBaselineY);
+        }
+
+        if (dataState === "stale") {
+            const staleLabelBase = infoMessage ? infoMessage.toUpperCase() : "STALE";
+            const staleTime = formatTimestampForDisplay(lastValidTimestamp);
+            const staleLabel = staleTime ? (staleLabelBase + " • " + staleTime) : staleLabelBase;
+            const staleFontSizePx = Math.max(14, baseFontSize * 0.6) * sizeMultiplier;
+            canvasContext.font = staleFontSizePx + "px " + font;
+            canvasContext.fillStyle = degradedColor || textColor;
+            canvasContext.fillText(staleLabel, pairTextX, pairBaselineY + staleFontSizePx + (4 * sizeMultiplier));
+            canvasContext.font = baseFont;
+            canvasContext.fillStyle = textColor;
+        }
+
+        const shouldDisplayDetails = dataState !== "missing";
+
+        if (!shouldDisplayDetails) {
+            const messageText = infoMessage ? infoMessage.toUpperCase() : "NO DATA";
+            const messageFontSizePx = Math.max(26, baseFontSize) * sizeMultiplier;
+            const messageFont = "bold " + messageFontSizePx + "px " + font;
+            canvasContext.font = messageFont;
+            canvasContext.fillStyle = degradedColor || textColor;
+            const previousAlign = canvasContext.textAlign;
+            const previousBaseline = canvasContext.textBaseline;
+            canvasContext.textAlign = "center";
+            canvasContext.textBaseline = "middle";
+            const maxWidth = canvasWidth - (textPadding * 2);
+            const messageLines = splitMessageIntoLines(canvasContext, messageText, maxWidth, messageFont);
+            const lineHeight = messageFontSizePx * 1.1;
+            const totalHeight = lineHeight * messageLines.length;
+            let startY = (canvasHeight - totalHeight) / 2 + (lineHeight / 2);
+            for (let i = 0; i < messageLines.length; i++) {
+                canvasContext.fillText(messageLines[i], canvasWidth / 2, startY + (i * lineHeight));
+            }
+            canvasContext.textAlign = previousAlign;
+            canvasContext.textBaseline = previousBaseline;
+            canvasContext.font = baseFont;
+            canvasContext.fillStyle = textColor;
+        } else {
+            const priceText = priceValue !== null
+                ? formatters.getRoundedValue(priceValue, digits, multiplier, priceFormat)
+                : "--";
+            canvasContext.font = "bold " + (priceFontSize * sizeMultiplier) + "px " + font;
+            canvasContext.fillStyle = textColor;
+            canvasContext.textAlign = "left";
+            canvasContext.fillText(priceText, textPadding, 60 * sizeMultiplier);
+
+            if (settings["displayHighLow"] !== "off") {
+                canvasContext.font = (highLowFontSize * sizeMultiplier) + "px " + font;
+                canvasContext.fillStyle = textColor;
+                canvasContext.textAlign = "left";
+                const lowText = lowValue !== null
+                    ? formatters.getRoundedValue(lowValue, highLowDigits, multiplier, priceFormat)
+                    : "--";
+                canvasContext.fillText(lowText, textPadding, 90 * sizeMultiplier);
+
+                canvasContext.textAlign = "right";
+                const highText = highValue !== null
+                    ? formatters.getRoundedValue(highValue, highLowDigits, multiplier, priceFormat)
+                    : "--";
+                canvasContext.fillText(highText, canvasWidth - textPadding, 135 * sizeMultiplier);
+            }
+
+            if (settings["displayDailyChange"] !== "off" && changePercent !== null) {
+                const originalFillColor = canvasContext.fillStyle;
+                let digitsPercent = 2;
+                if (Math.abs(changePercent) >= 100) {
+                    digitsPercent = 0;
+                } else if (Math.abs(changePercent) >= 10) {
+                    digitsPercent = 1;
+                }
+                let changePercentDisplay = formatters.getRoundedValue(changePercent, digitsPercent, 1, "plain");
+                if (changePercent > 0) {
+                    changePercentDisplay = "+" + changePercentDisplay;
+                    canvasContext.fillStyle = "green";
+                } else if (changePercent < 0) {
+                    canvasContext.fillStyle = "red";
+                } else {
+                    canvasContext.fillStyle = originalFillColor;
+                }
+
+                canvasContext.font = (changeFontSize * sizeMultiplier) + "px " + font;
+                canvasContext.textAlign = "right";
+                canvasContext.fillText(changePercentDisplay, canvasWidth - textPadding, 90 * sizeMultiplier);
+
+                canvasContext.fillStyle = originalFillColor;
+            }
+
+            if (settings["displayHighLowBar"] !== "off" && highValue !== null && lowValue !== null && priceValue !== null) {
+                const lineY = 104 * sizeMultiplier;
+                const padding = 5 * sizeMultiplier;
+                const lineWidth = 6 * sizeMultiplier;
+
+                const range = highValue - lowValue;
+                const percent = range > 0
+                    ? Math.min(Math.max((priceValue - lowValue) / range, 0), 1)
+                    : DEFAULT_PRICE_BAR_POSITION;
+                const lineLength = canvasWidth - (padding * 2);
+                const cursorPositionX = padding + Math.round(lineLength * percent);
+
+                const triangleSide = 12 * sizeMultiplier;
+
+                canvasContext.beginPath();
+                canvasContext.moveTo(padding, lineY);
+                canvasContext.lineTo(cursorPositionX, lineY);
+                canvasContext.lineWidth = lineWidth;
+                canvasContext.strokeStyle = "green";
+                canvasContext.stroke();
+
+                canvasContext.beginPath();
+                canvasContext.moveTo(cursorPositionX, lineY);
+                canvasContext.lineTo(canvasWidth - padding, lineY);
+                canvasContext.lineWidth = lineWidth;
+                canvasContext.strokeStyle = "red";
+                canvasContext.stroke();
+
+                drawPriceCursorTriangle(canvasContext, cursorPositionX, lineY, triangleSide, textColor);
+            }
+        }
+
+        const connectionIconSetting = (settings["displayConnectionStatusIcon"] || "OFF").toUpperCase();
+        if (connectionIconSetting !== "OFF") {
+            renderConnectionStatusIcon({
+                canvas: canvas,
+                canvasContext: canvasContext,
+                state: effectiveConnectionState,
+                color: textColor,
+                sizeMultiplier: sizeMultiplier,
+                position: connectionIconSetting,
+                connectionStates: connectionStates
+            });
+        }
     }
 
     function renderCandlesCanvas(params) {

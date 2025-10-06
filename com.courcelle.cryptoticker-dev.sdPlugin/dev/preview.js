@@ -31,6 +31,22 @@ previewTickerAction.sendCanvas = function () {};
 function assignCanvasGlobals(canvasElement) {
     globalScope.canvas = canvasElement;
     globalScope.canvasContext = canvasElement.getContext("2d");
+
+    if (previewTickerAction && typeof previewTickerAction.initCanvas === "function" && typeof document !== "undefined") {
+        const originalGetElementById = document.getElementById.bind(document);
+        document.getElementById = function (id) {
+            if (id === "ticker") {
+                return canvasElement;
+            }
+            return originalGetElementById(id);
+        };
+
+        try {
+            previewTickerAction.initCanvas();
+        } finally {
+            document.getElementById = originalGetElementById;
+        }
+    }
 }
 
 function generateSampleCandles(values) {
