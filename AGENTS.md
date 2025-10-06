@@ -20,7 +20,7 @@ This project is a Stream Deck plugin; The docs for the SDK are located at https:
 - JavaScript: prefer small, focused modules; functions and variables in `lowerCamelCase`.
 - Files: keep existing naming (e.g., `ticker.js`, `pi.js`); assets under `images/`, styles under `css/`.
 - Keep code and DOM IDs readable and descriptive; avoid abbreviations.
-- Comment your code, whenever WHAT or WHY it's doing isn't trivial. Ensure comments stays concise, while still explaining everything (favor conciseness over grammar).
+- Comment your code, whenever WHAT or WHY it's doing isn't trivially self-explanatory. Ensure comments stays concise, while still explaining everything (favor conciseness over grammar).
 
 ## Testing Guidelines
 - Framework: Jest (configured via `package.json`).

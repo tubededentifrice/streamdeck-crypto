@@ -42,7 +42,7 @@
             this.connectionState = "Disconnected";
             this.startingConnection = false;
 
-            // Manager coordinates fallback polling + streaming so rest of action stays simple.
+            // Manager handles fallback polling + streaming so action code stays simple.
             const managerOptions = {
                 logger: (...args) => {
                     this.logger(...args);
@@ -264,7 +264,7 @@
                     cached.connectionState = cached.connectionState || ConnectionStates.BACKUP;
                     return cached;
                 }
-                // Fallback: return empty ticker so renderer shows broken state, not an exception.
+                // Fallback: return empty ticker so renderer shows BROKEN, not runtime error.
                 const fallback = self.buildEmptyTicker(symbol);
                 fallback.connectionState = ConnectionStates.BROKEN;
                 return fallback;

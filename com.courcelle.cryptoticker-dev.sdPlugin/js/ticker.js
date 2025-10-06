@@ -317,7 +317,7 @@ const tickerAction = {
         return buildSubscriptionKey(exchange, pair, fromCurrency, toCurrency);
     },
 
-    // Decide if conversion required; when override empty or same currency return `to:null` so later steps skip it.
+    // Decide if conversion needed; empty/same override → `to:null`.
     resolveConversionCurrencies: function (fromCurrency, toCurrency) {
         const resolvedFrom = normalizeCurrencyCode(fromCurrency) || "USD";
         const resolvedTo = normalizeCurrencyCode(toCurrency);
@@ -352,7 +352,7 @@ const tickerAction = {
         }
 
         if (cacheEntry.promise) {
-            // Reuse pending fetch (avoids rate spam); swallow failure so next call can retry.
+            // Reuse pending fetch; swallow failure so next call can retry.
             try {
                 return await cacheEntry.promise;
             } catch (promiseErr) {
@@ -404,9 +404,7 @@ const tickerAction = {
                 return cacheEntry.rate;
             }
 
-            // Breaking change: Previously, this function returned 1 as a fallback on error.
-            // To preserve backward compatibility, we now return 1 instead of throwing.
-            // Consider making this behavior configurable in the future.
+            // Keep legacy fallback: surface cached rate else hardcode 1 so old flows keep working.
             return 1;
         }
     },
@@ -468,7 +466,7 @@ const tickerAction = {
         return errorValues;
     },
 
-    // Multiply numeric fields; parse strings since providers emit them during outages.
+    // Multiply numeric fields; parse strings providers sometimes emit.
     applyTickerConversion: function (tickerValues, rate, fromCurrency, toCurrency) {
         if (!tickerValues || typeof tickerValues !== "object") {
             return tickerValues;
@@ -504,7 +502,7 @@ const tickerAction = {
         return converted;
     },
 
-    // Clone candles before scaling prices/quote volume; avoid mutating shared cache.
+    // Clone candles before scaling price/quote volume; keep shared cache untouched.
     applyCandlesConversion: function (candles, rate) {
         if (!Array.isArray(candles) || !rate || !isFinite(rate) || rate <= 0) {
             return candles;
@@ -569,19 +567,10 @@ const tickerAction = {
         }
     },
     /**
-     * Sanitizes and normalizes ticker values by parsing numeric fields, validating input, and extracting key metadata.
+     * Normalize raw ticker payload: parse numeric fields, flag basic metadata, align timestamp.
      *
-     * @param {Object} values - The raw ticker values object to sanitize. May contain price, volume, timestamp, and other fields.
-     * @returns {Object} An object with the following structure:
-     *   {
-     *     values: {Object} - The sanitized values with numeric fields parsed and normalized.
-     *     hasAny: {boolean} - True if any value is present after sanitization.
-     *     hasCritical: {boolean} - True if any critical value (e.g., price, close) is present and valid.
-     *     timestamp: {number|null} - The normalized timestamp (in ms since epoch) if available, otherwise null.
-     *   }
-     *
-     * The function handles parsing of numeric fields, checks for the presence of critical values,
-     * and normalizes the timestamp field if present. Used to ensure ticker data is in a consistent format.
+     * @param {Object} values Raw ticker payload.
+     * @returns {{values:Object, hasAny:boolean, hasCritical:boolean, timestamp:(number|null)}} Parsed summary consumed by renderers.
      */
     sanitizeTickerValues: function (values) {
         if (!values || typeof values !== "object") {

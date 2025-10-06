@@ -151,13 +151,13 @@ function clearAbortTimer(timerId) {
 }
 
 /**
- * Performs a fetch request to the specified URL and returns the parsed JSON response.
+ * Fetch JSON from `url`, honoring optional abort controller/config.
  *
- * @param {string} url - The URL to fetch.
- * @param {AbortController|null} controller - Optional AbortController to allow request cancellation. If null, no abort signal is used.
- * @param {Object} [baseFetchOptions] - Optional fetch options to merge with the request.
- * @returns {Promise<Object>} - A promise that resolves to the parsed JSON response.
- * @throws {Error} If the response is not OK (status not in the range 200-299), or if the fetch fails.
+ * @param {string} url Target URL.
+ * @param {AbortController|null} controller Abort hook or null.
+ * @param {Object} [baseFetchOptions] Extra fetch options.
+ * @returns {Promise<Object>} Parsed JSON payload.
+ * @throws {Error} When the response is not OK or fetch rejects.
  */
 async function performJsonFetch(url, controller, baseFetchOptions) {
     const fetchOptions = Object.assign({}, baseFetchOptions || {});
@@ -1658,7 +1658,7 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, infoJson
     const parsedInfo = JSON.parse(infoJson);
     websocket = new WebSocket('ws://127.0.0.1:' + inPort);
 
-    /** let's see, if we have some settings */
+    // Load saved PI settings if provided.
     pi.extractSettings(actionInfo.payload.settings);
     // console.log(actionInfo.payload.settings);
 
