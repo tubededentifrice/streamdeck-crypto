@@ -74,7 +74,7 @@ describe("ProviderRegistry", () => {
     });
 
     test("registers providers with shared options and generic fallback", () => {
-        const registry = new ProviderRegistry({
+        new ProviderRegistry({
             baseUrl: "https://proxy",
             fallbackPollIntervalMs: 5000,
             staleTickerTimeoutMs: 60000

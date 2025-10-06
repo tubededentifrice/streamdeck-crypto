@@ -1,6 +1,6 @@
 # Crypto Ticker PRO - Improvement Plan
 
-This document consolidates proposed improvements from code reviews and analysis. Each improvement includes rationale, specific implementation details, and risk considerations.
+This document consolidates proposed improvements from code reviews and analysis. Each improvement includes rationale, specific implementation details, and risk considerations. Core runtime modules are now maintained in TypeScript (`.ts`) and compiled to JavaScript for the Stream Deck runtime, so the paths below reference the TypeScript sources.
 
 ---
 
@@ -18,7 +18,7 @@ This document consolidates proposed improvements from code reviews and analysis.
 
 **Current behavior:**
 - Fixed 5-second delay: `DEFAULT_WS_RECONNECT_DELAY_MS = 5000`
-- Used in: binance-provider.js:30, bitfinex-provider.js:30, generic-provider.js:31
+- Used in: `binance-provider.ts:30`, `bitfinex-provider.ts:30`, `generic-provider.ts:31`
 - Reconnects indefinitely every 5 seconds
 
 **Proposed behavior:**
@@ -38,9 +38,9 @@ const attemptDelay = Math.min(
 
 **What needs to be changed:**
 - **Files**:
-  - `js/providers/binance-provider.js:322-340` (scheduleReconnect)
-  - `js/providers/bitfinex-provider.js:410-428` (scheduleReconnect)
-  - `js/providers/generic-provider.js:98-109` (onclose handler)
+  - `js/providers/binance-provider.ts:322-340` (scheduleReconnect)
+  - `js/providers/bitfinex-provider.ts:410-428` (scheduleReconnect)
+  - `js/providers/generic-provider.ts:98-109` (onclose handler)
 
 **Implementation**:
 1. Add `reconnectAttempts` counter to provider metadata
@@ -111,9 +111,9 @@ const attemptDelay = Math.min(
 - **Flexibility**: Different users need different log levels
 
 **What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.js`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/ticker.ts`
   - Line 77: `loggingEnabled` is hardcoded to `false`
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
+- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.ts`
   - Line 12: `loggingEnabled` is also hardcoded
 - **Implementation**:
   1. Add "Enable Debugging" toggle in property inspector (advanced section)
@@ -141,9 +141,9 @@ const attemptDelay = Math.min(
 
 **What needs to be changed?**
 - **Files**:
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/binance-provider.js`
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/bitfinex-provider.js`
-  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/ticker-subscription-manager.js`
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/binance-provider.ts`
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/bitfinex-provider.ts`
+  - `com.courcelle.cryptoticker-dev.sdPlugin/js/providers/ticker-subscription-manager.ts`
 - **Implementation**:
   1. Create connection pool manager per exchange
   2. Share single WebSocket per exchange across all subscriptions
@@ -169,41 +169,6 @@ const attemptDelay = Math.min(
 ---
 
     ## 7. FEATURE ENHANCEMENTS
-
-    ### 7.1 Add TypeScript Support
-
-    **Why?**
-    - **Type safety**: Catch type-related bugs at compile time
-    - **IDE support**: Better autocomplete, refactoring, and navigation
-    - **Documentation**: Types serve as inline documentation
-    - **Maintainability**: Easier to understand code and refactor safely
-
-    **What needs to be changed?**
-    - **All `.js` files** in `com.courcelle.cryptoticker-dev.sdPlugin/js/`
-    - **New files to create**:
-      - `tsconfig.json`: TypeScript configuration
-      - Type definition files for StreamDeck SDK (or use existing @types package)
-    - **Implementation approach**:
-      1. Add TypeScript compiler and build tools to `package.json`
-      2. Start with `.d.ts` declaration files for existing code (no conversion yet)
-      3. Incrementally convert modules to TypeScript, while ensuring comments and explanations stays in place (feel free to modify or add your own, if things aren't self explanatory, but stays concise):
-        - Start with utility modules (formatters, helpers)
-        - Then providers (define provider interface)
-        - Finally main plugin files
-      4. Define key interfaces:
-        - `Settings`: Plugin settings structure
-        - `TickerData`: Ticker data from providers
-        - `CandleData`: Candle data structure
-        - `ProviderInterface`: Provider contract
-        - etc., as needed
-      5. Update build process to compile TypeScript to JavaScript
-      6. Review and update documentation and instructions (.md files, eg. README.md, AGENTS.md, CODEBASE_ANALYSIS.md, IMPROVEMENTS.md)
-
-    **Risks & Considerations**:
-    - **Dependencies**: Some libraries may lack type definitions
-    - **Incremental approach**: Can use TypeScript's `allowJs` for gradual migration
-
-    ---
 
     ### 7.2 Add Module Bundler
 

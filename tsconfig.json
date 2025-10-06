@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "commonjs",
+    "lib": ["ES2019", "DOM", "DOM.Iterable"],
+    "moduleResolution": "node",
+    "noEmitOnError": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "useDefineForClassFields": false
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "com.courcelle.cryptoticker-dev.sdPlugin/js/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "com.courcelle.cryptoticker-dev.sdPlugin/js/vendor/**/*",
+    "com.courcelle.cryptoticker-dev.sdPlugin/js/**/*.test.ts",
+    "__tests__"
+  ]
+}

@@ -3,7 +3,7 @@
 `Crypto ticker PRO` is a plugin to watch crypto and stock rates. Crypto rates are provided by Bitfinex, Binance in real time and Stocks are provided by Yahoo Finance every 15mins.
 
 ## Features
-- Code written in pure JavaScript
+- Core modules authored in TypeScript (compiled to JavaScript for Stream Deck runtime)
 - Cross-platform (macOS, Windows)
 - All Bitfinex and Binance pairs are supported (~1500 pairs); All Yahoo Finance stocks are supported.
 - Real time updates of the ticker (WebSocket connection)
@@ -59,6 +59,8 @@ rm -rf com.courcelle.cryptoticker.sdPlugin
 
 Use the following npm scripts during development:
 
-- `npm test` – run the Jest unit tests
-- `npm run watch` – watch for changes in the code and notify the Stream Deck UI to reload it whenever needed
-- `npm run preview` – start a lightweight server on port 34115 and open the preview page in the default browser
+- `npm run build` – transpile the TypeScript sources in `com.courcelle.cryptoticker-dev.sdPlugin/js/` to runtime JavaScript
+- `npm run build:watch` – keep the TypeScript compiler running in watch mode (used by other scripts)
+- `npm test` – run the Jest unit tests (automatically runs `npm run build` first)
+- `npm run watch` – concurrently run the TypeScript compiler in watch mode and restart the dev plugin via `streamdeck restart`
+- `npm run preview` – run the TypeScript compiler in watch mode alongside the preview server (`npm run preview:serve` if you only need the server)

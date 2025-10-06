@@ -1,16 +1,14 @@
-"use strict";
-(function (root, factory) {
+(function (root: Record<string, unknown>, factory: () => CryptoTickerRuntimeConfig) {
     if (typeof module === "object" && module.exports) {
         module.exports = factory();
-    }
-    else {
+    } else {
         const config = factory();
         root.CryptoTickerConfig = Object.assign({}, root.CryptoTickerConfig || {}, config);
     }
-}(typeof self !== "undefined" ? self : this, function buildConfig() {
+}(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function buildConfig(): CryptoTickerRuntimeConfig {
     return {
         tProxyBase: "https://tproxyv8.opendle.com",
-        fallbackPollIntervalMs: 60000,
+        fallbackPollIntervalMs: 60_000,
         staleTickerTimeoutMs: 5 * 60 * 1000,
         binanceRestBaseUrl: "https://api.binance.com",
         binanceWsBaseUrl: "wss://stream.binance.com:9443/ws",
@@ -27,3 +25,16 @@
         }
     };
 }));
+
+interface CryptoTickerRuntimeConfig {
+    tProxyBase: string;
+    fallbackPollIntervalMs: number;
+    staleTickerTimeoutMs: number;
+    binanceRestBaseUrl: string;
+    binanceWsBaseUrl: string;
+    binanceSymbolOverrides: Record<string, string>;
+    bitfinexRestBaseUrl: string;
+    bitfinexWsBaseUrl: string;
+    bitfinexSymbolOverrides: Record<string, string>;
+    messages: CryptoTickerMessageConfig;
+}

@@ -1,38 +1,49 @@
 "use strict";
-(function (root, factory) {
+
+(function (root: Record<string, unknown>, factory: () => CryptoTickerFormatters) {
     const exports = factory();
     if (typeof module === "object" && module.exports) {
         module.exports = exports;
-    }
-    else {
+    } else {
         root.CryptoTickerFormatters = exports;
     }
-}(typeof self !== "undefined" ? self : this, function () {
+}(typeof self !== "undefined" ? self : this, function (): CryptoTickerFormatters {
+    type NumericFormatMode = "auto" | "full" | "compact" | "plain";
+
     // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
-    function getRoundedValue(value, digits, multiplier, format) {
-        const formatOption = (format || "auto");
-        const parsedDigits = typeof digits === "number" ? digits : parseInt(String(digits !== null && digits !== void 0 ? digits : ""), 10);
+    function getRoundedValue(
+        value: number,
+        digits: number | string | null | undefined,
+        multiplier: number | null | undefined,
+        format?: string | null
+    ): string {
+        const formatOption = (format || "auto") as NumericFormatMode;
+        const parsedDigits = typeof digits === "number" ? digits : parseInt(String(digits ?? ""), 10);
         let precision = parsedDigits;
         if (Number.isNaN(precision) || precision < 0) {
             precision = 2;
         }
+
         const scaledValue = value * (typeof multiplier === "number" ? multiplier : 1);
         const absoluteValue = Math.abs(scaledValue);
         const sign = scaledValue < 0 ? "-" : "";
-        function roundWithPrecision(val, localPrecision) {
+
+        function roundWithPrecision(val: number, localPrecision: number): number {
             const pow = Math.pow(10, localPrecision);
             return Math.round(val * pow) / pow;
         }
-        function toLocale(val, options) {
+
+        function toLocale(val: number, options: Intl.NumberFormatOptions): string {
             try {
                 return val.toLocaleString(undefined, options);
-            }
-            catch (err) {
+            } catch (err) {
                 return val.toString();
             }
         }
+
         let formattedValue = "";
         const fixedDigits = Math.max(0, precision);
+
         switch (formatOption) {
             case "full": {
                 const roundedFull = roundWithPrecision(absoluteValue, fixedDigits);
@@ -45,7 +56,7 @@
             }
             case "compact": {
                 // T=trillion, B=billion, M=million, K=thousand; pick largest threshold that fits.
-                const units = [
+                const units: Array<{ value: number; suffix: string }> = [
                     { value: 1000000000000, suffix: "T" },
                     { value: 1000000000, suffix: "B" },
                     { value: 1000000, suffix: "M" },
@@ -60,6 +71,7 @@
                         break;
                     }
                 }
+
                 const roundedCompact = roundWithPrecision(compactValue, fixedDigits);
                 formattedValue = toLocale(roundedCompact, {
                     minimumFractionDigits: fixedDigits,
@@ -86,6 +98,7 @@
                     autoSuffix = "K";
                     autoValue = absoluteValue / 1000;
                 }
+
                 const roundedAuto = roundWithPrecision(autoValue, fixedDigits);
                 formattedValue = toLocale(roundedAuto, {
                     minimumFractionDigits: fixedDigits,
@@ -95,17 +108,31 @@
                 break;
             }
         }
+
         return sign + formattedValue;
     }
+
     // Normalize into [0,1] for price cursors; clamp to 0.5 when min==max prevents divide-by-zero.
-    function normalizeValue(value, min, max) {
+    function normalizeValue(value: number, min: number, max: number): number {
         if (max - min === 0) {
             return 0.5;
         }
+
         return (value - min) / (max - min);
     }
+
     return {
         getRoundedValue,
         normalizeValue
     };
 }));
+
+interface CryptoTickerFormatters {
+    getRoundedValue(
+        value: number,
+        digits: number | string | null | undefined,
+        multiplier: number | null | undefined,
+        format?: string | null
+    ): string;
+    normalizeValue(value: number, min: number, max: number): number;
+}

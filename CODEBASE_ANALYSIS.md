@@ -8,7 +8,7 @@ This document provides a summary of the Stream Deck Crypto Ticker plugin's codeb
 
 The project is a plugin for the Elgato Stream Deck that displays real-time prices for cryptocurrencies and stocks with advanced charting and alert capabilities.
 
-- **Frontend**: The plugin's user interface is built with HTML, CSS, and JavaScript. It runs within the Stream Deck application.
+- **Frontend**: The plugin's user interface is built with HTML, CSS, and JavaScript. TypeScript is used for the logic modules (compiled to JavaScript for the Stream Deck runtime).
 - **Backend**: Hybrid architecture with both direct exchange connections and proxy fallback
 - **Data Sources**: Direct WebSocket connections to Binance and Bitfinex, with fallback to proxy (`https://tproxyv8.opendle.com`) and Yahoo Finance for stocks
 
@@ -26,7 +26,7 @@ The plugin consists of three main parts:
 
 Communication between the plugin and Stream Deck software happens via WebSocket established by the Stream Deck application.
 
-The runtime logic is now modular: `ticker.js` orchestrates lifecycle events while specialized helpers (`canvas-renderer`, `settings-manager`, `alert-manager`, `formatters`, `ticker-state`) encapsulate rendering, configuration, alerts, and shared caches to keep responsibilities focused and testable.
+The runtime logic is now modular: `ticker.ts` orchestrates lifecycle events while specialized helpers (`canvas-renderer.ts`, `settings-manager.ts`, `alert-manager.ts`, `formatters.ts`, `ticker-state.ts`) encapsulate rendering, configuration, alerts, and shared caches to keep responsibilities focused and testable. Compiled JavaScript artifacts live alongside the TypeScript sources for Stream Deck consumption.
 
 ### Provider Architecture (NEW in direct_provider branch)
 
@@ -77,19 +77,19 @@ Each ticker instance tracks its connection state:
 ### Core Plugin Logic
 
 - **`manifest.json`**: Plugin manifest defining properties, actions, and entry points
-- **`js/ticker.js`**: Stream Deck integration layer that wires providers, state, and rendering modules together
+- **`js/ticker.ts`**: Stream Deck integration layer that wires providers, state, and rendering modules together
   - Handles WebSocket lifecycle, action callbacks, and provider subscriptions
   - Delegates rendering, state management, alerts, and formatting to dedicated modules
-- **`js/canvas-renderer.js`**: Canvas drawing helpers for ticker and candle views, including connection-state icon support
-- **`js/settings-manager.js`**: Default settings resolution, normalization, and subscription refresh coordination
-- **`js/alert-manager.js`**: Alert rule evaluation plus arm/disarm state tracking
-- **`js/formatters.js`**: Number/price formatting and normalization helpers shared by renderer and tests
-- **`js/ticker-state.js`**: Centralized store for context metadata, subscriptions, connection states, and caches
+- **`js/canvas-renderer.ts`**: Canvas drawing helpers for ticker and candle views, including connection-state icon support
+- **`js/settings-manager.ts`**: Default settings resolution, normalization, and subscription refresh coordination
+- **`js/alert-manager.ts`**: Alert rule evaluation plus arm/disarm state tracking
+- **`js/formatters.ts`**: Number/price formatting and normalization helpers shared by renderer and tests
+- **`js/ticker-state.ts`**: Centralized store for context metadata, subscriptions, connection states, and caches
 
 ### Property Inspector
 
 - **`index_pi.html`**: Property inspector HTML with connection status display
-- **`js/pi.js`** (204 lines): Property inspector logic
+- **`js/pi.ts`** (~204 lines): Property inspector logic
   - Dynamic exchange and pair selection
   - Settings validation
   - Provider configuration
@@ -98,30 +98,30 @@ Each ticker instance tracks its connection state:
 ### Provider System (NEW)
 
 **Core Interfaces:**
-- **`js/providers/provider-interface.js`** (59 lines): Base interface all providers implement
-- **`js/providers/provider-registry.js`** (122 lines): Central provider management with failover
-- **`js/providers/subscription-key.js`** (25 lines): Subscription key generation utility
-- **`js/providers/connection-states.js`** (14 lines): Connection state constants
+- **`js/providers/provider-interface.ts`** (59 lines): Base interface all providers implement
+- **`js/providers/provider-registry.ts`** (122 lines): Central provider management with failover
+- **`js/providers/subscription-key.ts`** (25 lines): Subscription key generation utility
+- **`js/providers/connection-states.ts`** (14 lines): Connection state constants
 
 **Provider Implementations:**
-- **`js/providers/binance-provider.js`** (426 lines): Direct Binance WebSocket integration
+- **`js/providers/binance-provider.ts`** (426 lines): Direct Binance WebSocket integration
   - REST API: `https://api.binance.com`
   - WebSocket: `wss://stream.binance.com:9443/ws`
   - Symbol transformation: `BTCUSD` → `BTCUSDT`
   - Automatic reconnection with 5-second delay
-- **`js/providers/bitfinex-provider.js`** (502 lines): Direct Bitfinex WebSocket integration
+- **`js/providers/bitfinex-provider.ts`** (502 lines): Direct Bitfinex WebSocket integration
   - REST API: `https://api-pub.bitfinex.com`
   - WebSocket: `wss://api-pub.bitfinex.com/ws/2`
   - Symbol normalization (removes separators, adds `t` prefix)
   - Channel-based subscription management
-- **`js/providers/generic-provider.js`** (348 lines): Refactored generic provider
+- **`js/providers/generic-provider.ts`** (348 lines): Refactored generic provider
   - Uses SignalR for WebSocket connection to proxy
   - REST API fallback
   - Supports conversion between currencies
-- **`js/providers/yfinance-provider.js`** (54 lines): Yahoo Finance wrapper for stocks
+- **`js/providers/yfinance-provider.ts`** (54 lines): Yahoo Finance wrapper for stocks
 
 **Subscription Management:**
-- **`js/providers/ticker-subscription-manager.js`** (372 lines): Unified subscription lifecycle
+- **`js/providers/ticker-subscription-manager.ts`** (372 lines): Unified subscription lifecycle
   - Manages WebSocket subscriptions across providers
   - Automatic reconnection on disconnect
   - Stale data detection (triggers fallback after 6 minutes)
@@ -130,7 +130,7 @@ Each ticker instance tracks its connection state:
 
 ### Configuration
 
-- **`js/config.js`** (20 lines): Configuration options for direct providers
+- **`js/config.ts`** (20 lines): Configuration options for direct providers
   ```javascript
   {
       "tProxyBase": "https://tproxyv8.opendle.com",
@@ -145,9 +145,9 @@ Each ticker instance tracks its connection state:
 
 ### Property Inspector UI Helpers (NEW)
 
-- **`js/pi/providers/index.js`** (24 lines): Provider-specific UI helpers
-- **`js/pi/providers/binance.js`** (46 lines): Binance UI integration
-- **`js/pi/providers/bitfinex.js`** (34 lines): Bitfinex UI integration
+- **`js/pi/providers/index.ts`** (24 lines): Provider-specific UI helpers
+- **`js/pi/providers/binance.ts`** (46 lines): Binance UI integration
+- **`js/pi/providers/bitfinex.ts`** (34 lines): Bitfinex UI integration
 
 ### Testing
 
