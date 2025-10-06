@@ -146,42 +146,63 @@
             [0.6, 0.62], [1.0, 0.62], [1.0, 0.7], [0.6, 0.7]
         ]);
     } else if (iconState === connectionStates.BROKEN) {
-        const drawRoundedRect = function (width, height, radius) {
-            const r = Math.min(radius, Math.min(width, height) / 2);
-            canvasContext.beginPath();
-            canvasContext.moveTo(r, 0);
-            canvasContext.lineTo(width - r, 0);
-            canvasContext.quadraticCurveTo(width, 0, width, r);
-            canvasContext.lineTo(width, height - r);
-            canvasContext.quadraticCurveTo(width, height, width - r, height);
-            canvasContext.lineTo(r, height);
-            canvasContext.quadraticCurveTo(0, height, 0, height - r);
-            canvasContext.lineTo(0, r);
-            canvasContext.quadraticCurveTo(0, 0, r, 0);
-            canvasContext.closePath();
-            canvasContext.fill();
-        };
-
-        const linkWidth = iconSize * 0.55;
-        const linkHeight = iconSize * 0.28;
-        const linkRadius = iconSize * 0.12;
-        const rotation = -Math.PI / 6;
-
+        // Draw a red broken heart icon with visible separation
         canvasContext.save();
-        canvasContext.translate(iconSize * 0.08, iconSize * 0.4);
-        canvasContext.rotate(rotation);
-        drawRoundedRect(linkWidth, linkHeight, linkRadius);
-        canvasContext.restore();
+        canvasContext.fillStyle = "#ff0000"; // Red color for broken state
 
-        canvasContext.save();
-        canvasContext.translate(iconSize * 0.45, iconSize * 0.05);
-        canvasContext.rotate(rotation);
-        drawRoundedRect(linkWidth, linkHeight, linkRadius);
-        canvasContext.restore();
+        // Draw left half of broken heart (shifted left and down)
+        canvasContext.beginPath();
+        // Start at jagged break edge
+        canvasContext.moveTo(iconSize * 0.46, iconSize * 0.32);
+        canvasContext.lineTo(iconSize * 0.42, iconSize * 0.38);
+        canvasContext.lineTo(iconSize * 0.46, iconSize * 0.44);
+        canvasContext.lineTo(iconSize * 0.41, iconSize * 0.50);
+        // Left bottom point
+        canvasContext.lineTo(iconSize * 0.43, iconSize * 0.88);
+        canvasContext.lineTo(iconSize * 0.30, iconSize * 0.73);
+        // Left outer curve
+        canvasContext.lineTo(iconSize * 0.18, iconSize * 0.62);
+        canvasContext.bezierCurveTo(
+            iconSize * 0.08, iconSize * 0.52,
+            iconSize * 0.08, iconSize * 0.38,
+            iconSize * 0.15, iconSize * 0.28
+        );
+        // Left top arc
+        canvasContext.bezierCurveTo(
+            iconSize * 0.25, iconSize * 0.16,
+            iconSize * 0.40, iconSize * 0.20,
+            iconSize * 0.46, iconSize * 0.32
+        );
+        canvasContext.closePath();
+        canvasContext.fill();
 
-        drawPolygon([
-            [0.38, 0.32], [0.55, 0.22], [0.62, 0.38], [0.5, 0.48], [0.56, 0.62], [0.4, 0.58]
-        ]);
+        // Draw right half of broken heart (shifted right and up)
+        canvasContext.beginPath();
+        // Start at jagged break edge (offset from left)
+        canvasContext.moveTo(iconSize * 0.54, iconSize * 0.28);
+        canvasContext.lineTo(iconSize * 0.58, iconSize * 0.34);
+        canvasContext.lineTo(iconSize * 0.54, iconSize * 0.40);
+        canvasContext.lineTo(iconSize * 0.59, iconSize * 0.46);
+        // Right bottom point
+        canvasContext.lineTo(iconSize * 0.57, iconSize * 0.84);
+        canvasContext.lineTo(iconSize * 0.70, iconSize * 0.69);
+        // Right outer curve
+        canvasContext.lineTo(iconSize * 0.82, iconSize * 0.58);
+        canvasContext.bezierCurveTo(
+            iconSize * 0.92, iconSize * 0.48,
+            iconSize * 0.92, iconSize * 0.34,
+            iconSize * 0.85, iconSize * 0.24
+        );
+        // Right top arc
+        canvasContext.bezierCurveTo(
+            iconSize * 0.75, iconSize * 0.12,
+            iconSize * 0.60, iconSize * 0.16,
+            iconSize * 0.54, iconSize * 0.28
+        );
+        canvasContext.closePath();
+        canvasContext.fill();
+
+        canvasContext.restore();
     }
 
     canvasContext.restore();

@@ -35,6 +35,17 @@ function createMockCanvas(width = 144, height = 144) {
                 y
             });
         },
+        bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y) {
+            operations.push({
+                type: "bezierCurveTo",
+                cp1x,
+                cp1y,
+                cp2x,
+                cp2y,
+                x,
+                y
+            });
+        },
         arc(x, y, radius, startAngle, endAngle) {
             operations.push({
                 type: "arc",
