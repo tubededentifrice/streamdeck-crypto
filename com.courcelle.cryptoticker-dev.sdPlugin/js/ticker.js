@@ -619,7 +619,7 @@ const tickerAction = {
         let timestamp = null;
         for (let i = 0; i < timestampCandidateKeys.length; i++) {
             const key = timestampCandidateKeys[i];
-            const hasValueKey = Object.hasOwn ? Object.hasOwn(values, key) : key in values;
+            const hasValueKey = Object.prototype.hasOwnProperty.call(values, key);
             if (!hasValueKey) {
                 continue;
             }
