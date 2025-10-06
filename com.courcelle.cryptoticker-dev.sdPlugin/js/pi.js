@@ -149,6 +149,15 @@ function clearAbortTimer(timerId) {
     }
 }
 
+/**
+ * Performs a fetch request to the specified URL and returns the parsed JSON response.
+ *
+ * @param {string} url - The URL to fetch.
+ * @param {AbortController|null} controller - Optional AbortController to allow request cancellation. If null, no abort signal is used.
+ * @param {Object} [baseFetchOptions] - Optional fetch options to merge with the request.
+ * @returns {Promise<Object>} - A promise that resolves to the parsed JSON response.
+ * @throws {Error} If the response is not OK (status not in the range 200-299), or if the fetch fails.
+ */
 async function performJsonFetch(url, controller, baseFetchOptions) {
     const fetchOptions = Object.assign({}, baseFetchOptions || {});
     if (controller) {
