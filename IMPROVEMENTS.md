@@ -166,40 +166,6 @@ const attemptDelay = Math.min(
 - **Testing**: Need to test with many simultaneous subscriptions
 - **Migration**: Ensure backward compatibility during transition
 
----
-
-## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
-
-### 8.1 Document Connection States and Troubleshooting
-
-**Why?**
-- **User confusion**: Users see LIVE/DETACHED/BACKUP/BROKEN states but don't know what they mean
-- **Support burden**: Repeated questions about connection issues
-- **Self-service**: Users should be able to diagnose and fix common issues
-
-**What needs to be changed?**
-- **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-  - Add a collapsible panel below the dropdown allowing to select the state icon explaining the different states (same type of help as for the alerts, for example)
-- **File**: `README.md`
-  - Document connection state meanings
-  - Common issues and solutions
-  - Diagnostic steps
-- **Documentation content**:
-  - **LIVE**: Connected to primary provider with live data
-  - **BACKUP**: Primary provider failed, using backup/fallback provider
-  - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
-  - **BROKEN**: Connection failed and retries exhausted
-  - On the PI, show the corresponding icons: the corresponding logic to draw them will need to be moved to a place that is accessible by both the PI and the plugin, so we only define those icons in a single place
-  - Add troubleshooting steps:
-    - Check internet connection
-    - Verify exchange is accessible (not blocked by firewall/VPN)
-    - Check if API is experiencing outages
-    - Try different provider
-    - Check plugin logs for detailed errors
-
-**Risks & Considerations**:
-- **Maintenance**: Keep docs updated as states/behavior changes
-
 ## 9. USER EXPERIENCE IMPROVEMENTS
 
 ### 9.1 Improve Property Inspector UI
