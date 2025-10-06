@@ -346,28 +346,6 @@ const attemptDelay = Math.min(
 
 ---
 
-        ### 9.2 Improve Pair Selection UX
-
-        **Why?**
-        - **Scale**: Binance has ~1500 pairs, making dropdown unusable
-        - **Speed**: Users waste time scrolling through long list
-
-        **What needs to be changed?**
-        - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-          - Replace simple `<select>` with searchable dropdown
-        - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/js/pi.js`
-          - Add search/filter logic
-        - **Implementation**:
-          1. Add search input above pair dropdown
-          2. Filter pairs as user types
-          3. Support keyboard navigation (arrow keys, enter)
-
-        **Risks & Considerations**:
-        - **Performance**: Filtering 1500 items in real-time might need optimization
-        - **UI**: Custom dropdown may have accessibility challenges
-
----
-
 ### 10.2 Implement Configuration Validation (Enhanced)
 
 **Why?**

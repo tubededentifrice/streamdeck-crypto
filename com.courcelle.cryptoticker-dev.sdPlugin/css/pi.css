@@ -573,6 +573,43 @@ td:last-child {
     margin-left: 4px;
 }
 
+.pair-search-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-right: 13px;
+    margin-left: 4px;
+}
+
+.pair-search-input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid var(--sdpi-bordercolor);
+    border-radius: var(--sdpi-borderradius);
+    background-color: var(--sdpi-background);
+    color: var(--sdpi-color);
+    font-size: 10pt;
+    font-weight: var(--sdpi-fontweight);
+    letter-spacing: var(--sdpi-letterspacing);
+    box-sizing: border-box;
+}
+
+.pair-search-input:focus {
+    border-color: #4ebbe4;
+}
+
+.pair-search-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.pair-search-feedback {
+    display: none;
+    font-size: 8pt;
+    color: #b5b5b5;
+    min-height: 0;
+}
+
 .sdpi-item-child,
 .sdpi-item-group>.sdpi-item>input[type="color"] {
     margin-top: 0.4em;

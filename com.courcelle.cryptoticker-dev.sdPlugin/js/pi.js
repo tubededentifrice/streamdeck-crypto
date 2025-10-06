@@ -100,6 +100,8 @@ const tProxyBase = "https://tproxyv8.opendle.com";
 
 const loggingEnabled = false;
 const selectPairDropdown = document.getElementById("select-pair-dropdown");
+const pairSearchInput = document.getElementById("select-pair-search");
+const pairSearchFeedback = document.getElementById("pair-search-feedback");
 const FETCH_TIMEOUT_MS = 10000;
 const FETCH_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 600;
@@ -138,6 +140,7 @@ const networkStatusManager = (function() {
         },
         pairs: {
             selectId: "select-pair-dropdown",
+            extraDisableIds: ["select-pair-search"],
             loadingMessage: "Loading pairs...",
             retryMessage: "Failed to load pairs. Retrying..."
         },
@@ -160,6 +163,16 @@ const networkStatusManager = (function() {
         const select = document.getElementById(conf.selectId);
         if (!select || !select.parentNode) {
             return null;
+        }
+
+        const extraDisableElements = [];
+        if (Array.isArray(conf.extraDisableIds)) {
+            conf.extraDisableIds.forEach(function(extraId) {
+                const extraElement = document.getElementById(extraId);
+                if (extraElement) {
+                    extraDisableElements.push(extraElement);
+                }
+            });
         }
 
         const status = document.createElement("div");
@@ -195,7 +208,8 @@ const networkStatusManager = (function() {
             spinner: spinner,
             text: text,
             retry: retry,
-            warning: warning
+            warning: warning,
+            extraDisableElements: extraDisableElements
         };
 
         return state[key];
@@ -224,6 +238,14 @@ const networkStatusManager = (function() {
 
         if (entry.select) {
             entry.select.disabled = !!opts.disableSelect;
+        }
+        if (entry.extraDisableElements && entry.extraDisableElements.length) {
+            for (let i = 0; i < entry.extraDisableElements.length; i++) {
+                const target = entry.extraDisableElements[i];
+                if (target) {
+                    target.disabled = !!opts.disableSelect;
+                }
+            }
         }
     }
 
@@ -567,6 +589,12 @@ function setCurrentSettings(values) {
 }
 
 const pi = {
+    pairDropdownState: {
+        allPairs: [],
+        filteredPairs: [],
+        filterTerm: "",
+        provider: ""
+    },
     log: function(...data) {
         if (loggingEnabled) {
             console.log(...data);
@@ -638,6 +666,265 @@ const pi = {
         }
 
         return result;
+    },
+    setPairUIVisibility: function(isVisible) {
+        const displayValue = isVisible ? "" : "none";
+        const dropdownGroup = document.getElementById("select-pair-dropdown-group");
+        const searchGroup = document.getElementById("pair-search-group");
+        if (dropdownGroup) {
+            dropdownGroup.style.display = displayValue;
+        }
+        if (searchGroup) {
+            searchGroup.style.display = displayValue;
+        }
+    },
+    resetPairDropdown: function() {
+        this.pairDropdownState.allPairs = [];
+        this.pairDropdownState.filteredPairs = [];
+        this.pairDropdownState.filterTerm = "";
+        this.pairDropdownState.provider = "";
+        if (selectPairDropdown) {
+            this.removeAllOptions(selectPairDropdown);
+            const emptyOption = document.createElement("option");
+            emptyOption.text = "";
+            emptyOption.value = "";
+            selectPairDropdown.add(emptyOption);
+            selectPairDropdown.disabled = true;
+        }
+        if (pairSearchInput) {
+            pairSearchInput.value = "";
+            pairSearchInput.disabled = true;
+        }
+        this.updatePairSearchFeedback(0, "");
+        this.setPairUIVisibility(false);
+    },
+    findMatchingPairValue: function(pairs, identifier) {
+        if (!identifier) {
+            return null;
+        }
+        const normalized = identifier.toUpperCase();
+        const list = Array.isArray(pairs) ? pairs : [];
+        const match = list.find(function(pair) {
+            if (!pair) {
+                return false;
+            }
+            const value = (pair.value || "").toUpperCase();
+            const symbol = (pair.symbol || "").toUpperCase();
+            const display = (pair.display || "").toUpperCase();
+            return value === normalized || symbol === normalized || display === normalized;
+        });
+        if (match) {
+            return match.value || match.symbol || "";
+        }
+        return null;
+    },
+    renderPairDropdownOptions: function(pairs, options) {
+        if (!selectPairDropdown) {
+            return;
+        }
+
+        const opts = options || {};
+        const availablePairs = Array.isArray(pairs) ? pairs : [];
+        const previousValue = typeof opts.previousValue === "string" ? opts.previousValue : (selectPairDropdown.value || "");
+        const preferredValue = typeof opts.preferredValue === "string" ? opts.preferredValue : "";
+        const fallbackValue = typeof opts.fallbackValue === "string" ? opts.fallbackValue : "";
+        const pairConfig = settingsConfig && settingsConfig["pair"] ? settingsConfig["pair"] : null;
+        const currentPairValue = pairConfig && pairConfig.value ? pairConfig.value.value : "";
+
+        this.removeAllOptions(selectPairDropdown);
+
+        const emptyOption = document.createElement("option");
+        emptyOption.text = "";
+        emptyOption.value = "";
+        selectPairDropdown.add(emptyOption);
+
+        for (let i = 0; i < availablePairs.length; i++) {
+            const pair = availablePairs[i];
+            const option = document.createElement("option");
+            option.value = pair.value;
+            option.text = pair.display || pair.value;
+            selectPairDropdown.add(option);
+        }
+
+        const normalizedPreferred = this.findMatchingPairValue(availablePairs, preferredValue);
+        const normalizedPrevious = this.findMatchingPairValue(availablePairs, previousValue);
+        const normalizedCurrent = this.findMatchingPairValue(availablePairs, currentPairValue);
+        const normalizedFallback = this.findMatchingPairValue(availablePairs, fallbackValue);
+
+        const targetValue = normalizedPreferred || normalizedPrevious || normalizedCurrent || normalizedFallback || "";
+        if (targetValue) {
+            selectPairDropdown.value = targetValue;
+        } else {
+            selectPairDropdown.value = "";
+        }
+    },
+    updatePairSearchFeedback: function(matchesCount, query) {
+        if (!pairSearchFeedback) {
+            return;
+        }
+        const hasQuery = !!(query && query.trim());
+        if (hasQuery && matchesCount === 0) {
+            pairSearchFeedback.textContent = "No matches for \"" + query.trim() + "\"";
+            pairSearchFeedback.style.display = "";
+        } else {
+            pairSearchFeedback.textContent = "";
+            pairSearchFeedback.style.display = "none";
+        }
+    },
+    applyPairFilter: function(rawTerm, options) {
+        const term = (rawTerm || "").trim();
+        const normalizedTerm = term.toUpperCase();
+        const state = this.pairDropdownState;
+        state.filterTerm = term;
+
+        const sourcePairs = Array.isArray(state.allPairs) ? state.allPairs : [];
+        let filtered = sourcePairs;
+        if (normalizedTerm) {
+            filtered = sourcePairs.filter(function(pair) {
+                const value = (pair.value || "").toUpperCase();
+                const symbol = (pair.symbol || "").toUpperCase();
+                const display = (pair.display || "").toUpperCase();
+                return value.indexOf(normalizedTerm) !== -1 || symbol.indexOf(normalizedTerm) !== -1 || display.indexOf(normalizedTerm) !== -1;
+            });
+        }
+
+        state.filteredPairs = filtered;
+
+        const opts = options || {};
+        const previousValue = typeof opts.previousValue === "string" ? opts.previousValue : (selectPairDropdown ? selectPairDropdown.value : "");
+        const preferredValue = typeof opts.preferredValue === "string" ? opts.preferredValue : "";
+        const fallbackCandidate = typeof opts.fallbackValue === "string" ? opts.fallbackValue : (filtered[0] ? filtered[0].value : "");
+
+        this.renderPairDropdownOptions(filtered, {
+            previousValue: previousValue,
+            preferredValue: preferredValue,
+            fallbackValue: fallbackCandidate
+        });
+        this.updatePairSearchFeedback(filtered.length, term);
+    },
+    setPairDropdownData: function(provider, pairs, options) {
+        const normalizedPairs = Array.isArray(pairs) ? pairs.slice(0) : [];
+        this.pairDropdownState.allPairs = normalizedPairs;
+        this.pairDropdownState.provider = (provider || "").toUpperCase();
+
+        const opts = options || {};
+        const shouldResetFilter = opts.resetFilter !== false;
+        if (pairSearchInput) {
+            if (shouldResetFilter) {
+                pairSearchInput.value = "";
+            }
+            pairSearchInput.disabled = normalizedPairs.length === 0;
+        }
+
+        const filterTerm = shouldResetFilter ? "" : this.pairDropdownState.filterTerm;
+        this.applyPairFilter(filterTerm, {
+            previousValue: opts.previousValue,
+            preferredValue: opts.preferredValue,
+            fallbackValue: opts.savedValue
+        });
+    },
+    handlePairSearchInput: function(value) {
+        this.applyPairFilter(value, {
+            previousValue: selectPairDropdown ? selectPairDropdown.value : ""
+        });
+    },
+    handlePairSearchKeydown: function(evt) {
+        if (!evt) {
+            return;
+        }
+
+        if (evt.key === "ArrowDown" || evt.key === "Down") {
+            evt.preventDefault();
+            this.focusPairDropdown();
+            this.movePairSelection(1);
+        } else if (evt.key === "ArrowUp" || evt.key === "Up") {
+            evt.preventDefault();
+            this.focusPairDropdown();
+            this.movePairSelection(-1);
+        } else if (evt.key === "Enter") {
+            evt.preventDefault();
+            this.selectPairFromSearch();
+        } else if (evt.key === "Escape") {
+            if (pairSearchInput && pairSearchInput.value) {
+                evt.preventDefault();
+                pairSearchInput.value = "";
+                const pairConfig = settingsConfig && settingsConfig["pair"] ? settingsConfig["pair"] : null;
+                const currentValue = pairConfig && pairConfig.value ? pairConfig.value.value : "";
+                this.applyPairFilter("", {
+                    previousValue: currentValue
+                });
+            }
+        }
+    },
+    focusPairDropdown: function() {
+        if (!selectPairDropdown) {
+            return;
+        }
+        selectPairDropdown.focus();
+        if (selectPairDropdown.options.length > 1 && selectPairDropdown.selectedIndex < 1) {
+            selectPairDropdown.selectedIndex = 1;
+        }
+    },
+    movePairSelection: function(offset) {
+        if (!selectPairDropdown) {
+            return;
+        }
+        const optionsLength = selectPairDropdown.options.length;
+        if (optionsLength <= 1) {
+            return;
+        }
+
+        let nextIndex = selectPairDropdown.selectedIndex;
+        if (nextIndex < 1) {
+            nextIndex = offset > 0 ? 1 : optionsLength - 1;
+        } else {
+            nextIndex = nextIndex + offset;
+            if (nextIndex < 1) {
+                nextIndex = optionsLength - 1;
+            } else if (nextIndex >= optionsLength) {
+                nextIndex = 1;
+            }
+        }
+
+        selectPairDropdown.selectedIndex = nextIndex;
+    },
+    selectPairFromSearch: function() {
+        if (!selectPairDropdown) {
+            return;
+        }
+
+        let value = selectPairDropdown.value;
+        if (!value && this.pairDropdownState.filteredPairs.length > 0) {
+            value = this.pairDropdownState.filteredPairs[0].value;
+        }
+
+        if (value) {
+            this.applyPairSelection(value);
+        }
+    },
+    applyPairSelection: function(value) {
+        if (!selectPairDropdown) {
+            return;
+        }
+        selectPairDropdown.value = value || "";
+        if (typeof selectPairDropdown.onchange === "function") {
+            selectPairDropdown.onchange();
+        }
+    },
+    syncPairSelectionDisplay: function() {
+        if (!selectPairDropdown) {
+            return;
+        }
+        const pairConfig = settingsConfig && settingsConfig["pair"] ? settingsConfig["pair"] : null;
+        const currentValue = pairConfig && pairConfig.value ? pairConfig.value.value : "";
+        if (!currentValue) {
+            selectPairDropdown.value = "";
+            return;
+        }
+
+        const available = this.pairDropdownState.filteredPairs.length > 0 ? this.pairDropdownState.filteredPairs : this.pairDropdownState.allPairs;
+        const matchValue = this.findMatchingPairValue(available, currentValue) || currentValue;
+        selectPairDropdown.value = matchValue;
     },
 
     setupNetworkStatusElements: function() {
@@ -718,12 +1005,7 @@ const pi = {
         const exchangeDropdown = settingsConfig["exchange"]["value"];
         const currentProvider = provider || (exchangeDropdown ? exchangeDropdown.value : "");
         if (!currentProvider) {
-            this.removeAllOptions(selectPairDropdown);
-            selectPairDropdown.disabled = true;
-            const dropdownGroup = document.getElementById("select-pair-dropdown-group");
-            if (dropdownGroup) {
-                dropdownGroup.style.display = "none";
-            }
+            this.resetPairDropdown();
             return [];
         }
 
@@ -736,9 +1018,6 @@ const pi = {
         if (exchangeValue && exchangeValue !== expectedProvider) {
             return pairs;
         }
-
-        const previousValue = selectPairDropdown.value;
-        this.removeAllOptions(selectPairDropdown);
 
         const normalized = Array.isArray(pairs) ? pairs.slice(0) : [];
         normalized.sort(function(a, b) {
@@ -756,50 +1035,29 @@ const pi = {
             return 0;
         });
 
-        const emptyOption = document.createElement("option");
-        emptyOption.text = "";
-        emptyOption.value = "";
-        selectPairDropdown.add(emptyOption);
-
-        normalized.forEach(function(pair) {
-            const option = document.createElement("option");
-            const value = pair["value"];
-            const display = pair["display"] || value;
-            option.text = display;
-            option.value = value;
-            selectPairDropdown.add(option);
-        });
-
         const savedPair = (currentSettings["pair"] || "").toUpperCase();
+        const previousValue = selectPairDropdown ? selectPairDropdown.value : "";
         const preferredPair = (previousValue || savedPair || "").toUpperCase();
 
-        if (preferredPair) {
-            const preferredMatch = normalized.find(function(pair) {
-                return (pair["value"] || "").toUpperCase() === preferredPair || (pair["symbol"] || "").toUpperCase() === preferredPair;
-            });
-            if (preferredMatch) {
-                selectPairDropdown.value = preferredMatch["value"] || preferredMatch["symbol"] || "";
-            }
-        }
-
-        if (!selectPairDropdown.value && savedPair) {
-            const savedMatch = normalized.find(function(pair) {
-                return (pair["value"] || "").toUpperCase() === savedPair || (pair["symbol"] || "").toUpperCase() === savedPair;
-            });
-            if (savedMatch) {
-                selectPairDropdown.value = savedMatch["value"] || savedMatch["symbol"] || "";
-            } else {
-                selectPairDropdown.value = savedPair;
-            }
-        }
+        this.setPairDropdownData(currentProvider, normalized, {
+            previousValue: previousValue,
+            preferredValue: preferredPair,
+            savedValue: savedPair,
+            resetFilter: !opts.preserveFilter
+        });
 
         const hasPairs = normalized.length > 0;
-        const dropdownGroup = document.getElementById("select-pair-dropdown-group");
-        if (dropdownGroup) {
-            dropdownGroup.style.display = hasPairs ? "" : "none";
-        }
+        this.setPairUIVisibility(hasPairs);
 
-        selectPairDropdown.disabled = !hasPairs;
+        if (selectPairDropdown) {
+            selectPairDropdown.disabled = !hasPairs;
+        }
+        if (pairSearchInput) {
+            pairSearchInput.disabled = !hasPairs;
+        }
+        if (!hasPairs) {
+            this.updatePairSearchFeedback(0, pairSearchInput ? pairSearchInput.value : "");
+        }
         return normalized;
     },
 
@@ -850,12 +1108,7 @@ const pi = {
         const exchangeDropdown = settingsConfig["exchange"]["value"];
         const provider = exchangeDropdown ? exchangeDropdown.value : "";
         if (!provider) {
-            this.removeAllOptions(selectPairDropdown);
-            selectPairDropdown.disabled = true;
-            const dropdownGroup = document.getElementById("select-pair-dropdown-group");
-            if (dropdownGroup) {
-                dropdownGroup.style.display = "none";
-            }
+            this.resetPairDropdown();
             lastDisplayedExchange = provider;
             return;
         }
@@ -911,6 +1164,15 @@ const pi = {
                     pairInput.onchange();
                 }
             };
+
+            if (pairSearchInput) {
+                pairSearchInput.addEventListener("input", function(event) {
+                    thisTmp.handlePairSearchInput(event.target.value);
+                });
+                pairSearchInput.addEventListener("keydown", function(event) {
+                    thisTmp.handlePairSearchKeydown(event);
+                });
+            }
 
             this.exchangeDropdownInitialized = true;
         }
@@ -1303,6 +1565,7 @@ const pi = {
             }
         }
 
+        this.syncPairSelectionDisplay();
         this.refreshMenus();
     },
     refreshMenus: function() {
