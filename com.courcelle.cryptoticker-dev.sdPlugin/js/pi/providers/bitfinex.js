@@ -2,15 +2,16 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 (function (root, factory) {
+    const globalRoot = typeof globalThis !== "undefined" ? globalThis : root;
+    const namespace = (globalRoot && globalRoot.CryptoTickerPIProviders)
+        ? globalRoot.CryptoTickerPIProviders
+        : null;
+    const provider = factory();
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
+        module.exports = provider;
     }
-    else {
-        const namespace = root.CryptoTickerPIProviders = root.CryptoTickerPIProviders || {};
-        const provider = factory();
-        if (namespace.registerProvider) {
-            namespace.registerProvider(provider);
-        }
+    if (namespace && typeof namespace.registerProvider === "function") {
+        namespace.registerProvider(provider);
     }
 }(typeof self !== "undefined" ? self : this, function () {
     const API_URL = "https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange";

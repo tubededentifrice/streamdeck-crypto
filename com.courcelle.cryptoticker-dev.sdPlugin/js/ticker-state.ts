@@ -49,12 +49,13 @@ interface TickerStateExports {
   clearLastGoodTicker(context: string): void;
 }
 
-(function loadTickerState(root: Record<string, unknown>, factory: () => TickerStateExports) {
+(function loadTickerState(root: Record<string, unknown> | undefined, factory: () => TickerStateExports) {
   const exports = factory();
   if (typeof module === "object" && module.exports) {
     module.exports = exports;
-  } else {
-    root.CryptoTickerState = exports;
+  }
+  if (root && typeof root === "object") {
+    (root as TickerStateGlobalRoot).CryptoTickerState = exports;
   }
 })(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function buildTickerState(): TickerStateExports {
   const contextDetails: Record<string, ContextDetailsEntry> = {};
@@ -232,3 +233,7 @@ interface TickerStateExports {
     clearLastGoodTicker
   };
 });
+
+interface TickerStateGlobalRoot extends Record<string, unknown> {
+  CryptoTickerState?: TickerStateExports;
+}

@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 "use strict";
 (function (root, factory) {
-    const dependency = typeof module === "object" && module.exports
-        ? factory(require("./expression-evaluator"))
-        : factory(root.CryptoTickerExpressionEvaluator);
+    const expressionEvaluatorModule = typeof module === "object" && module.exports
+        ? require("./expression-evaluator")
+        : root === null || root === void 0 ? void 0 : root.CryptoTickerExpressionEvaluator;
+    const dependency = factory(expressionEvaluatorModule);
     if (typeof module === "object" && module.exports) {
         module.exports = dependency;
     }
-    else {
+    if (root && typeof root === "object") {
         root.CryptoTickerAlertManager = dependency;
     }
 }(typeof self !== "undefined" ? self : this, function (expressionEvaluator) {

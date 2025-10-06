@@ -8,11 +8,13 @@ const ConnectionStates = {
 };
 // UMD module pattern for browser/CommonJS compatibility
 (function (root, factory) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const exportsValue = factory();
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
+        module.exports = exportsValue;
     }
-    else {
-        root.CryptoTickerConnectionStates = factory();
+    if (globalRoot) {
+        globalRoot.CryptoTickerConnectionStates = exportsValue;
     }
 }(typeof self !== "undefined" ? self : this, function buildConnectionStates() {
     return ConnectionStates;

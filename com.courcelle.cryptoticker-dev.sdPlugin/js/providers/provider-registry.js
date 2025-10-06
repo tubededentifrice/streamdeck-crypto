@@ -2,13 +2,27 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const args = typeof module === "object" && module.exports
+        ? [
+            require("./generic-provider"),
+            require("./binance-provider"),
+            require("./bitfinex-provider"),
+            require("./yfinance-provider")
+        ]
+        : [
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders
+        ];
+    const exportsValue = factory(args[0], args[1], args[2], args[3]);
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./generic-provider"), require("./binance-provider"), require("./bitfinex-provider"), require("./yfinance-provider"));
+        module.exports = exportsValue;
     }
-    else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(root.CryptoTickerProviders, root.CryptoTickerProviders, root.CryptoTickerProviders, root.CryptoTickerProviders);
-        root.CryptoTickerProviders.ProviderRegistry = exports.ProviderRegistry;
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.ProviderRegistry = exportsValue.ProviderRegistry;
     }
 }(typeof self !== "undefined" ? self : this, function (genericModule, binanceModule, bitfinexModule, yfinanceModule) {
     const GenericProvider = genericModule.GenericProvider || genericModule;

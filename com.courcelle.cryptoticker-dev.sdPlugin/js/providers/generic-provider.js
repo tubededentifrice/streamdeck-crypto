@@ -3,13 +3,27 @@
 // @ts-nocheck
 /* global signalR */
 (function (root, factory) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const args = typeof module === "object" && module.exports
+        ? [
+            require("./provider-interface"),
+            require("./subscription-key"),
+            require("./ticker-subscription-manager"),
+            require("./connection-states")
+        ]
+        : [
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerConnectionStates
+        ];
+    const exportsValue = factory(args[0], args[1], args[2], args[3]);
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./provider-interface"), require("./subscription-key"), require("./ticker-subscription-manager"), require("./connection-states"));
+        module.exports = exportsValue;
     }
-    else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(root.CryptoTickerProviders, root.CryptoTickerProviders, root.CryptoTickerProviders, root.CryptoTickerConnectionStates);
-        root.CryptoTickerProviders.GenericProvider = exports.GenericProvider;
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.GenericProvider = exportsValue.GenericProvider;
     }
 }(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, subscriptionKeyModule, managerModule, connectionStatesModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;

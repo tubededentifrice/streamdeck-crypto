@@ -1,20 +1,31 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) {
-        module.exports = factory(
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as TickerSubscriptionManagerGlobalRoot | undefined;
+    const args = typeof module === "object" && module.exports
+        ? [
             require("./subscription-key"),
             require("./connection-states")
-        );
-    } else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(
-            root.CryptoTickerProviders,
-            root.CryptoTickerConnectionStates
-        );
-        root.CryptoTickerProviders.TickerSubscriptionManager = exports.TickerSubscriptionManager;
+        ]
+        : [
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerConnectionStates
+        ];
+
+    const exportsValue = factory(
+        args[0],
+        args[1]
+    );
+
+    if (typeof module === "object" && module.exports) {
+        module.exports = exportsValue;
     }
-}(typeof self !== "undefined" ? self : this, function (subscriptionKeyModule, connectionStatesModule) {
+
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.TickerSubscriptionManager = exportsValue.TickerSubscriptionManager;
+    }
+}(typeof self !== "undefined" ? (self as unknown as TickerSubscriptionManagerGlobalRoot) : (this as unknown as TickerSubscriptionManagerGlobalRoot), function (subscriptionKeyModule, connectionStatesModule) {
     const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
     const ConnectionStates = connectionStatesModule || {
         LIVE: "live",
@@ -375,3 +386,10 @@
         TickerSubscriptionManager: TickerSubscriptionManager
     };
 }));
+
+interface TickerSubscriptionManagerGlobalRoot extends Record<string, unknown> {
+    CryptoTickerProviders?: Record<string, unknown> & {
+        TickerSubscriptionManager?: unknown;
+    };
+    CryptoTickerConnectionStates?: Record<string, unknown>;
+}

@@ -46,12 +46,17 @@ type SettingsSchema = Record<keyof CryptoTickerSettings, SettingsSchemaEntry<Cry
 
 type NormalizedSettings = CryptoTickerSettings & Record<string, unknown>;
 
-(function loadDefaults(root: Record<string, unknown>, factory: () => CryptoTickerDefaultsExports) {
+interface GlobalDefaultsRoot extends Record<string, unknown> {
+  CryptoTickerDefaults?: CryptoTickerDefaultsExports;
+}
+
+(function loadDefaults(root: Record<string, unknown> | undefined, factory: () => CryptoTickerDefaultsExports) {
   const exports = factory();
   if (typeof module === 'object' && module.exports) {
     module.exports = exports;
-  } else {
-    root.CryptoTickerDefaults = exports;
+  }
+  if (root && typeof root === 'object') {
+    (root as GlobalDefaultsRoot).CryptoTickerDefaults = exports;
   }
 })(typeof self !== 'undefined' ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function buildDefaults(): CryptoTickerDefaultsExports {
   function clone<T>(obj: T): T {

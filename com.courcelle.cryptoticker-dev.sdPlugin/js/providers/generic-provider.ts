@@ -3,24 +3,37 @@
 /* global signalR */
 
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) {
-        module.exports = factory(
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as GenericProviderGlobalRoot | undefined;
+    const args = typeof module === "object" && module.exports
+        ? [
             require("./provider-interface"),
             require("./subscription-key"),
             require("./ticker-subscription-manager"),
             require("./connection-states")
-        );
-    } else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerConnectionStates
-        );
-        root.CryptoTickerProviders.GenericProvider = exports.GenericProvider;
+        ]
+        : [
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerConnectionStates
+        ];
+
+    const exportsValue = factory(
+        args[0],
+        args[1],
+        args[2],
+        args[3]
+    );
+
+    if (typeof module === "object" && module.exports) {
+        module.exports = exportsValue;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, subscriptionKeyModule, managerModule, connectionStatesModule) {
+
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.GenericProvider = exportsValue.GenericProvider;
+    }
+}(typeof self !== "undefined" ? (self as unknown as GenericProviderGlobalRoot) : (this as unknown as GenericProviderGlobalRoot), function (providerInterfaceModule, subscriptionKeyModule, managerModule, connectionStatesModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
     const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
@@ -354,3 +367,10 @@
         GenericProvider: GenericProvider
     };
 }));
+
+interface GenericProviderGlobalRoot extends Record<string, unknown> {
+    CryptoTickerProviders?: Record<string, unknown> & {
+        GenericProvider?: unknown;
+    };
+    CryptoTickerConnectionStates?: Record<string, unknown>;
+}

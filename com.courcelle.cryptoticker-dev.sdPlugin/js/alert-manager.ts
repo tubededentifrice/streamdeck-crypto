@@ -1,15 +1,19 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 "use strict";
 
-(function (root: Record<string, unknown>, factory: (expressionEvaluator: ExpressionEvaluatorModule | undefined) => CryptoTickerAlertManager) {
-    const dependency = typeof module === "object" && module.exports
-        ? factory(require("./expression-evaluator"))
-        : factory(root.CryptoTickerExpressionEvaluator as ExpressionEvaluatorModule | undefined);
+(function (root: Record<string, unknown> | undefined, factory: (expressionEvaluator: ExpressionEvaluatorModule | undefined) => CryptoTickerAlertManager) {
+    const expressionEvaluatorModule = typeof module === "object" && module.exports
+        ? require("./expression-evaluator")
+        : root?.CryptoTickerExpressionEvaluator;
+
+    const dependency = factory(expressionEvaluatorModule as ExpressionEvaluatorModule | undefined);
 
     if (typeof module === "object" && module.exports) {
         module.exports = dependency;
-    } else {
-        root.CryptoTickerAlertManager = dependency;
+    }
+
+    if (root && typeof root === "object") {
+        (root as AlertManagerGlobalRoot).CryptoTickerAlertManager = dependency;
     }
 }(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function (expressionEvaluator: ExpressionEvaluatorModule | undefined): CryptoTickerAlertManager {
     if (!expressionEvaluator) {
@@ -107,6 +111,11 @@
         isAlertArmed
     };
 }));
+
+interface AlertManagerGlobalRoot extends Record<string, unknown> {
+    CryptoTickerAlertManager?: CryptoTickerAlertManager;
+    CryptoTickerExpressionEvaluator?: ExpressionEvaluatorModule;
+}
 
 interface EvaluateAlertParams {
     context: string;

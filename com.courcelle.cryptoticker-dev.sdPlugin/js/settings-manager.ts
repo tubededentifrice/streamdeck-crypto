@@ -1,11 +1,20 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 "use strict";
 
-(function (root: Record<string, unknown>, factory: (tickerState: TickerStateModule, globalRoot: GlobalRootScope) => CryptoTickerSettingsManager) {
+(function (root: Record<string, unknown> | undefined, factory: (tickerState: TickerStateModule, globalRoot: GlobalRootScope) => CryptoTickerSettingsManager) {
+    const globalScope = typeof globalThis !== "undefined" ? globalThis : root;
+    const tickerStateModule = (typeof module === "object" && module.exports
+        ? require("./ticker-state")
+        : root?.CryptoTickerState) as TickerStateModule;
+
+    const exportsValue = factory(tickerStateModule, globalScope as GlobalRootScope);
+
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./ticker-state"), typeof globalThis !== "undefined" ? globalThis : (root as GlobalRootScope));
-    } else {
-        root.CryptoTickerSettingsManager = factory(root.CryptoTickerState as TickerStateModule, root as GlobalRootScope);
+        module.exports = exportsValue;
+    }
+
+    if (root && typeof root === "object") {
+        (root as GlobalRootScope).CryptoTickerSettingsManager = exportsValue;
     }
 }(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function buildSettingsManager(tickerState: TickerStateModule, globalRoot: GlobalRootScope): CryptoTickerSettingsManager {
     function requireOrNull(modulePath: string): DefaultSettingsModule | null {
@@ -116,4 +125,5 @@ interface DefaultSettingsModule {
 interface GlobalRootScope extends Record<string, unknown> {
     CryptoTickerDefaults?: DefaultSettingsModule;
     CryptoTickerState?: TickerStateModule;
+    CryptoTickerSettingsManager?: CryptoTickerSettingsManager;
 }

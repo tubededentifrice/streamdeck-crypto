@@ -1,26 +1,40 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) {
-        module.exports = factory(
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as BinanceProviderGlobalRoot | undefined;
+    const args = typeof module === "object" && module.exports
+        ? [
             require("./provider-interface"),
             require("./generic-provider"),
             require("./ticker-subscription-manager"),
             require("./connection-states"),
             require("./websocket-connection-pool")
-        );
-    } else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerConnectionStates,
-            root.CryptoTickerProviders
-        );
-        root.CryptoTickerProviders.BinanceProvider = exports.BinanceProvider;
+        ]
+        : [
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerConnectionStates,
+            root?.CryptoTickerProviders
+        ];
+
+    const exportsValue = factory(
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4]
+    );
+
+    if (typeof module === "object" && module.exports) {
+        module.exports = exportsValue;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule, poolModule) {
+
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.BinanceProvider = exportsValue.BinanceProvider;
+    }
+}(typeof self !== "undefined" ? (self as unknown as BinanceProviderGlobalRoot) : (this as unknown as BinanceProviderGlobalRoot), function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule, poolModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
     const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
@@ -471,3 +485,10 @@
         BinanceProvider: BinanceProvider
     };
 }));
+
+interface BinanceProviderGlobalRoot extends Record<string, unknown> {
+    CryptoTickerProviders?: Record<string, unknown> & {
+        BinanceProvider?: unknown;
+    };
+    CryptoTickerConnectionStates?: Record<string, unknown>;
+}

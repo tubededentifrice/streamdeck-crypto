@@ -4,7 +4,7 @@
     if (typeof module === "object" && module.exports) {
         module.exports = exports;
     }
-    else {
+    if (root && typeof root === "object") {
         root.CryptoTickerFormatters = exports;
     }
 }(typeof self !== "undefined" ? self : this, function () {

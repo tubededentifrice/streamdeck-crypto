@@ -26,7 +26,7 @@ The plugin consists of three main parts:
 
 Communication between the plugin and Stream Deck software happens via WebSocket established by the Stream Deck application.
 
-The runtime logic is now modular: `ticker.ts` orchestrates lifecycle events while specialized helpers (`canvas-renderer.ts`, `settings-manager.ts`, `alert-manager.ts`, `formatters.ts`, `ticker-state.ts`) encapsulate rendering, configuration, alerts, and shared caches to keep responsibilities focused and testable. Compiled JavaScript artifacts live alongside the TypeScript sources for Stream Deck consumption.
+The runtime logic is now modular: `ticker.ts` orchestrates lifecycle events while specialized helpers (`canvas-renderer.ts`, `settings-manager.ts`, `alert-manager.ts`, `formatters.ts`, `ticker-state.ts`) encapsulate rendering, configuration, alerts, and shared caches to keep responsibilities focused and testable. TypeScript modules compile to CommonJS for tests and are further bundled into `plugin.bundle.js`, `pi.bundle.js`, and `preview.bundle.js` for Stream Deck consumption.
 
 ### Provider Architecture (NEW in direct_provider branch)
 
@@ -533,6 +533,7 @@ If not → fetchTicker() via REST API
 ### Building
 ```bash
 npm install                    # Install dependencies
+npm run build                  # Compile TypeScript and generate bundles
 npm test                       # Run tests
 npm run preview               # Start preview server (port 3000)
 ```
@@ -560,6 +561,7 @@ Plugin is packaged as `.streamDeckPlugin` file containing:
 ### Development Dependencies
 - **jest** (^29.7.0): Testing framework
 - **jest-environment-jsdom** (^29.7.0): DOM environment for tests
+- **esbuild** (^0.21.5): Bundles runtime assets for plugin, PI, and preview
 
 ---
 

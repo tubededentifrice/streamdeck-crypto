@@ -1,14 +1,19 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 (function (root, factory) {
+    const globalRoot = typeof globalThis !== "undefined" ? globalThis : root;
+    const namespace = (globalRoot && (globalRoot as Record<string, unknown>).CryptoTickerPIProviders)
+        ? (globalRoot as Record<string, unknown>).CryptoTickerPIProviders as CryptoTickerPIProvidersNamespace
+        : null;
+
+    const provider = factory();
+
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
-    } else {
-        const namespace = root.CryptoTickerPIProviders = root.CryptoTickerPIProviders || {};
-        const provider = factory();
-        if (namespace.registerProvider) {
-            namespace.registerProvider(provider);
-        }
+        module.exports = provider;
+    }
+
+    if (namespace && typeof namespace.registerProvider === "function") {
+        namespace.registerProvider(provider);
     }
 }(typeof self !== "undefined" ? self : this, function () {
     const API_URL = "https://api.binance.com/api/v3/exchangeInfo";
@@ -47,3 +52,7 @@
         getPairs: getPairs
     };
 }));
+
+interface CryptoTickerPIProvidersNamespace {
+    registerProvider?: (provider: { id: string }) => void;
+}

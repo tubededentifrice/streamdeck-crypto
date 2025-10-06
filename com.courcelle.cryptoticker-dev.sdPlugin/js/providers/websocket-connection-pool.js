@@ -2,13 +2,14 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const exportsValue = factory();
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
+        module.exports = exportsValue;
     }
-    else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory();
-        root.CryptoTickerProviders.WebSocketConnectionPool = exports.WebSocketConnectionPool;
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.WebSocketConnectionPool = exportsValue.WebSocketConnectionPool;
     }
 }(typeof self !== "undefined" ? self : this, function () {
     function noop() { }

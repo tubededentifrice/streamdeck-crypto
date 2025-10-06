@@ -1,20 +1,31 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) {
-        module.exports = factory(
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as YFinanceProviderGlobalRoot | undefined;
+    const args = typeof module === "object" && module.exports
+        ? [
             require("./provider-interface"),
             require("./generic-provider")
-        );
-    } else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders
-        );
-        root.CryptoTickerProviders.YFinanceProvider = exports.YFinanceProvider;
+        ]
+        : [
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders
+        ];
+
+    const exportsValue = factory(
+        args[0],
+        args[1]
+    );
+
+    if (typeof module === "object" && module.exports) {
+        module.exports = exportsValue;
     }
-}(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule) {
+
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.YFinanceProvider = exportsValue.YFinanceProvider;
+    }
+}(typeof self !== "undefined" ? (self as unknown as YFinanceProviderGlobalRoot) : (this as unknown as YFinanceProviderGlobalRoot), function (providerInterfaceModule, genericModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
 
@@ -55,3 +66,9 @@
         YFinanceProvider: YFinanceProvider
     };
 }));
+
+interface YFinanceProviderGlobalRoot extends Record<string, unknown> {
+    CryptoTickerProviders?: Record<string, unknown> & {
+        YFinanceProvider?: unknown;
+    };
+}

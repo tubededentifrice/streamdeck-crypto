@@ -2,18 +2,46 @@
 // @ts-nocheck
 "use strict";
 
-(function (root, factory) {
+(function (root: Record<string, unknown> | undefined, factory: (
+    alertManager: unknown,
+    formatters: unknown,
+    expressionEvaluator: unknown,
+    constants: Record<string, unknown> | undefined
+) => unknown) {
+    const dependencyArgs = typeof module === "object" && module.exports
+        ? [
+            require("./alert-manager") as unknown,
+            require("./formatters") as unknown,
+            require("./expression-evaluator") as unknown,
+            require("./constants") as Record<string, unknown>
+        ]
+        : [
+            root?.CryptoTickerAlertManager,
+            root?.CryptoTickerFormatters,
+            root?.CryptoTickerExpressionEvaluator,
+            root?.CryptoTickerConstants as Record<string, unknown> | undefined
+        ];
+
+    const exportsValue = factory(
+        dependencyArgs[0],
+        dependencyArgs[1],
+        dependencyArgs[2],
+        dependencyArgs[3]
+    );
+
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./alert-manager"), require("./formatters"), require("./expression-evaluator"), require("./constants"));
-    } else {
-        root.CryptoTickerCanvasRenderer = factory(
-            root.CryptoTickerAlertManager,
-            root.CryptoTickerFormatters,
-            root.CryptoTickerExpressionEvaluator,
-            root.CryptoTickerConstants
-        );
+        module.exports = exportsValue;
     }
-}(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator, constants) {
+
+    if (root && typeof root === "object") {
+        (root as CanvasRendererGlobalRoot).CryptoTickerCanvasRenderer = exportsValue;
+    }
+}(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function (
+    alertManager,
+    formatters,
+    expressionEvaluator,
+    constants
+) {
     if (!alertManager) {
         throw new Error("Alert manager dependency is missing");
     }
@@ -767,3 +795,11 @@
         renderMessageCanvas
     };
 }));
+
+interface CanvasRendererGlobalRoot extends Record<string, unknown> {
+    CryptoTickerCanvasRenderer?: unknown;
+    CryptoTickerAlertManager?: unknown;
+    CryptoTickerFormatters?: unknown;
+    CryptoTickerExpressionEvaluator?: unknown;
+    CryptoTickerConstants?: Record<string, unknown>;
+}

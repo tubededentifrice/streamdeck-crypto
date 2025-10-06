@@ -308,13 +308,14 @@ function getDefaultParser(): ParserConstructor {
   throw new Error('expr-eval dependency is missing');
 }
 
-(function loadExpressionEvaluator(root: Record<string, unknown>, factory: (Parser: ParserConstructor) => ExpressionEvaluatorExports) {
+(function loadExpressionEvaluator(root: Record<string, unknown> | undefined, factory: (Parser: ParserConstructor) => ExpressionEvaluatorExports) {
   const parserCtor = getDefaultParser();
   const exports = factory(parserCtor);
   if (typeof module === 'object' && module.exports) {
     module.exports = exports;
-  } else {
-    root.CryptoTickerExpressionEvaluator = exports;
+  }
+  if (root && typeof root === 'object') {
+    (root as ExpressionEvaluatorGlobalRoot).CryptoTickerExpressionEvaluator = exports;
   }
 })(typeof self !== 'undefined' ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function buildExports(
   Parser
@@ -328,3 +329,7 @@ function getDefaultParser(): ParserConstructor {
     allowedVariables: cloneArray(DEFAULT_ALLOWED_VARIABLES)
   };
 });
+
+interface ExpressionEvaluatorGlobalRoot extends Record<string, unknown> {
+  CryptoTickerExpressionEvaluator?: ExpressionEvaluatorExports;
+}

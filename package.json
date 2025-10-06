@@ -8,6 +8,7 @@
     "@typescript-eslint/eslint-plugin": "^7.8.0",
     "@typescript-eslint/parser": "^7.8.0",
     "concurrently": "^8.2.2",
+    "esbuild": "^0.21.5",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "husky": "^8.0.3",
@@ -19,8 +20,10 @@
     "typescript": "^5.4.5"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "build:watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "build": "tsc -p tsconfig.json && node esbuild.config.mjs --mode=production",
+    "build:watch": "concurrently -k --names \"tsc,bundle\" \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node esbuild.config.mjs --watch\"",
+    "bundle": "node esbuild.config.mjs --mode=production",
+    "bundle:watch": "node esbuild.config.mjs --watch",
     "test": "jest",
     "preview": "concurrently -k --names \"tsc,preview\" \"npm:build:watch\" \"npm:preview:serve\"",
     "preview:serve": "node preview-server.js",

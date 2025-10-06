@@ -1,6 +1,6 @@
 # Crypto Ticker PRO - Improvement Plan
 
-This document consolidates proposed improvements from code reviews and analysis. Each improvement includes rationale, specific implementation details, and risk considerations. Core runtime modules are now maintained in TypeScript (`.ts`) and compiled to JavaScript for the Stream Deck runtime, so the paths below reference the TypeScript sources.
+This document consolidates proposed improvements from code reviews and analysis. Each improvement includes rationale, specific implementation details, and risk considerations. Core runtime modules are now maintained in TypeScript (`.ts`), compiled to CommonJS for tests, and bundled into runtime assets (`plugin.bundle.js`, `pi.bundle.js`, `preview.bundle.js`) for the Stream Deck runtime, so the paths below reference the TypeScript sources.
 
 ---
 
@@ -168,47 +168,6 @@ const attemptDelay = Math.min(
 
 ---
 
-    ## 7. FEATURE ENHANCEMENTS
-
-    ### 7.2 Add Module Bundler
-
-    **Why?**
-    - **Plugin size**: Files loaded individually increase plugin size
-    - **Load performance**: Many small files slower than one bundle
-    - **Tree shaking**: Remove unused code to reduce size
-    - **Optimization**: Minification and compression
-    - **Development**: Enable modern JavaScript features and imports
-
-    **What needs to be changed?**
-    - **New files to create**:
-      - `webpack.config.js` or `rollup.config.js` or `esbuild.config.js`
-      - Update `package.json` with build scripts
-    - **Build outputs**:
-      - `plugin.bundle.js`: Main plugin code
-      - `pi.bundle.js`: Property inspector code
-      - `preview.bundle.js`: Preview server code
-    - **HTML files to update**:
-      - `index.html`: Load plugin bundle
-      - `index_pi.html`: Load PI bundle
-      - `dev/preview.html`: Load preview bundle
-    - **Implementation**:
-      1. Choose bundler (webpack = most features, rollup = smaller bundles, esbuild = fastest)
-      2. Configure entry points for each bundle
-      3. Set up development mode (source maps, watch mode)
-      4. Set up production mode (minification, tree shaking)
-      5. Update deployment process to use bundled files
-      6. Review and update documentation and instructions (.md files, eg. README.md, AGENTS.md, CODEBASE_ANALYSIS.md, IMPROVEMENTS.md)
-
-    **Risks & Considerations**:
-    - **Build complexity**: Adds significant complexity to build process
-    - **Debugging**: Source maps needed to debug bundled code
-    - **Development workflow**: Hot reload or watch mode needed for good DX
-    - **Compatibility**: Ensure bundled code works in StreamDeck environment
-    - **Dependencies**: Bundle size can grow with dependencies
-    - **Testing**: Tests may need to run on source files, not bundles
-
-    ---
-
     ## 8. DOCUMENTATION & DEVELOPER EXPERIENCE
 
     ### 8.1 Document Connection States and Troubleshooting
@@ -220,7 +179,7 @@ const attemptDelay = Math.min(
 
     **What needs to be changed?**
     - **File**: `com.courcelle.cryptoticker-dev.sdPlugin/index_pi.html`
-      - Add help section or tooltips explaining states
+      - Add a collapsible panel below the dropdown allowing to select the state icon explaining the different states (same type of help as for the alerts, for example)
     - **File**: `README.md`
       - Document connection state meanings
       - Common issues and solutions
@@ -230,6 +189,7 @@ const attemptDelay = Math.min(
       - **BACKUP**: Primary provider failed, using backup/fallback provider
       - **DETACHED**: The provider requests failed, using the legacy ticker proxy instead
       - **BROKEN**: Connection failed and retries exhausted
+      - On the PI, show the corresponding icons: the corresponding logic to draw them will need to be moved to a place that is accessible by both the PI and the plugin, so we only define those icons in a single place
       - Add troubleshooting steps:
         - Check internet connection
         - Verify exchange is accessible (not blocked by firewall/VPN)
@@ -238,7 +198,6 @@ const attemptDelay = Math.min(
         - Check plugin logs for detailed errors
 
     **Risks & Considerations**:
-    - **Low risk**: Documentation-only change
     - **Maintenance**: Keep docs updated as states/behavior changes
 
     ---
@@ -261,7 +220,7 @@ const attemptDelay = Math.min(
       - `npm run release:patch`: Bump patch version and release
       - `npm run release:minor`: Bump minor version and release
       - `npm run release:major`: Bump major version and release
-    - **Automation** (refer to README.md for the current build commands, as it needs to be done on a different plugin ID as the dev one -- make sure to update that file with the new commands once done):
+    - **Automation** (refer to README.md for the current commands used to build the plugin, as it needs to be done on a different plugin ID as the dev one -- make sure to update that file with the new commands once done):
       1. Version bumping in `manifest.json` and `package.json`
       2. Changelog generation from git commits (conventional commits)
       3. Build and bundle for distribution

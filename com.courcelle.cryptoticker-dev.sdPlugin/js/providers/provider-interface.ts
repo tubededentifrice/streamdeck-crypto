@@ -1,11 +1,14 @@
-(function (root: Record<string, unknown>, factory: () => ProviderInterfaceExports) {
+(function (root: Record<string, unknown> | undefined, factory: () => ProviderInterfaceExports) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as ProviderInterfaceGlobalRoot | undefined;
+    const exportsValue = factory();
+
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
-    } else {
-        const namespace = (root.CryptoTickerProviders as Record<string, unknown> | undefined) || {};
-        root.CryptoTickerProviders = namespace;
-        const exports = factory();
-        (namespace as Record<string, unknown>).ProviderInterface = exports.ProviderInterface;
+        module.exports = exportsValue;
+    }
+
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.ProviderInterface = exportsValue.ProviderInterface;
     }
 }(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function buildProviderInterface(): ProviderInterfaceExports {
     function noop(): void {
@@ -62,6 +65,12 @@
         ProviderInterface
     };
 }));
+
+interface ProviderInterfaceGlobalRoot extends Record<string, unknown> {
+    CryptoTickerProviders?: Record<string, unknown> & {
+        ProviderInterface?: unknown;
+    };
+}
 
 interface ProviderInterfaceExports {
     ProviderInterface: new (options?: CryptoTickerProviderOptions) => CryptoTickerProviderInterface;

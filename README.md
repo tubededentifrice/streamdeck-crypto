@@ -15,13 +15,16 @@
 - Fully open source!
 
 ## Code Structure
-- `js/ticker.js` orchestrates Stream Deck lifecycle events and delegates to helper modules
-- `js/canvas-renderer.js` encapsulates ticker and candle canvas drawing logic
-- `js/settings-manager.js` normalizes defaults and drives subscription refresh
-- `js/alert-manager.js` evaluates alert rules and tracks arm/disarm state
-- `js/formatters.js` provides shared number/price formatting helpers
-- `js/ticker-state.js` owns context metadata, subscriptions, and cache storage
+- `js/ticker.ts` orchestrates Stream Deck lifecycle events and delegates to helper modules
+- `js/canvas-renderer.ts` encapsulates ticker and candle canvas drawing logic
+- `js/settings-manager.ts` normalizes defaults and drives subscription refresh
+- `js/alert-manager.ts` evaluates alert rules and tracks arm/disarm state
+- `js/formatters.ts` provides shared number/price formatting helpers
+- `js/ticker-state.ts` owns context metadata, subscriptions, and cache storage
 - Jest specs cover each helper module alongside the existing ticker/provider tests
+
+The TypeScript sources compile to CommonJS modules for tests and are bundled into
+`js/plugin.bundle.js`, `js/pi.bundle.js`, and `js/preview.bundle.js` for runtime use.
 
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot1.png" width="277" />
 <img src="https://github.com/tubededentifrice/streamdeck-crypto/raw/master/screenshot2.png" width="354" />
@@ -59,8 +62,9 @@ rm -rf com.courcelle.cryptoticker.sdPlugin
 
 Use the following npm scripts during development:
 
-- `npm run build` – transpile the TypeScript sources in `com.courcelle.cryptoticker-dev.sdPlugin/js/` to runtime JavaScript
-- `npm run build:watch` – keep the TypeScript compiler running in watch mode (used by other scripts)
+- `npm run build` – transpile TypeScript and emit the runtime bundles (`plugin.bundle.js`, `pi.bundle.js`, `preview.bundle.js`)
+- `npm run build:watch` – run the TypeScript compiler and esbuild bundler in watch mode (used by other scripts)
+- `npm run bundle` – rebuild only the bundled assets (skips TypeScript recompile)
 - `npm test` – run the Jest unit tests (automatically runs `npm run build` first)
 - `npm run watch` – concurrently run the TypeScript compiler in watch mode and restart the dev plugin via `streamdeck restart`
 - `npm run preview` – run the TypeScript compiler in watch mode alongside the preview server (`npm run preview:serve` if you only need the server)

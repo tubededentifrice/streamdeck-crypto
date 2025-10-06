@@ -1,13 +1,13 @@
 "use strict";
 (function (root, factory) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const exportsValue = factory();
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
+        module.exports = exportsValue;
     }
-    else {
-        const namespace = root.CryptoTickerProviders || {};
-        root.CryptoTickerProviders = namespace;
-        const exports = factory();
-        namespace.buildSubscriptionKey = exports.buildSubscriptionKey;
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.buildSubscriptionKey = exportsValue.buildSubscriptionKey;
     }
 }(typeof self !== "undefined" ? self : this, function buildSubscriptionKeyModule() {
     function buildSubscriptionKey(exchange, symbol, fromCurrency, toCurrency) {

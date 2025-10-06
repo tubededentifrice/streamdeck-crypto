@@ -2,11 +2,25 @@
 // @ts-nocheck
 "use strict";
 (function (root, factory) {
+    const dependencyArgs = typeof module === "object" && module.exports
+        ? [
+            require("./alert-manager"),
+            require("./formatters"),
+            require("./expression-evaluator"),
+            require("./constants")
+        ]
+        : [
+            root === null || root === void 0 ? void 0 : root.CryptoTickerAlertManager,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerFormatters,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerExpressionEvaluator,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerConstants
+        ];
+    const exportsValue = factory(dependencyArgs[0], dependencyArgs[1], dependencyArgs[2], dependencyArgs[3]);
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./alert-manager"), require("./formatters"), require("./expression-evaluator"), require("./constants"));
+        module.exports = exportsValue;
     }
-    else {
-        root.CryptoTickerCanvasRenderer = factory(root.CryptoTickerAlertManager, root.CryptoTickerFormatters, root.CryptoTickerExpressionEvaluator, root.CryptoTickerConstants);
+    if (root && typeof root === "object") {
+        root.CryptoTickerCanvasRenderer = exportsValue;
     }
 }(typeof self !== "undefined" ? self : this, function (alertManager, formatters, expressionEvaluator, constants) {
     if (!alertManager) {

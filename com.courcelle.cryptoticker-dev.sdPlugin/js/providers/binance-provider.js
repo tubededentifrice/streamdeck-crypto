@@ -2,13 +2,29 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const args = typeof module === "object" && module.exports
+        ? [
+            require("./provider-interface"),
+            require("./generic-provider"),
+            require("./ticker-subscription-manager"),
+            require("./connection-states"),
+            require("./websocket-connection-pool")
+        ]
+        : [
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerConnectionStates,
+            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders
+        ];
+    const exportsValue = factory(args[0], args[1], args[2], args[3], args[4]);
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./provider-interface"), require("./generic-provider"), require("./ticker-subscription-manager"), require("./connection-states"), require("./websocket-connection-pool"));
+        module.exports = exportsValue;
     }
-    else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(root.CryptoTickerProviders, root.CryptoTickerProviders, root.CryptoTickerProviders, root.CryptoTickerConnectionStates, root.CryptoTickerProviders);
-        root.CryptoTickerProviders.BinanceProvider = exports.BinanceProvider;
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.BinanceProvider = exportsValue.BinanceProvider;
     }
 }(typeof self !== "undefined" ? self : this, function (providerInterfaceModule, genericModule, managerModule, connectionStatesModule, poolModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;

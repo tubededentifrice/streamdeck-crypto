@@ -169,7 +169,19 @@ async function performJsonFetch(url, controller, baseFetchOptions) {
     if (!response.ok) {
         throw new Error("Request failed with status " + response.status);
     }
-    return response.json();
+
+    const raw = await response.text();
+    if (!raw || raw.trim().length === 0) {
+        return [];
+    }
+
+    try {
+        return JSON.parse(raw);
+    } catch (err) {
+        const parseError = err instanceof Error ? err : new Error(String(err));
+        parseError.message = "Failed to parse JSON response from " + url + ": " + parseError.message;
+        throw parseError;
+    }
 }
 
 function formatCacheTimestamp(timestamp) {

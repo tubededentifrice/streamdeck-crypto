@@ -1,11 +1,16 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 "use strict";
 (function (root, factory) {
+    const globalScope = typeof globalThis !== "undefined" ? globalThis : root;
+    const tickerStateModule = (typeof module === "object" && module.exports
+        ? require("./ticker-state")
+        : root === null || root === void 0 ? void 0 : root.CryptoTickerState);
+    const exportsValue = factory(tickerStateModule, globalScope);
     if (typeof module === "object" && module.exports) {
-        module.exports = factory(require("./ticker-state"), typeof globalThis !== "undefined" ? globalThis : root);
+        module.exports = exportsValue;
     }
-    else {
-        root.CryptoTickerSettingsManager = factory(root.CryptoTickerState, root);
+    if (root && typeof root === "object") {
+        root.CryptoTickerSettingsManager = exportsValue;
     }
 }(typeof self !== "undefined" ? self : this, function buildSettingsManager(tickerState, globalRoot) {
     function requireOrNull(modulePath) {

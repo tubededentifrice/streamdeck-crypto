@@ -1,24 +1,37 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
-    if (typeof module === "object" && module.exports) {
-        module.exports = factory(
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as CryptoTickerProvidersGlobal | undefined;
+    const args = typeof module === "object" && module.exports
+        ? [
             require("./generic-provider"),
             require("./binance-provider"),
             require("./bitfinex-provider"),
             require("./yfinance-provider")
-        );
-    } else {
-        root.CryptoTickerProviders = root.CryptoTickerProviders || {};
-        const exports = factory(
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders,
-            root.CryptoTickerProviders
-        );
-        root.CryptoTickerProviders.ProviderRegistry = exports.ProviderRegistry;
+        ]
+        : [
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders,
+            root?.CryptoTickerProviders
+        ];
+
+    const exportsValue = factory(
+        args[0],
+        args[1],
+        args[2],
+        args[3]
+    );
+
+    if (typeof module === "object" && module.exports) {
+        module.exports = exportsValue;
     }
-}(typeof self !== "undefined" ? self : this, function (genericModule, binanceModule, bitfinexModule, yfinanceModule) {
+
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.ProviderRegistry = exportsValue.ProviderRegistry;
+    }
+}(typeof self !== "undefined" ? (self as unknown as CryptoTickerProvidersGlobal) : (this as unknown as CryptoTickerProvidersGlobal), function (genericModule, binanceModule, bitfinexModule, yfinanceModule) {
     const GenericProvider = genericModule.GenericProvider || genericModule;
     const BinanceProvider = binanceModule.BinanceProvider || binanceModule;
     const BitfinexProvider = bitfinexModule.BitfinexProvider || bitfinexModule;
@@ -124,3 +137,12 @@
         ProviderRegistry: ProviderRegistry
     };
 }));
+
+interface CryptoTickerProvidersNamespace {
+    ProviderRegistry?: unknown;
+    [key: string]: unknown;
+}
+
+interface CryptoTickerProvidersGlobal extends Record<string, unknown> {
+    CryptoTickerProviders?: CryptoTickerProvidersNamespace;
+}

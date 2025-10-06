@@ -1,11 +1,14 @@
-(function (root: Record<string, unknown>, factory: () => SubscriptionKeyExports) {
+(function (root: Record<string, unknown> | undefined, factory: () => SubscriptionKeyExports) {
+    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as SubscriptionKeyGlobalRoot | undefined;
+    const exportsValue = factory();
+
     if (typeof module === "object" && module.exports) {
-        module.exports = factory();
-    } else {
-        const namespace = (root.CryptoTickerProviders as Record<string, unknown> | undefined) || {};
-        root.CryptoTickerProviders = namespace;
-        const exports = factory();
-        (namespace as Record<string, unknown>).buildSubscriptionKey = exports.buildSubscriptionKey;
+        module.exports = exportsValue;
+    }
+
+    if (globalRoot) {
+        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+        globalRoot.CryptoTickerProviders.buildSubscriptionKey = exportsValue.buildSubscriptionKey;
     }
 }(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function buildSubscriptionKeyModule(): SubscriptionKeyExports {
     function buildSubscriptionKey(
@@ -29,6 +32,12 @@
         buildSubscriptionKey
     };
 }));
+
+interface SubscriptionKeyGlobalRoot extends Record<string, unknown> {
+    CryptoTickerProviders?: Record<string, unknown> & {
+        buildSubscriptionKey?: unknown;
+    };
+}
 
 interface SubscriptionKeyExports {
     buildSubscriptionKey(

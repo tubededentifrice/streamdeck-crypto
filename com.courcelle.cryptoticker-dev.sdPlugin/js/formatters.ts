@@ -1,13 +1,14 @@
 "use strict";
 
-(function (root: Record<string, unknown>, factory: () => CryptoTickerFormatters) {
+(function (root: Record<string, unknown> | undefined, factory: () => CryptoTickerFormatters) {
     const exports = factory();
     if (typeof module === "object" && module.exports) {
         module.exports = exports;
-    } else {
-        root.CryptoTickerFormatters = exports;
     }
-}(typeof self !== "undefined" ? self : this, function (): CryptoTickerFormatters {
+    if (root && typeof root === "object") {
+        (root as FormattersGlobalRoot).CryptoTickerFormatters = exports;
+    }
+}(typeof self !== "undefined" ? (self as unknown as Record<string, unknown>) : (this as unknown as Record<string, unknown>), function (): CryptoTickerFormatters {
     // Use const assertion for literal types
     const NUMERIC_FORMATS = ["auto", "full", "compact", "plain"] as const;
     type NumericFormatMode = typeof NUMERIC_FORMATS[number];
@@ -130,6 +131,10 @@
         normalizeValue
     };
 }));
+
+interface FormattersGlobalRoot extends Record<string, unknown> {
+    CryptoTickerFormatters?: CryptoTickerFormatters;
+}
 
 interface CryptoTickerFormatters {
     getRoundedValue(
