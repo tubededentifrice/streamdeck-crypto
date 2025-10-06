@@ -185,6 +185,20 @@
     canvasContext.restore();
     }
 
+    /**
+     * Draws an equilateral triangle (used as a price cursor) on the canvas at the specified position.
+     *
+     * @param {CanvasRenderingContext2D} canvasContext - The canvas context to draw on.
+     * @param {number} cursorPositionX - The x-coordinate of the triangle's center.
+     * @param {number} lineY - The y-coordinate where the triangle is vertically centered.
+     * @param {number} triangleSide - The length of each side of the equilateral triangle.
+     * @param {string} fillStyle - The fill color/style for the triangle.
+     *
+     * The triangle's height is calculated using the formula for an equilateral triangle:
+     *   height = sqrt(3) / 2 * side = sqrt(0.75 * side^2)
+     * The triangle is positioned so that its base is parallel to the x-axis, with the base centered at (cursorPositionX, lineY - triangleHeight/3)
+     * and the apex pointing downward at (cursorPositionX, lineY + 2*triangleHeight/3).
+     */
     function drawPriceCursorTriangle(canvasContext, cursorPositionX, lineY, triangleSide, fillStyle) {
         const triangleHeight = Math.sqrt(0.75 * Math.pow(triangleSide, 2));
         canvasContext.beginPath();
