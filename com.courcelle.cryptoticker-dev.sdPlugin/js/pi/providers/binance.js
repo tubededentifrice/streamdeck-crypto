@@ -17,9 +17,7 @@
         const symbols = Array.isArray(json.symbols) ? json.symbols : [];
 
         return symbols
-            // Binance exposes delisted/maintenance symbols as well. Filter to
-            // live markets so the PI dropdown mirrors what the provider can
-            // actually stream.
+            // Filter out delisted/maintenance symbols so the PI only lists live markets.
             .filter(function (item) {
                 if (!item) {
                     return false;

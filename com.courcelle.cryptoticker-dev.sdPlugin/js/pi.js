@@ -1,5 +1,4 @@
-// this is our global websocket, used to communicate from/to Stream Deck software
-// and some info about our plugin, as sent by Stream Deck software
+// Global Stream Deck websocket plus plugin metadata snapshot.
 /* global CryptoTickerExpressionEvaluator */
 /* exported connectElgatoStreamDeckSocket */
 
@@ -1536,7 +1535,7 @@ const pi = {
 
         const incoming = settings ? Object.assign({}, settings) : {};
 
-        // Backward compatibility, to remove at some point
+        // Legacy pair pipe fallback; remove when PI drops combined value support.
         const pairElements = this.splitPairValue(incoming["pair"]);
         if (pairElements) {
             for (const k in pairElements) {
@@ -1545,8 +1544,6 @@ const pi = {
                 }
             }
         }
-        //
-
         setCurrentSettings(incoming);
         this.refreshValues();
         this.displayExpressionErrors({});
@@ -1554,7 +1551,7 @@ const pi = {
     checkNewSettings: function() {
         this.log("checkNewSettings");
 
-        // Retrieve values from HTML to put them to the current settings
+        // Pull DOM values into `currentSettings` snapshot.
         for (const k in settingsConfig) {
             const settingConfig = settingsConfig[k];
             if (settingConfig["getValue"]) {
@@ -1582,7 +1579,7 @@ const pi = {
             return;
         }
 
-        // Set values to the HTML
+        // Push stored settings into inputs.
         for (const k in settingsConfig) {
             const settingConfig = settingsConfig[k];
             if (settingConfig["setValue"]) {
@@ -1652,8 +1649,7 @@ pi.initDom();
 
 function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, infoJson, actionInfoJson) {
     uuid = inUUID;
-    // please note: the incoming arguments are of type STRING, so
-    // in case of the inActionInfo, we must parse it into JSON first
+    // Stream Deck passes strings; parse the JSON payloads before using them.
     actionInfo = JSON.parse(actionInfoJson); // cache the info
     const parsedInfo = JSON.parse(infoJson);
     websocket = new WebSocket('ws://127.0.0.1:' + inPort);
@@ -1662,8 +1658,7 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, infoJson
     pi.extractSettings(actionInfo.payload.settings);
     // console.log(actionInfo.payload.settings);
 
-    // if connection was established, the websocket sends
-    // an 'onopen' event, where we need to register our PI
+    // Register PI once the websocket reports `onopen`.
     websocket.onopen = function () {
         const json = {
             event: inRegisterEvent,

@@ -5,8 +5,7 @@
         root.CryptoTickerDefaults = factory();
     }
 }(typeof self !== "undefined" ? self : this, function () {
-    // Minimal deep clone so defaults can be reused safely in the PI and the
-    // action without sharing object references across contexts.
+    // Minimal deep clone so defaults stay isolated between PI and action contexts.
     function clone(obj) {
         if (obj === null || typeof obj !== "object") {
             return obj;
@@ -23,9 +22,7 @@
         return copy;
     }
 
-    // Produces a normalizer tailored for the schema entry. Handles trimming,
-    // casing, allow-lists, and empty-string semantics in one place to keep the
-    // schema definition declarative.
+    // Build schema-driven string normalizer handling trim/case/allow-lists in one place.
     function buildStringNormalizer(options) {
         const normalizeCase = options && options.case;
         const allowEmpty = options && options.allowEmptyString === true;
@@ -91,9 +88,7 @@
         };
     }
 
-    // Numeric inputs go through this helper so variants like sliders, text
-    // inputs and property inspector messages all end up normalized the same
-    // way. Optional min/max clamping keeps values inside supported ranges.
+    // Normalize numeric inputs consistently (slider/text/PI) with optional clamp + integer support.
     function buildNumberNormalizer(options) {
         const min = options && typeof options.min === "number" ? options.min : null;
         const max = options && typeof options.max === "number" ? options.max : null;
@@ -258,9 +253,7 @@
         }
     };
 
-    // Core coercion pipeline. Returns the normalized value plus an optional
-    // error message so callers can surface validation issues without having to
-    // re-run normalization.
+    // Core coercion pipeline: normalize value and return optional error so callers can surface validation once.
     function coerceValue(schemaEntry, value, hasValue) {
         if (!schemaEntry || typeof schemaEntry !== "object") {
             return { value: value, error: null };
@@ -290,8 +283,7 @@
         };
     }
 
-    // Validates a settings bag while preserving unknown keys so we remain
-    // forward-compatible with future schema changes.
+    // Validate settings but keep unknown keys for forward compatibility.
     function validateSettings(input) {
         const provided = input && typeof input === "object" ? input : {};
         const normalized = {};

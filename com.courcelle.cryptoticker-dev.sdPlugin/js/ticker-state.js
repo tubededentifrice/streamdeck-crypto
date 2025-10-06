@@ -7,9 +7,7 @@
         root.CryptoTickerState = factory();
     }
 }(typeof self !== "undefined" ? self : this, function () {
-    // Everything here is in-memory per Stream Deck runtime. Keys are bound to
-    // the action context so hotkeys, multi-actions, and dev preview can share
-    // the same APIs without stepping on each other.
+    // In-memory per runtime; keyed by action context so hotkeys, multi-actions, and dev preview share APIs safely.
     const contextDetails = {};
     const contextSubscriptions = {};
     const contextConnectionStates = {};
@@ -123,8 +121,7 @@
         });
     }
 
-    // Persist the last successful payload so we can render something useful
-    // when providers temporarily go stale (e.g., network hiccups).
+    // Cache last successful payload so stale providers still render something useful.
     function setLastGoodTicker(context, values, timestamp) {
         if (!context || !values) {
             return;

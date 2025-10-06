@@ -12,9 +12,7 @@
     }
 
     const alertRuleEvaluator = expressionEvaluator.createEvaluator();
-    // Keep lightweight state keyed by Stream Deck context so alerts survive
-    // reconnections. The armed flag implements the "press to acknowledge"
-    // behavior expected by power users.
+    // Context-keyed state keeps alerts alive through reconnects; armed flag powers press-to-ack UX.
     const alertStatuses = {};
     const alertArmedStates = {};
 
@@ -43,9 +41,7 @@
         delete alertArmedStates[context];
     }
 
-    // Evaluates the alert expression and optionally swaps foreground/background
-    // colors. Any expression failure downgrades the alert to "error" so the PI
-    // can surface the problem without crashing rendering.
+    // Evaluate rule, optionally swap colors, downgrade failures to "error" so PI can surface issues.
     function evaluateAlert(params) {
         const context = params.context;
         const settings = params.settings || {};

@@ -10,9 +10,7 @@
     root.CryptoTickerExpressionEvaluator = factory(root.exprEval.Parser);
   }
 })(typeof self !== 'undefined' ? self : this, function (Parser) {
-  // Restrict expressions to a vetted set of variables so user input cannot
-  // reach arbitrary object properties. Additional variables get whitelisted by
-  // the PI when needed (e.g., background color rules).
+  // Restrict expressions to vetted variables so user input cannot reach arbitrary properties; PI whitelists extras when needed.
   const DEFAULT_ALLOWED_VARIABLES = [
     'value',
     'high',
@@ -26,8 +24,7 @@
     return source ? source.slice(0) : [];
   }
 
-  // Providers often send strings or nulls; coerce everything into a safe
-  // numeric value so the expression engine does not throw at runtime.
+  // Providers sometimes send strings/null; coerce to safe numbers so expressions never throw.
   function normalizeNumericValue(value) {
     if (value === undefined || value === null) {
       return 0;
@@ -50,8 +47,7 @@
     return 0;
   }
 
-  // Returns the canonical set of expression variables. This keeps alerts and
-  // color rules consistent across the plugin and PI.
+  // Canonical expression variable map keeps alerts and color rules in sync across action + PI.
   function buildBaseContext(values) {
     const source = values || {};
     return {
@@ -91,8 +87,7 @@
     return message;
   }
 
-  // Thin wrapper around expr-eval that adds variable whitelisting, caching, and
-  // friendlier error messages for end users configuring expressions.
+  // Thin expr-eval wrapper adding variable whitelisting, caching, and friendlier user errors.
   function ExpressionEvaluator(options) {
     const evaluatorOptions = options || {};
     const allowed =

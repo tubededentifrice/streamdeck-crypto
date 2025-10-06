@@ -9,8 +9,7 @@
 }(typeof self !== "undefined" ? self : this, function () {
     function noop() {}
 
-    // Abstract base class shared by all exchange integrations. Keeping the
-    // shape centralized helps the ticker action treat providers polymorphically.
+    // Base class for exchange integrations so ticker action can treat providers polymorphically.
     class ProviderInterface {
         constructor(options) {
             const opts = options || {};
@@ -47,10 +46,7 @@
                 return 1;
             }
 
-            // Intended implementation:
-            // const response = await fetch(this.baseUrl + "/api/Conversion/json/" + fromCurrency + "/" + toCurrency);
-            // const json = await response.json();
-            // return parseFloat(json["rate"]);
+            // Intended fetch sketch: fetch baseUrl + "/api/Conversion/json/...", parse JSON, return parseFloat(rate).
             return 1;
         }
     }
