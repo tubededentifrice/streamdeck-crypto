@@ -1,7 +1,7 @@
 /// <reference path="../libs/js/action.js" />
 /// <reference path="../libs/js/stream-deck.js" />
 
-/* global DestinationEnum */
+/* global DestinationEnum, CryptoTickerConstants */
 
 const defaultConfig = {
     "tProxyBase": "https://tproxyv8.opendle.com",
