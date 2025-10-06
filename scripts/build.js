@@ -24,19 +24,24 @@ function fail(message, error) {
   process.exit(1);
 }
 
-function runCommand(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: repoRoot,
+function runCommand(command, args = [], options = {}) {
+  const cwd = options.cwd ?? repoRoot;
+  const fullCommand = [command, ...args].join(' ');
+  const spawnOptions = {
+    cwd,
     stdio: 'inherit',
     ...options,
-  });
+    cwd,
+  };
+
+  const result = spawnSync(command, args, spawnOptions);
 
   if (result.error) {
-    fail(`Failed to run ${command}`, result.error);
+    fail(`Failed to run command: ${fullCommand}\nWorking directory: ${cwd}`, result.error);
   }
 
   if (result.status !== 0) {
-    fail(`Command ${command} ${args.join(' ')} exited with code ${result.status}`);
+    fail(`Command failed: ${fullCommand}\nWorking directory: ${cwd}\nExited with code ${result.status}`);
   }
 }
 

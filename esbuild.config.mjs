@@ -10,7 +10,7 @@ const args = process.argv.slice(2);
 const argMap = new Map();
 for (const arg of args) {
   if (arg.startsWith('--')) {
-    const [flag, value] = arg.includes('=') ? arg.split('=') : [arg, true];
+    const [flag, value] = arg.includes('=') ? arg.split('=', 2) : [arg, true];
     argMap.set(flag, value);
   }
 }

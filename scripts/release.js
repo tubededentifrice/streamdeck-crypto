@@ -58,12 +58,12 @@ function writeJson(filePath, data, indent = 2) {
 }
 
 function bumpVersion(version, releaseType) {
-  const parts = version.split('.').map(Number);
-  if (parts.length < 3 || parts.some(Number.isNaN)) {
-    fail(`Unsupported version format in package.json: ${version}`);
+  const parts = version.split('.');
+  if (parts.length !== 3 || parts.some((part) => part.trim() === '' || Number.isNaN(Number(part)))) {
+    fail(`Unsupported version format in package.json: ${version}. Expected format: 'x.y.z' (e.g., '1.2.3')`);
   }
 
-  const [major, minor, patch] = parts;
+  const [major, minor, patch] = parts.map((part) => Number(part));
   switch (releaseType) {
     case 'patch':
       return `${major}.${minor}.${patch + 1}`;
