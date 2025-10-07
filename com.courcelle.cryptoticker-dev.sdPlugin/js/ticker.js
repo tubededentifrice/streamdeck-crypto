@@ -52,8 +52,51 @@ const runtimeConfig = Object.assign({}, defaultConfig, moduleConfig || {}, globa
 const constants = constantsModule || (typeof CryptoTickerConstants !== "undefined" ? CryptoTickerConstants : null) || {};
 const TIMESTAMP_SECONDS_THRESHOLD = typeof constants.TIMESTAMP_SECONDS_THRESHOLD === "number" ? constants.TIMESTAMP_SECONDS_THRESHOLD : 9999999999;
 const tProxyBase = runtimeConfig.tProxyBase;
+const tProxyBaseNormalized = typeof tProxyBase === "string" ? tProxyBase.replace(/\/$/, "") : "";
+const TPROXY_CACHE_BYPASS_PARAM = "_ctBust";
 const DEFAULT_MESSAGE_CONFIG = defaultConfig.messages;
 const messageConfig = Object.assign({}, DEFAULT_MESSAGE_CONFIG, (runtimeConfig && runtimeConfig.messages) || {});
+// Ensure tproxy requests bypass any local caches by appending a timestamped query param.
+function appendTProxyCacheBypassParam(url) {
+    if (!url || typeof url !== "string") {
+        return url;
+    }
+    try {
+        const parsed = new URL(url);
+        parsed.searchParams.set(TPROXY_CACHE_BYPASS_PARAM, Date.now().toString());
+        return parsed.toString();
+    }
+    catch (err) {
+        const separator = url.indexOf("?") === -1 ? "?" : "&";
+        return url + separator + TPROXY_CACHE_BYPASS_PARAM + "=" + Date.now();
+    }
+}
+// Inject no-cache headers/options for tproxy fetches while leaving other URLs untouched.
+function buildTProxyRequestConfig(url, baseOptions) {
+    if (!url || typeof url !== "string") {
+        return {
+            url: url,
+            options: baseOptions
+        };
+    }
+    const normalizedUrl = url.replace(/\/$/, "");
+    if (!tProxyBaseNormalized || normalizedUrl.indexOf(tProxyBaseNormalized) !== 0) {
+        return {
+            url: url,
+            options: baseOptions
+        };
+    }
+    const options = Object.assign({}, baseOptions || {});
+    options.cache = "no-store";
+    const headers = Object.assign({}, options.headers || {});
+    headers["cache-control"] = "no-cache";
+    headers["pragma"] = "no-cache";
+    options.headers = headers;
+    return {
+        url: appendTProxyCacheBypassParam(url),
+        options: options
+    };
+}
 const subscriptionKeyModule = requireOrNull("./providers/subscription-key");
 const globalProviders = typeof CryptoTickerProviders !== "undefined" ? CryptoTickerProviders : null;
 // Local fallback keeps subscription key format stable when provider bundle missing (tests/preview).
@@ -325,7 +368,8 @@ const tickerAction = {
         const self = this;
         cacheEntry.promise = (async function () {
             try {
-                const response = await fetchFn(url);
+                const request = buildTProxyRequestConfig(url);
+                const response = await fetchFn(request.url, request.options);
                 if (!response || !response.ok) {
                     throw new Error("Conversion rate response not ok");
                 }
@@ -851,7 +895,9 @@ const tickerAction = {
         }
         if (rawCandles === null) {
             try {
-                const response = await fetch(tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24");
+                const proxyUrl = tProxyBase + "/api/Candles/json/" + exchange + "/" + pair + "/" + interval + "?limit=24";
+                const request = buildTProxyRequestConfig(proxyUrl);
+                const response = await fetch(request.url, request.options);
                 const responseJson = await response.json();
                 if (responseJson && Array.isArray(responseJson.candles)) {
                     rawCandles = responseJson.candles;

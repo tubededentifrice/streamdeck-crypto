@@ -106,6 +106,55 @@ const expressionValidationTargets = [
 
 const tProxyBase = "https://tproxyv8.opendle.com";
 // const tProxyBase = "https://localhost:44330";
+const tProxyBaseNormalized = typeof tProxyBase === "string" ? tProxyBase.replace(/\/$/, "") : "";
+const TPROXY_CACHE_BYPASS_PARAM = "_ctBust";
+
+// Append a timestamp query so the browser cannot satisfy tproxy fetches from cache.
+function appendCacheBypassParam(url) {
+    if (!url || typeof url !== "string") {
+        return url;
+    }
+
+    try {
+        const parsed = new URL(url);
+        parsed.searchParams.set(TPROXY_CACHE_BYPASS_PARAM, Date.now().toString());
+        return parsed.toString();
+    } catch (err) {
+        const separator = url.indexOf("?") === -1 ? "?" : "&";
+        return url + separator + TPROXY_CACHE_BYPASS_PARAM + "=" + Date.now();
+    }
+}
+
+// Augment fetch init for tproxy requests with cache-busting headers/settings.
+function applyTProxyCacheBypass(url, baseOptions) {
+    if (!url || typeof url !== "string") {
+        return {
+            url: url,
+            options: baseOptions
+        };
+    }
+
+    const normalizedUrl = url.replace(/\/$/, "");
+    if (!tProxyBaseNormalized || normalizedUrl.indexOf(tProxyBaseNormalized) !== 0) {
+        return {
+            url: url,
+            options: baseOptions
+        };
+    }
+
+    const options = Object.assign({}, baseOptions || {});
+    options.cache = "no-store";
+
+    const headers = Object.assign({}, options.headers || {});
+    headers["cache-control"] = "no-cache";
+    headers["pragma"] = "no-cache";
+    options.headers = headers;
+
+    return {
+        url: appendCacheBypassParam(url),
+        options: options
+    };
+}
 
 const loggingEnabled = false;
 const selectPairDropdown = document.getElementById("select-pair-dropdown");
@@ -172,7 +221,8 @@ async function performJsonFetch(url, controller, baseFetchOptions) {
     if (controller) {
         fetchOptions.signal = controller.signal;
     }
-    const response = await fetch(url, fetchOptions);
+    const proxySafeRequest = applyTProxyCacheBypass(url, fetchOptions);
+    const response = await fetch(proxySafeRequest.url, proxySafeRequest.options);
     if (!response.ok) {
         throw new Error("Request failed with status " + response.status);
     }
