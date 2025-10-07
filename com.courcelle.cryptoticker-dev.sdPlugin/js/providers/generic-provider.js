@@ -37,6 +37,22 @@
     };
     const CONNECTION_STATE_CONNECTED = "Connected";
     const DEFAULT_RETRY_DELAY_MS = 5000;
+    const TPROXY_CACHE_BYPASS_PARAM = "_ctBust";
+    // Ensure requests to the proxy always bypass client-side caches.
+    function appendCacheBypassParam(url) {
+        if (!url || typeof url !== "string") {
+            return url;
+        }
+        try {
+            const parsed = new URL(url);
+            parsed.searchParams.set(TPROXY_CACHE_BYPASS_PARAM, Date.now().toString());
+            return parsed.toString();
+        }
+        catch (err) {
+            const separator = url.indexOf("?") === -1 ? "?" : "&";
+            return url + separator + TPROXY_CACHE_BYPASS_PARAM + "=" + Date.now();
+        }
+    }
     class GenericProvider extends ProviderInterface {
         constructor(options) {
             super(options);
@@ -46,6 +62,7 @@
             this.shouldReconnect = true;
             this.connectionState = "Disconnected";
             this.startingConnection = false;
+            this.normalizedBaseUrl = (this.baseUrl || "").replace(/\/$/, "");
             // Manager handles fallback polling + streaming so action code stays simple.
             const managerOptions = {
                 logger: (...args) => {
@@ -205,16 +222,20 @@
             return this.rawFetchTicker(params);
         }
         rawFetchTicker(params) {
-            const exchange = params.exchange;
-            const symbol = params.symbol;
+            const exchange = params.exchange || "";
+            const symbol = params.symbol || "";
             const fromCurrency = params.fromCurrency || "USD";
             const toCurrency = params.toCurrency || null;
-            let url = this.baseUrl + "/api/Ticker/json/" + exchange + "/" + symbol + "?fromCurrency=" + encodeURIComponent(fromCurrency);
+            const base = (this.baseUrl || "").replace(/\/$/, "");
+            const pathExchange = encodeURIComponent(exchange);
+            const pathSymbol = encodeURIComponent(symbol);
+            let url = base + "/api/Ticker/json/" + pathExchange + "/" + pathSymbol + "?fromCurrency=" + encodeURIComponent(fromCurrency);
             if (toCurrency !== null) {
                 url += "&toCurrency=" + encodeURIComponent(toCurrency);
             }
             const self = this;
-            return fetch(url).then(function (response) {
+            const request = this.buildProxyRequestConfig(url);
+            return fetch(request.url, request.options).then(function (response) {
                 return response.json();
             }).then(function (json) {
                 const ticker = self.transformTickerResponse(json);
@@ -261,7 +282,8 @@
             const base = this.baseUrl.replace(/\/$/, "");
             const url = base + "/api/Candles/json/" + encodeURIComponent(exchange) + "/" + encodeURIComponent(symbol) + "/" + interval + "?limit=" + limit;
             try {
-                const response = await fetch(url);
+                const request = this.buildProxyRequestConfig(url);
+                const response = await fetch(request.url, request.options);
                 if (!response || !response.ok) {
                     throw new Error("GenericProvider: candles response not ok");
                 }
@@ -275,6 +297,33 @@
                 this.logger("GenericProvider: error fetching candles", err);
                 throw err;
             }
+        }
+        // Build fetch options that disable caching when targeting the tproxy backend.
+        buildProxyRequestConfig(url, baseOptions) {
+            if (!url || typeof url !== "string") {
+                return {
+                    url: url,
+                    options: baseOptions
+                };
+            }
+            const normalizedBase = this.normalizedBaseUrl;
+            const normalizedUrl = url.replace(/\/$/, "");
+            if (!normalizedBase || normalizedUrl.indexOf(normalizedBase) !== 0) {
+                return {
+                    url: url,
+                    options: baseOptions
+                };
+            }
+            const options = Object.assign({}, baseOptions || {});
+            options.cache = "no-store";
+            const headers = Object.assign({}, options.headers || {});
+            headers["cache-control"] = "no-cache";
+            headers["pragma"] = "no-cache";
+            options.headers = headers;
+            return {
+                url: appendCacheBypassParam(url),
+                options: options
+            };
         }
         transformTickerResponse(responseJson) {
             const json = responseJson || {};
