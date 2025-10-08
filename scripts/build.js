@@ -113,7 +113,7 @@ async function packagePlugin(stagingDir) {
   try {
     const remaining = await fsp.readdir(stagingDir);
     if (remaining.length === 0) {
-      await fsp.rm(stagingDir, { recursive: false, force: true });
+      await fsp.rmdir(stagingDir);
     }
   } catch (error) {
     if (error.code !== 'ENOENT') {

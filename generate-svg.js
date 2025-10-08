@@ -8,6 +8,8 @@
  */
 
 const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
 
 // Configuration - easily modifiable
 const CONFIG = {
@@ -20,7 +22,8 @@ const CONFIG = {
   negativeColor: '#ffffff',  // Color for negative changes (default: red)
   width: 144,
   height: 144,
-  outputFile: 'ticker.svg',
+  outputFile: 'pluginIcon3.svg',
+  imagesDir: 'com.courcelle.cryptoticker-dev.sdPlugin/images',
   displayHighLow: 'on',
   displayHighLowBar: 'on',
   displayDailyChange: 'on',
@@ -67,9 +70,50 @@ async function generateSVG() {
   // Generate SVG
   const svg = renderTickerSVG(settings, tickerValues);
 
-  fs.writeFileSync(CONFIG.outputFile, svg);
-  console.log(`✓ SVG saved to ${CONFIG.outputFile}`);
+  const svgPath = path.join(CONFIG.imagesDir, CONFIG.outputFile);
+  fs.writeFileSync(svgPath, svg);
+  console.log(`✓ SVG saved to ${svgPath}`);
+
+  // Generate PNG versions
+  await generatePNGs(svgPath, CONFIG.imagesDir);
+
   process.exit(0);
+}
+
+async function generatePNGs(svgPath, imagesDir) {
+  console.log('\nGenerating PNG versions:');
+
+  const svgBuffer = fs.readFileSync(svgPath);
+
+  const pngVersions = [
+    { name: 'categoryIcon3.png', width: 28, height: 28 },
+    { name: 'categoryIcon3@2x.png', width: 56, height: 56 },
+    { name: 'actionIcon3.png', width: 20, height: 20 },
+    { name: 'actionIcon3@2x.png', width: 40, height: 40 }
+  ];
+
+  for (const png of pngVersions) {
+    const outputPath = path.join(imagesDir, png.name);
+
+    await sharp(svgBuffer)
+      .resize(png.width, png.height)
+      .png({ compressionLevel: 9 })
+      .toFile(outputPath);
+
+    console.log(`  ✓ ${png.name} (${png.width}x${png.height}px)`);
+  }
+
+  // Copy SVG versions
+  console.log('\nCopying SVG versions:');
+  const svgCopies = ['categoryIcon3.svg', 'actionIcon3.svg'];
+
+  for (const svgName of svgCopies) {
+    const outputPath = path.join(imagesDir, svgName);
+    fs.copyFileSync(svgPath, outputPath);
+    console.log(`  ✓ ${svgName}`);
+  }
+
+  console.log(`\nAll images saved to ${imagesDir}/`);
 }
 
 function renderTickerSVG(settings, values) {

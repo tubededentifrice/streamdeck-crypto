@@ -1,7 +1,7 @@
 {
     "Actions": [
         {
-            "Icon": "images/actionIcon",
+            "Icon": "images/actionIcon3",
             "Name": "Crypto Ticker PRO",
             "States": [
                 {
@@ -21,11 +21,11 @@
     "PropertyInspectorPath": "index_pi.html",
     "Name": "Crypto Ticker PRO",
     "Description": "This lets you display the price of a crypto currency (all Binance and Bitfinex pairs are supported), and stock prices (all Yahoo Finance pairs). Supports a very wide range of customizations.",
-    "Icon": "images/pluginIcon3",
+    "Icon": "images/pluginIcon",
     "Category": "Crypto Ticker PRO",
-    "CategoryIcon": "images/pluginIcon3",
+    "CategoryIcon": "images/categoryIcon3",
     "URL": "https://github.com/tubededentifrice/streamdeck-crypto",
-    "Version": "2.0.0.0",
+    "Version": "2.0.2.0",
     "SDKVersion": 2,
     "Software": {
         "MinimumVersion": "6.5"
