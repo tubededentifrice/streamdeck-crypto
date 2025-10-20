@@ -26,9 +26,9 @@
     "CategoryIcon": "images/categoryIcon3",
     "URL": "https://github.com/tubededentifrice/streamdeck-crypto",
     "Version": "2.1.2.0",
-    "SDKVersion": 2,
+    "SDKVersion": 3,
     "Software": {
-        "MinimumVersion": "6.5"
+        "MinimumVersion": "6.9"
     },
     "OS": [
         {
