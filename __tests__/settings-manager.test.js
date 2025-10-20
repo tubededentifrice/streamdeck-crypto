@@ -33,7 +33,7 @@ describe("settings-manager", () => {
         expect(applied.exchange).toBe("BITFINEX");
         expect(applied.digits).toBe(10);
         expect(applied.multiplier).toBe(0);
-        expect(applied.priceFormat).toBe("plain");
+        expect(applied.priceFormat).toBe("full");
     });
 
     test("refreshSettings tolerates missing updateSubscription callback", () => {

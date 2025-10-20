@@ -323,6 +323,19 @@
         const priceFontSize = parseNumberSetting(settings["fontSizePrice"], baseFontSize * 35 / 25);
         const highLowFontSize = parseNumberSetting(settings["fontSizeHighLow"], baseFontSize);
         const changeFontSize = parseNumberSetting(settings["fontSizeChange"], baseFontSize * 19 / 25);
+
+        function resolveSeparatorSetting(value: unknown, fallback: string): string {
+            if (typeof value === "string" && value.length > 0) {
+                return value;
+            }
+            return fallback;
+        }
+
+        const numericSeparators = {
+            thousandsSeparator: resolveSeparatorSetting(settings["thousandsSeparator"], ","),
+            decimalSeparator: resolveSeparatorSetting(settings["decimalSeparator"], ".")
+        };
+
         const defaultBackgroundColor = settings["backgroundColor"] || "#000000";
         const defaultTextColor = settings["textColor"] || "#ffffff";
         let backgroundColor = defaultBackgroundColor;
@@ -472,7 +485,7 @@
             canvasContext.fillStyle = textColor;
         } else {
             const priceText = priceValue !== null
-                ? formatters.getRoundedValue(priceValue, digits, multiplier, priceFormat)
+                ? formatters.getRoundedValue(priceValue, digits, multiplier, priceFormat, numericSeparators)
                 : "--";
             canvasContext.font = "bold " + (priceFontSize * sizeMultiplier) + "px " + font;
             canvasContext.fillStyle = textColor;
@@ -484,13 +497,13 @@
                 canvasContext.fillStyle = textColor;
                 canvasContext.textAlign = "left";
                 const lowText = lowValue !== null
-                    ? formatters.getRoundedValue(lowValue, highLowDigits, multiplier, priceFormat)
+                    ? formatters.getRoundedValue(lowValue, highLowDigits, multiplier, priceFormat, numericSeparators)
                     : "--";
                 canvasContext.fillText(lowText, textPadding, 90 * sizeMultiplier);
 
                 canvasContext.textAlign = "right";
                 const highText = highValue !== null
-                    ? formatters.getRoundedValue(highValue, highLowDigits, multiplier, priceFormat)
+                    ? formatters.getRoundedValue(highValue, highLowDigits, multiplier, priceFormat, numericSeparators)
                     : "--";
                 canvasContext.fillText(highText, canvasWidth - textPadding, 135 * sizeMultiplier);
             }
@@ -503,7 +516,7 @@
                 } else if (Math.abs(changePercent) >= 10) {
                     digitsPercent = 1;
                 }
-                let changePercentDisplay = formatters.getRoundedValue(changePercent, digitsPercent, 1, "plain");
+                let changePercentDisplay = formatters.getRoundedValue(changePercent, digitsPercent, 1, "plain", numericSeparators);
                 if (changePercent > 0) {
                     changePercentDisplay = "+" + changePercentDisplay;
                     canvasContext.fillStyle = "green";

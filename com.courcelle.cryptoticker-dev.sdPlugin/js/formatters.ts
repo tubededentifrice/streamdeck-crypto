@@ -20,12 +20,37 @@
         { value: 1000, suffix: "K" }
     ] as const;
 
+    const DEFAULT_THOUSANDS_SEPARATOR = ",";
+    const DEFAULT_DECIMAL_SEPARATOR = ".";
+
+    function resolveSeparators(options?: NumericSeparatorOptions | null) {
+        const thousandsCandidate = options && typeof options.thousandsSeparator === "string"
+            ? options.thousandsSeparator
+            : null;
+        const decimalCandidate = options && typeof options.decimalSeparator === "string"
+            ? options.decimalSeparator
+            : null;
+
+        const thousandsSeparator = thousandsCandidate && thousandsCandidate.length > 0
+            ? thousandsCandidate
+            : DEFAULT_THOUSANDS_SEPARATOR;
+        const decimalSeparator = decimalCandidate && decimalCandidate.length > 0
+            ? decimalCandidate
+            : DEFAULT_DECIMAL_SEPARATOR;
+
+        return {
+            thousandsSeparator,
+            decimalSeparator
+        };
+    }
+
     // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
     function getRoundedValue(
         value: number,
         digits: number | string | null | undefined,
         multiplier: number | null | undefined,
-        format?: string | null
+        format?: string | null,
+        separators?: NumericSeparatorOptions | null
     ): string {
         // Backward compatibility: map old values to new ones
         const formatOption = (format || "auto") as NumericFormatMode;
@@ -39,17 +64,40 @@
         const absoluteValue = Math.abs(scaledValue);
         const sign = scaledValue < 0 ? "-" : "";
 
+        const resolvedSeparators = resolveSeparators(separators);
+        const thousandsSeparator = resolvedSeparators.thousandsSeparator;
+        const decimalSeparator = resolvedSeparators.decimalSeparator;
+
         function roundWithPrecision(val: number, localPrecision: number): number {
             const pow = Math.pow(10, localPrecision);
             return Math.round(val * pow) / pow;
         }
 
-        function toLocale(val: number, options: Intl.NumberFormatOptions): string {
-            try {
-                return val.toLocaleString(undefined, options);
-            } catch (err) {
-                return val.toString();
+        function formatRounded(val: number, useGrouping: boolean): string {
+            const fixedString = val.toFixed(fixedDigits);
+            let integerPart = fixedString;
+            let fractionalPart = "";
+
+            const decimalIndex = fixedString.indexOf(".");
+            if (decimalIndex >= 0) {
+                integerPart = fixedString.slice(0, decimalIndex);
+                fractionalPart = fixedString.slice(decimalIndex + 1);
             }
+
+            let groupedInteger = integerPart;
+            if (useGrouping && thousandsSeparator) {
+                groupedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSeparator);
+            }
+
+            if (fractionalPart && fixedDigits > 0) {
+                return groupedInteger + decimalSeparator + fractionalPart;
+            }
+
+            if (fixedDigits > 0) {
+                return groupedInteger + decimalSeparator + "0".repeat(fixedDigits);
+            }
+
+            return groupedInteger;
         }
 
         let formattedValue = "";
@@ -59,11 +107,7 @@
             case "full":
             case "plain": {
                 const roundedPlain = roundWithPrecision(absoluteValue, fixedDigits);
-                formattedValue = toLocale(roundedPlain, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: (formatOption == "full")
-                });
+                formattedValue = formatRounded(roundedPlain, formatOption === "full");
                 break;
             }
             case "auto":
@@ -73,8 +117,9 @@
                 let suffix = "";
                 let compactValue = absoluteValue;
                 for (const unit of COMPACT_UNITS) {
-                    // Only compact when above 100 of the thing, to avoid eg. 7260 becoming 7.26K (which actually decreases readability)
-                    if (absoluteValue >= (unit.value * 100)) {
+                    // Keep thousands readable unless the number is large enough, but allow higher units sooner for clarity.
+                    const threshold = unit.suffix === "K" ? unit.value * 100 : unit.value;
+                    if (absoluteValue >= threshold) {
                         suffix = unit.suffix;
                         compactValue = absoluteValue / unit.value;
                         break;
@@ -82,11 +127,7 @@
                 }
 
                 const roundedCompact = roundWithPrecision(compactValue, fixedDigits);
-                formattedValue = toLocale(roundedCompact, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: !suffix
-                }) + suffix;
+                formattedValue = formatRounded(roundedCompact, !suffix) + suffix;
                 break;
             }
         }
@@ -109,6 +150,11 @@
     };
 }));
 
+interface NumericSeparatorOptions {
+    thousandsSeparator?: string | null | undefined;
+    decimalSeparator?: string | null | undefined;
+}
+
 interface FormattersGlobalRoot extends Record<string, unknown> {
     CryptoTickerFormatters?: CryptoTickerFormatters;
 }
@@ -118,7 +164,8 @@ interface CryptoTickerFormatters {
         value: number,
         digits: number | string | null | undefined,
         multiplier: number | null | undefined,
-        format?: string | null
+        format?: string | null,
+        separators?: NumericSeparatorOptions | null
     ): string;
     normalizeValue(value: number, min: number, max: number): number;
 }

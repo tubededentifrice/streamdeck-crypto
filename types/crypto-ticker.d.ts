@@ -40,6 +40,8 @@ declare interface CryptoTickerSettings {
   fontSizeHighLow: string | null;
   fontSizeChange: number;
   priceFormat: string;
+  thousandsSeparator: string;
+  decimalSeparator: string;
   backgroundColor: string;
   textColor: string;
   displayHighLow: string;

@@ -164,6 +164,32 @@ interface GlobalDefaultsRoot extends Record<string, unknown> {
     };
   }
 
+  function buildSeparatorNormalizer(options: { allowed: readonly string[]; trim?: boolean }): Normalizer<string> {
+    const allowedValues = Array.isArray(options.allowed) ? options.allowed.slice(0) : [];
+    const shouldTrim = options.trim !== false;
+
+    return function normalizeSeparator(value: unknown): string | null {
+      if (value === undefined || value === null) {
+        return null;
+      }
+
+      let str = String(value);
+      if (shouldTrim) {
+        str = str.trim();
+      }
+
+      if (!str) {
+        return null;
+      }
+
+      if (allowedValues.indexOf(str) >= 0) {
+        return str;
+      }
+
+      return null;
+    };
+  }
+
   const settingsSchema: SettingsSchema = {
     title: {
       type: 'string',
@@ -263,6 +289,16 @@ interface GlobalDefaultsRoot extends Record<string, unknown> {
         // Invalid value, return null to fall back to default
         return null;
       }
+    },
+    thousandsSeparator: {
+      type: 'string',
+      default: ',',
+      normalize: buildSeparatorNormalizer({ allowed: [',', '.', ' ', "'"] as const, trim: false })
+    },
+    decimalSeparator: {
+      type: 'string',
+      default: '.',
+      normalize: buildSeparatorNormalizer({ allowed: ['.', ','] as const })
     },
     backgroundColor: {
       type: 'string',
