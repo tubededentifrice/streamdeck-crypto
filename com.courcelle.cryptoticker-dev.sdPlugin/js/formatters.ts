@@ -17,7 +17,7 @@
         { value: 1000000000000, suffix: "T" },
         { value: 1000000000, suffix: "B" },
         { value: 1000000, suffix: "M" },
-        { value: 1000, suffix: "K" } 
+        { value: 1000, suffix: "K" }
     ] as const;
 
     // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
@@ -62,7 +62,7 @@
                 formattedValue = toLocale(roundedPlain, {
                     minimumFractionDigits: fixedDigits,
                     maximumFractionDigits: fixedDigits,
-                    useGrouping: (formatOption=="full")
+                    useGrouping: (formatOption == "full")
                 });
                 break;
             }
