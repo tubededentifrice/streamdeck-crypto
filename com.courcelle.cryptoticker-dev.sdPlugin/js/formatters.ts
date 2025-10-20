@@ -55,16 +55,19 @@
         const fixedDigits = Math.max(0, precision);
 
         switch (formatOption) {
-            case "full": {
-                const roundedFull = roundWithPrecision(absoluteValue, fixedDigits);
-                formattedValue = toLocale(roundedFull, {
+            case "full":
+            case "plain": {
+                const roundedPlain = roundWithPrecision(absoluteValue, fixedDigits);
+                formattedValue = toLocale(roundedPlain, {
                     minimumFractionDigits: fixedDigits,
                     maximumFractionDigits: fixedDigits,
-                    useGrouping: true
+                    useGrouping: (formatOption=="full")
                 });
                 break;
             }
-            case "compact": {
+            case "auto":
+            case "compact":
+            default: {
                 // T=trillion, B=billion, M=million, K=thousand; pick largest threshold that fits.
                 let suffix = "";
                 let compactValue = absoluteValue;
@@ -82,33 +85,6 @@
                     maximumFractionDigits: fixedDigits,
                     useGrouping: !suffix
                 }) + suffix;
-                break;
-            }
-            case "plain": {
-                const roundedPlain = roundWithPrecision(absoluteValue, fixedDigits);
-                formattedValue = toLocale(roundedPlain, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: false
-                });
-                break;
-            }
-            case "auto":
-            default: {
-                // Legacy auto mode: add K suffix above 100k threshold only.
-                let autoSuffix = "";
-                let autoValue = absoluteValue;
-                if (absoluteValue > 100000) {
-                    autoSuffix = "K";
-                    autoValue = absoluteValue / 1000;
-                }
-
-                const roundedAuto = roundWithPrecision(autoValue, fixedDigits);
-                formattedValue = toLocale(roundedAuto, {
-                    minimumFractionDigits: fixedDigits,
-                    maximumFractionDigits: fixedDigits,
-                    useGrouping: false
-                }) + autoSuffix;
                 break;
             }
         }
