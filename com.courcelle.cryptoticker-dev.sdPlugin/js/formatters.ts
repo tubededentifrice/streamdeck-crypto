@@ -13,12 +13,13 @@
     const NUMERIC_FORMATS = ["auto", "full", "compact", "plain"] as const;
     type NumericFormatMode = typeof NUMERIC_FORMATS[number];
 
-    // Use readonly tuple for compact units
+    // Use readonly tuple for compact units, only above 100 units of the thing
+    // to avoid over-rounding
     const COMPACT_UNITS = [
-        { value: 1000000000000, suffix: "T" },
-        { value: 1000000000, suffix: "B" },
-        { value: 1000000, suffix: "M" },
-        { value: 1000, suffix: "K" }
+        { value: 100000000000000, suffix: "T" },  // Only above 100T
+        { value: 100000000000, suffix: "B" },  // Only above 100B
+        { value: 100000000, suffix: "M" },  // Only above 100M
+        { value: 100000, suffix: "K" }  // Only above 100K
     ] as const;
 
     // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
