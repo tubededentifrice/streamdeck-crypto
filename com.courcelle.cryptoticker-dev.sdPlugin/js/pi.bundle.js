@@ -268,8 +268,24 @@
           },
           priceFormat: {
             type: "string",
-            default: "compact",
-            normalize: buildStringNormalizer({ trim: true, allowEmptyString: false, case: "lower" })
+            default: "auto",
+            normalize: function(value) {
+              const baseNormalizer = buildStringNormalizer({ trim: true, allowEmptyString: false, case: "lower" });
+              const normalized = baseNormalizer(value);
+              if (!normalized) {
+                return null;
+              }
+              if (normalized === "compact") {
+                return "auto";
+              }
+              if (normalized === "plain") {
+                return "full";
+              }
+              if (normalized === "auto" || normalized === "full") {
+                return normalized;
+              }
+              return null;
+            }
           },
           backgroundColor: {
             type: "string",

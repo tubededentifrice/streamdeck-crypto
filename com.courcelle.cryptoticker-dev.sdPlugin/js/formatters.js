@@ -18,6 +18,7 @@
     ];
     // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
     function getRoundedValue(value, digits, multiplier, format) {
+        // Backward compatibility: map old values to new ones
         const formatOption = (format || "auto");
         const parsedDigits = typeof digits === "number" ? digits : parseInt(String(digits !== null && digits !== void 0 ? digits : ""), 10);
         let precision = parsedDigits;
@@ -59,7 +60,8 @@
                 let suffix = "";
                 let compactValue = absoluteValue;
                 for (const unit of COMPACT_UNITS) {
-                    if (absoluteValue >= unit.value * 100) {
+                    // Only compact when above 100 of the thing, to avoid eg. 7260 becoming 7.26K (which actually decreases readability)
+                    if (absoluteValue >= (unit.value * 100)) {
                         suffix = unit.suffix;
                         compactValue = absoluteValue / unit.value;
                         break;

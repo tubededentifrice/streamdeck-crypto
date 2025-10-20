@@ -27,6 +27,7 @@
         multiplier: number | null | undefined,
         format?: string | null
     ): string {
+        // Backward compatibility: map old values to new ones
         const formatOption = (format || "auto") as NumericFormatMode;
         const parsedDigits = typeof digits === "number" ? digits : parseInt(String(digits ?? ""), 10);
         let precision = parsedDigits;
@@ -72,7 +73,8 @@
                 let suffix = "";
                 let compactValue = absoluteValue;
                 for (const unit of COMPACT_UNITS) {
-                    if (absoluteValue >= unit.value * 100) {
+                    // Only compact when above 100 of the thing, to avoid eg. 7260 becoming 7.26K (which actually decreases readability)
+                    if (absoluteValue >= (unit.value * 100)) {
                         suffix = unit.suffix;
                         compactValue = absoluteValue / unit.value;
                         break;
