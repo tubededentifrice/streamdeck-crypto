@@ -164,6 +164,32 @@ interface GlobalDefaultsRoot extends Record<string, unknown> {
     };
   }
 
+  function buildSeparatorNormalizer(options: { allowed: readonly string[]; trim?: boolean }): Normalizer<string> {
+    const allowedValues = Array.isArray(options.allowed) ? options.allowed.slice(0) : [];
+    const shouldTrim = options.trim !== false;
+
+    return function normalizeSeparator(value: unknown): string | null {
+      if (value === undefined || value === null) {
+        return null;
+      }
+
+      let str = String(value);
+      if (shouldTrim) {
+        str = str.trim();
+      }
+
+      if (!str) {
+        return null;
+      }
+
+      if (allowedValues.indexOf(str) >= 0) {
+        return str;
+      }
+
+      return null;
+    };
+  }
+
   const settingsSchema: SettingsSchema = {
     title: {
       type: 'string',
@@ -242,8 +268,37 @@ interface GlobalDefaultsRoot extends Record<string, unknown> {
     },
     priceFormat: {
       type: 'string',
-      default: 'compact',
-      normalize: buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'lower' })
+      default: 'auto',
+      normalize: function(value: unknown): string | null {
+        const baseNormalizer = buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'lower' });
+        const normalized = baseNormalizer(value);
+        if (!normalized) {
+          return null;
+        }
+        // Backward compatibility: map old values to new ones
+        if (normalized === 'compact') {
+          return 'auto';
+        }
+        if (normalized === 'plain') {
+          return 'full';
+        }
+        // Only allow 'auto' and 'full'
+        if (normalized === 'auto' || normalized === 'full') {
+          return normalized;
+        }
+        // Invalid value, return null to fall back to default
+        return null;
+      }
+    },
+    thousandsSeparator: {
+      type: 'string',
+      default: ',',
+      normalize: buildSeparatorNormalizer({ allowed: [',', '.', ' ', "'"] as const, trim: false })
+    },
+    decimalSeparator: {
+      type: 'string',
+      default: '.',
+      normalize: buildSeparatorNormalizer({ allowed: ['.', ','] as const })
     },
     backgroundColor: {
       type: 'string',

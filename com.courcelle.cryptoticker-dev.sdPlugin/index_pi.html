@@ -62,9 +62,24 @@
         <div class="sdpi-item">
             <div class="sdpi-item-label">Price format</div>
             <select class="sdpi-item-value select" id="priceFormat" name="priceFormat">
-                <option value="auto">Automatic</option>
+                <option value="auto">Automatic (eg. 119.66K)</option>
                 <option value="full">Full (eg. 119,662)</option>
-                <option value="compact">Compact (eg. 119.66K)</option>
+            </select>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Thousands separator</div>
+            <select class="sdpi-item-value select" id="thousandsSeparator" name="thousandsSeparator">
+                <option value="," selected>Comma (,)</option>
+                <option value=".">Period (.)</option>
+                <option value=" ">Space</option>
+                <option value="'">Apostrophe (')</option>
+            </select>
+        </div>
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Decimal separator</div>
+            <select class="sdpi-item-value select" id="decimalSeparator" name="decimalSeparator">
+                <option value=".">Period (.)</option>
+                <option value=",">Comma (,)</option>
             </select>
         </div>
         <div class="sdpi-item">

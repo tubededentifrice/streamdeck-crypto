@@ -4,7 +4,7 @@ describe("formatters", () => {
     describe("getRoundedValue", () => {
         test("applies multiplier before formatting in auto mode", () => {
             const result = formatters.getRoundedValue(150.1234, 2, 10, "auto");
-            expect(result).toBe("1501.23");
+            expect(result).toBe("1,501.23");
         });
 
         test("falls back to default precision when digits invalid", () => {
@@ -27,7 +27,15 @@ describe("formatters", () => {
 
         test("formats with grouping in full mode", () => {
             const formatted = formatters.getRoundedValue(123456.789, 2, 1, "full");
-            expect(formatted.replace(/,/g, "")).toBe("123456.79");
+            expect(formatted).toBe("123,456.79");
+        });
+
+        test("respects custom thousands and decimal separators", () => {
+            const formatted = formatters.getRoundedValue(123456.789, 2, 1, "full", {
+                thousandsSeparator: " ",
+                decimalSeparator: ","
+            });
+            expect(formatted).toBe("123 456,79");
         });
     });
 

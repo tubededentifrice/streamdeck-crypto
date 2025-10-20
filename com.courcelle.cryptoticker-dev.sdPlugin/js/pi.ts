@@ -564,6 +564,14 @@ const settingsConfig = {
         "default": defaultSettings.priceFormat,
         "value": document.getElementById("priceFormat")
     },
+    "thousandsSeparator": {
+        "default": defaultSettings.thousandsSeparator,
+        "value": document.getElementById("thousandsSeparator")
+    },
+    "decimalSeparator": {
+        "default": defaultSettings.decimalSeparator,
+        "value": document.getElementById("decimalSeparator")
+    },
     "font": {
         "default": defaultSettings.font,
         "value": document.getElementById("font")
