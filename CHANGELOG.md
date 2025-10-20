@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.2 - 2025-10-20
+
+- No notable changes.
+
 ## 2.1.1 - 2025-10-20
 
 ### Other changes
