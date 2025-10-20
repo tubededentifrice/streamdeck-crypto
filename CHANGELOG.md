@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.2 - 2025-10-20
+
+- No notable changes.
+
+## 2.1.1 - 2025-10-20
+
+### Other changes
+- Configurable decimal and thousands separators (9515074)
+- Fix compact formatting (#44) (b0afd9c)
+
 ## 2.1.0 - 2025-10-20
 
 ### Other changes

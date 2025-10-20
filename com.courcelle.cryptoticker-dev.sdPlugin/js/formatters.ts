@@ -14,10 +14,10 @@
     type NumericFormatMode = typeof NUMERIC_FORMATS[number];
 
     const COMPACT_UNITS = [
-        { value: 1000000000000, suffix: "T" },
-        { value: 1000000000, suffix: "B" },
-        { value: 1000000, suffix: "M" },
-        { value: 1000, suffix: "K" }
+        { value: 1_000_000_000_000, suffix: "T" },
+        { value: 1_000_000_000, suffix: "B" },
+        { value: 1_000_000, suffix: "M" },
+        { value: 1_000, suffix: "K" }
     ] as const;
 
     const DEFAULT_THOUSANDS_SEPARATOR = ",";
