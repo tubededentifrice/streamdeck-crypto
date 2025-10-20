@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0 - 2025-10-20
+
+### Other changes
+- Embed fonts in the package (ca5dbea)
+
 ## 2.0.2 - 2025-10-08
 
 ### Features
