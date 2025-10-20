@@ -1,6 +1,6 @@
 {
   "name": "streamdeck-crypto",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "StreamDeck Crypto ticker plugin",
   "devDependencies": {
     "@types/jest": "^29.5.12",

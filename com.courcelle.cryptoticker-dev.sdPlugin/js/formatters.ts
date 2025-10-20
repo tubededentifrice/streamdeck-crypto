@@ -14,9 +14,9 @@
     type NumericFormatMode = typeof NUMERIC_FORMATS[number];
 
     const COMPACT_UNITS = [
-        { value: 1000*1000*1000*1000, suffix: "T" },
-        { value: 1000*1000*1000, suffix: "B" },
-        { value: 1000*1000, suffix: "M" },
+        { value: 1000 * 1000 * 1000 * 1000, suffix: "T" },
+        { value: 1000 * 1000 * 1000, suffix: "B" },
+        { value: 1000 * 1000, suffix: "M" },
         { value: 1000, suffix: "K" }
     ] as const;
 
