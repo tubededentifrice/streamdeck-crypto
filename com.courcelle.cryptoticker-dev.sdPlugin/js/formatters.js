@@ -10,13 +10,11 @@
 }(typeof self !== "undefined" ? self : this, function () {
     // Use const assertion for literal types
     const NUMERIC_FORMATS = ["auto", "full", "compact", "plain"];
-    // Use readonly tuple for compact units, only above 100 units of the thing
-    // to avoid over-rounding
     const COMPACT_UNITS = [
-        { value: 100000000000000, suffix: "T" }, // Only above 100T
-        { value: 100000000000, suffix: "B" }, // Only above 100B
-        { value: 100000000, suffix: "M" }, // Only above 100M
-        { value: 100000, suffix: "K" } // Only above 100K
+        { value: 1000000000000, suffix: "T" },
+        { value: 1000000000, suffix: "B" },
+        { value: 1000000, suffix: "M" },
+        { value: 1000, suffix: "K" }
     ];
     // Shared formatter for action + PI: handles localization, scaling, compact suffixes, and bad input.
     function getRoundedValue(value, digits, multiplier, format) {
@@ -58,7 +56,7 @@
                 let suffix = "";
                 let compactValue = absoluteValue;
                 for (const unit of COMPACT_UNITS) {
-                    if (absoluteValue >= unit.value) {
+                    if (absoluteValue >= unit.value * 100) {
                         suffix = unit.suffix;
                         compactValue = absoluteValue / unit.value;
                         break;
