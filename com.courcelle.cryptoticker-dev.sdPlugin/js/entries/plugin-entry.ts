@@ -3,6 +3,7 @@ import '../config';
 import '../providers/connection-states';
 import '../providers/subscription-key';
 import '../providers/provider-interface';
+import '../providers/fetch-utils';
 import '../providers/ticker-subscription-manager';
 import '../providers/generic-provider';
 import '../default-settings';

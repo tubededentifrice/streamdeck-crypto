@@ -2,31 +2,28 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
-    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
-    const args = typeof module === "object" && module.exports
-        ? [
-            require("./subscription-key"),
-            require("./connection-states")
-        ]
-        : [
-            root === null || root === void 0 ? void 0 : root.CryptoTickerProviders,
-            root === null || root === void 0 ? void 0 : root.CryptoTickerConnectionStates
-        ];
+    const globalRoot = (typeof globalThis !== 'undefined' ? globalThis : root);
+    const args = typeof module === 'object' && module.exports
+        ? [require('./subscription-key'), require('./connection-states')]
+        : [root === null || root === void 0 ? void 0 : root.CryptoTickerProviders, root === null || root === void 0 ? void 0 : root.CryptoTickerConnectionStates];
     const exportsValue = factory(args[0], args[1]);
-    if (typeof module === "object" && module.exports) {
+    if (typeof module === 'object' && module.exports) {
         module.exports = exportsValue;
     }
     if (globalRoot) {
         globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
-        globalRoot.CryptoTickerProviders.TickerSubscriptionManager = exportsValue.TickerSubscriptionManager;
+        globalRoot.CryptoTickerProviders.TickerSubscriptionManager =
+            exportsValue.TickerSubscriptionManager;
     }
-}(typeof self !== "undefined" ? self : this, function (subscriptionKeyModule, connectionStatesModule) {
+})(typeof self !== 'undefined'
+    ? self
+    : this, function (subscriptionKeyModule, connectionStatesModule) {
     const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
     const ConnectionStates = connectionStatesModule || {
-        LIVE: "live",
-        DETACHED: "detached",
-        BACKUP: "backup",
-        BROKEN: "broken"
+        LIVE: 'live',
+        DETACHED: 'detached',
+        BACKUP: 'backup',
+        BROKEN: 'broken'
     };
     const DEFAULT_FALLBACK_POLL_INTERVAL_MS = 60000;
     const DEFAULT_STALE_TICKER_TIMEOUT_MS = 5 * 60 * 1000;
@@ -34,8 +31,8 @@
     function normalizeHandlers(handlers) {
         const h = handlers || {};
         return {
-            onData: typeof h.onData === "function" ? h.onData : null,
-            onError: typeof h.onError === "function" ? h.onError : null
+            onData: typeof h.onData === 'function' ? h.onData : null,
+            onError: typeof h.onError === 'function' ? h.onError : null
         };
     }
     function copyParams(params) {
@@ -52,14 +49,26 @@
     class TickerSubscriptionManager {
         constructor(options) {
             const opts = options || {};
-            this.logger = typeof opts.logger === "function" ? opts.logger : noop;
-            this.fetchTickerFn = typeof opts.fetchTicker === "function" ? opts.fetchTicker : null;
-            this.subscribeStreamingFn = typeof opts.subscribeStreaming === "function" ? opts.subscribeStreaming : null;
-            this.unsubscribeStreamingFn = typeof opts.unsubscribeStreaming === "function" ? opts.unsubscribeStreaming : null;
-            this.ensureConnectionFn = typeof opts.ensureConnection === "function" ? opts.ensureConnection : null;
-            this.subscriptionKeyBuilder = typeof opts.buildSubscriptionKey === "function" ? opts.buildSubscriptionKey : buildSubscriptionKey;
-            this.fallbackPollIntervalMs = typeof opts.fallbackPollIntervalMs === "number" ? opts.fallbackPollIntervalMs : DEFAULT_FALLBACK_POLL_INTERVAL_MS;
-            this.staleTickerTimeoutMs = typeof opts.staleTickerTimeoutMs === "number" ? opts.staleTickerTimeoutMs : DEFAULT_STALE_TICKER_TIMEOUT_MS;
+            this.logger = typeof opts.logger === 'function' ? opts.logger : noop;
+            this.fetchTickerFn = typeof opts.fetchTicker === 'function' ? opts.fetchTicker : null;
+            this.subscribeStreamingFn =
+                typeof opts.subscribeStreaming === 'function' ? opts.subscribeStreaming : null;
+            this.unsubscribeStreamingFn =
+                typeof opts.unsubscribeStreaming === 'function' ? opts.unsubscribeStreaming : null;
+            this.ensureConnectionFn =
+                typeof opts.ensureConnection === 'function' ? opts.ensureConnection : null;
+            this.subscriptionKeyBuilder =
+                typeof opts.buildSubscriptionKey === 'function'
+                    ? opts.buildSubscriptionKey
+                    : buildSubscriptionKey;
+            this.fallbackPollIntervalMs =
+                typeof opts.fallbackPollIntervalMs === 'number'
+                    ? opts.fallbackPollIntervalMs
+                    : DEFAULT_FALLBACK_POLL_INTERVAL_MS;
+            this.staleTickerTimeoutMs =
+                typeof opts.staleTickerTimeoutMs === 'number'
+                    ? opts.staleTickerTimeoutMs
+                    : DEFAULT_STALE_TICKER_TIMEOUT_MS;
             this.connectionStates = ConnectionStates;
             this.entries = {};
             this.cache = {};
@@ -74,29 +83,12 @@
                     this.ensureConnectionFn();
                 }
                 catch (err) {
-                    this.logger("TickerSubscriptionManager: ensureConnection error", err);
+                    this.logger('TickerSubscriptionManager: ensureConnection error', err);
                 }
             }
             this.ensureStreaming(entry);
             this.startFallbackPolling(entry);
-            const self = this;
-            if (this.fetchTickerFn) {
-                this.fetchTickerFn(entry.params).then(function (ticker) {
-                    self.applyTickerStateFromFetch(entry, ticker);
-                    self.cache[entry.key] = ticker;
-                    self.notifySubscribers(entry, ticker);
-                }).catch(function (err) {
-                    self.logger("TickerSubscriptionManager: fetchTicker error", err);
-                    if (normalizedHandlers.onError) {
-                        try {
-                            normalizedHandlers.onError(err);
-                        }
-                        catch (handlerErr) {
-                            self.logger("TickerSubscriptionManager: onError handler threw", handlerErr);
-                        }
-                    }
-                });
-            }
+            this.fetchEntry(entry, 'fetchTicker');
             return {
                 key: entry.key,
                 unsubscribe: () => {
@@ -147,7 +139,7 @@
             return this.buildKey(p.exchange, p.symbol, p.fromCurrency, p.toCurrency);
         }
         forEachEntry(callback) {
-            if (typeof callback !== "function") {
+            if (typeof callback !== 'function') {
                 return;
             }
             const keys = Object.keys(this.entries);
@@ -157,45 +149,64 @@
             }
         }
         ensureStreaming(entry) {
-            if (!entry || entry.streamingActive || !this.subscribeStreamingFn) {
-                if (entry && !entry.streamingActive) {
-                    entry.streamingActive = Boolean(this.subscribeStreamingFn);
-                }
+            if (!entry ||
+                entry.streamingActive ||
+                entry.streamingPending ||
+                !this.subscribeStreamingFn) {
                 return;
             }
             try {
+                entry.streamingPending = true;
                 const result = this.subscribeStreamingFn(entry);
-                if (result && typeof result.then === "function") {
-                    result.then(() => {
-                        entry.streamingActive = true;
-                    }).catch((err) => {
+                if (result && typeof result.then === 'function') {
+                    result
+                        .then((subscribed) => {
+                        entry.streamingPending = false;
+                        if (!this.isEntryActive(entry)) {
+                            if (subscribed !== false && this.unsubscribeStreamingFn) {
+                                this.unsubscribeStreamingFn(entry);
+                            }
+                            return;
+                        }
+                        entry.streamingActive = subscribed !== false;
+                    })
+                        .catch((err) => {
+                        entry.streamingPending = false;
                         entry.streamingActive = false;
-                        this.logger("TickerSubscriptionManager: subscribeStreaming promise rejected", err);
+                        this.logger('TickerSubscriptionManager: subscribeStreaming promise rejected', err);
                     });
                 }
                 else if (result === false) {
+                    entry.streamingPending = false;
                     entry.streamingActive = false;
                 }
                 else {
+                    entry.streamingPending = false;
                     entry.streamingActive = true;
                 }
             }
             catch (err) {
+                entry.streamingPending = false;
                 entry.streamingActive = false;
-                this.logger("TickerSubscriptionManager: subscribeStreaming error", err);
+                this.logger('TickerSubscriptionManager: subscribeStreaming error', err);
             }
         }
         stopStreaming(entry) {
-            if (!entry || !this.unsubscribeStreamingFn || !entry.streamingActive) {
+            if (!entry ||
+                !this.unsubscribeStreamingFn ||
+                (!entry.streamingActive && !entry.streamingPending)) {
                 return;
             }
             try {
+                entry.streamingPending = false;
                 const result = this.unsubscribeStreamingFn(entry);
-                if (result && typeof result.then === "function") {
-                    result.then(() => {
+                if (result && typeof result.then === 'function') {
+                    result
+                        .then(() => {
                         entry.streamingActive = false;
-                    }).catch((err) => {
-                        this.logger("TickerSubscriptionManager: unsubscribeStreaming promise rejected", err);
+                    })
+                        .catch((err) => {
+                        this.logger('TickerSubscriptionManager: unsubscribeStreaming promise rejected', err);
                     });
                 }
                 else {
@@ -204,7 +215,7 @@
             }
             catch (err) {
                 entry.streamingActive = false;
-                this.logger("TickerSubscriptionManager: unsubscribeStreaming error", err);
+                this.logger('TickerSubscriptionManager: unsubscribeStreaming error', err);
             }
         }
         notifySubscribers(entry, ticker) {
@@ -219,7 +230,7 @@
                         subscriber.onData(ticker);
                     }
                     catch (err) {
-                        this.logger("TickerSubscriptionManager: onData handler threw", err);
+                        this.logger('TickerSubscriptionManager: onData handler threw', err);
                     }
                 }
             }
@@ -241,21 +252,13 @@
             entry.fallbackTimerId = null;
         }
         pollEntryIfNeeded(entry) {
-            if (!entry || !this.fetchTickerFn) {
+            if (!entry || !this.fetchTickerFn || entry.fetchInFlight) {
                 return;
             }
             if (!this.shouldPollEntry(entry)) {
                 return;
             }
-            const self = this;
-            this.fetchTickerFn(entry.params).then(function (ticker) {
-                self.applyTickerStateFromFetch(entry, ticker);
-                self.cache[entry.key] = ticker;
-                self.notifySubscribers(entry, ticker);
-            }).catch(function (err) {
-                self.logger("TickerSubscriptionManager: fallback fetch error", err);
-                self.handleFetchError(entry);
-            });
+            this.fetchEntry(entry, 'fallback fetch');
         }
         // Poll only when streaming idle or stale to reduce backend load yet recover from socket hiccups.
         shouldPollEntry(entry) {
@@ -281,6 +284,8 @@
                     params: copyParams(params),
                     subscribers: [],
                     streamingActive: false,
+                    streamingPending: false,
+                    fetchInFlight: false,
                     lastStreamUpdate: 0,
                     fallbackTimerId: null,
                     meta: {},
@@ -290,12 +295,69 @@
             }
             return entry;
         }
+        isEntryActive(entry) {
+            return !!entry && this.entries[entry.key] === entry && entry.subscribers.length > 0;
+        }
+        fetchEntry(entry, label) {
+            if (!entry || !this.fetchTickerFn || entry.fetchInFlight) {
+                return null;
+            }
+            entry.fetchInFlight = true;
+            let request;
+            try {
+                request = Promise.resolve(this.fetchTickerFn(entry.params));
+            }
+            catch (err) {
+                request = Promise.reject(err);
+            }
+            request
+                .then((ticker) => {
+                entry.fetchInFlight = false;
+                if (!this.isEntryActive(entry)) {
+                    return;
+                }
+                if (!ticker || typeof ticker !== 'object') {
+                    throw new Error('TickerSubscriptionManager: empty ticker response');
+                }
+                this.applyTickerStateFromFetch(entry, ticker);
+                this.cache[entry.key] = ticker;
+                this.notifySubscribers(entry, ticker);
+            })
+                .catch((err) => {
+                entry.fetchInFlight = false;
+                if (!this.isEntryActive(entry)) {
+                    return;
+                }
+                this.logger('TickerSubscriptionManager: ' + label + ' error', err);
+                this.notifySubscriberErrors(entry, err);
+                this.handleFetchError(entry);
+            });
+            return request;
+        }
+        notifySubscriberErrors(entry, error) {
+            if (!entry) {
+                return;
+            }
+            const subscribers = entry.subscribers.slice();
+            for (let i = 0; i < subscribers.length; i++) {
+                const handler = subscribers[i] && subscribers[i].onError;
+                if (!handler) {
+                    continue;
+                }
+                try {
+                    handler(error);
+                }
+                catch (handlerErr) {
+                    this.logger('TickerSubscriptionManager: onError handler threw', handlerErr);
+                }
+            }
+        }
         setEntryConnectionState(entry, state, ticker) {
             if (!entry) {
                 return;
             }
             entry.connectionState = state;
-            if (ticker && typeof ticker === "object") {
+            if (ticker && typeof ticker === 'object') {
                 ticker.connectionState = state;
             }
         }
@@ -303,7 +365,8 @@
             if (!entry || !ticker) {
                 return;
             }
-            const state = ticker.connectionState || (entry.streamingActive ? this.connectionStates.LIVE : this.connectionStates.DETACHED);
+            const state = ticker.connectionState ||
+                (entry.streamingActive ? this.connectionStates.LIVE : this.connectionStates.DETACHED);
             this.setEntryConnectionState(entry, state, ticker);
         }
         // REST failure: mark BROKEN and cache placeholder so later subscribers see same status tile.
@@ -337,4 +400,4 @@
     return {
         TickerSubscriptionManager: TickerSubscriptionManager
     };
-}));
+});

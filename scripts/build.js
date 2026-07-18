@@ -10,6 +10,34 @@ const stagingRoot = path.join(repoRoot, 'dist');
 const releasePluginFolder = 'com.courcelle.cryptoticker.sdPlugin';
 const releasePackageName = 'com.courcelle.cryptoticker.streamDeckPlugin';
 
+// Keep release payloads limited to files loaded by the manifests/HTML entry points.
+const releaseRuntimePaths = [
+  'en.json',
+  'index.html',
+  'index_pi.html',
+  'previews',
+  'fonts',
+  'css',
+  'images/actionDefaultImage.png',
+  'images/actionDefaultImage@2x.png',
+  'images/actionIcon3.svg',
+  'images/categoryIcon3.svg',
+  'images/pluginIcon.png',
+  'images/pluginIcon@2x.png',
+  'libs/js/constants.js',
+  'libs/js/prototypes.js',
+  'libs/js/timers.js',
+  'libs/js/utils.js',
+  'libs/js/events.js',
+  'libs/js/api.js',
+  'libs/js/stream-deck.js',
+  'libs/js/action.js',
+  'js/plugin.bundle.js',
+  'js/pi.bundle.js',
+  'js/connection-status-icons.js',
+  'js/providers/connection-states.js'
+];
+
 const fsp = fs.promises;
 
 function logStep(message) {
@@ -30,8 +58,7 @@ function runCommand(command, args = [], options = {}) {
   const spawnOptions = {
     cwd,
     stdio: 'inherit',
-    ...options,
-    cwd,
+    ...options
   };
 
   const result = spawnSync(command, args, spawnOptions);
@@ -41,7 +68,9 @@ function runCommand(command, args = [], options = {}) {
   }
 
   if (result.status !== 0) {
-    fail(`Command failed: ${fullCommand}\nWorking directory: ${cwd}\nExited with code ${result.status}`);
+    fail(
+      `Command failed: ${fullCommand}\nWorking directory: ${cwd}\nExited with code ${result.status}`
+    );
   }
 }
 
@@ -56,25 +85,28 @@ async function ensureDir(dirPath) {
 
 async function copyDevPluginToStaging(stagingDir) {
   await fsp.rm(stagingDir, { recursive: true, force: true });
-  await ensureDir(path.dirname(stagingDir));
-  await fsp.cp(devPluginDir, stagingDir, { recursive: true });
+  await ensureDir(stagingDir);
+
+  for (const relativePath of releaseRuntimePaths) {
+    const sourcePath = path.join(devPluginDir, relativePath);
+    const destinationPath = path.join(stagingDir, relativePath);
+    await ensureDir(path.dirname(destinationPath));
+    await fsp.cp(sourcePath, destinationPath, { recursive: true });
+  }
 
   const pubManifest = path.join(devPluginDir, 'manifest.pub.json');
   const stagingManifest = path.join(stagingDir, 'manifest.json');
 
   await fsp.copyFile(pubManifest, stagingManifest);
-
-  for (const extra of ['manifest.pub.json', 'manifest.dev.json']) {
-    const extraPath = path.join(stagingDir, extra);
-    await fsp.rm(extraPath, { force: true });
-  }
 }
 
 function ensureStreamDeckCliAvailable() {
   const result = spawnSync('streamdeck', ['--version'], { stdio: 'ignore' });
 
   if (result.error && result.error.code === 'ENOENT') {
-    fail('The "streamdeck" CLI was not found in PATH. Install Elgato\'s Stream Deck CLI to continue.');
+    fail(
+      'The "streamdeck" CLI was not found in PATH. Install Elgato\'s Stream Deck CLI to continue.'
+    );
   }
 }
 
@@ -90,7 +122,7 @@ async function packagePlugin(stagingDir) {
 
   const result = spawnSync('streamdeck', ['pack', releasePluginFolder], {
     cwd: stagingDir,
-    stdio: 'inherit',
+    stdio: 'inherit'
   });
 
   if (result.error) {

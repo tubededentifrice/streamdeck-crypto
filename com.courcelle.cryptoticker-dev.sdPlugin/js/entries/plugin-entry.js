@@ -5,6 +5,7 @@ require("../config");
 require("../providers/connection-states");
 require("../providers/subscription-key");
 require("../providers/provider-interface");
+require("../providers/fetch-utils");
 require("../providers/ticker-subscription-manager");
 require("../providers/generic-provider");
 require("../default-settings");

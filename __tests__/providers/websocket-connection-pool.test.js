@@ -1,78 +1,150 @@
-const { WebSocketConnectionPool } = require("../../com.courcelle.cryptoticker-dev.sdPlugin/js/providers/websocket-connection-pool.js");
-const { MockWebSocket } = require("../../test-utils/mock-websocket");
+const {
+  WebSocketConnectionPool
+} = require('../../com.courcelle.cryptoticker-dev.sdPlugin/js/providers/websocket-connection-pool.js');
+const { MockWebSocket } = require('../../test-utils/mock-websocket');
 
-describe("WebSocketConnectionPool", () => {
-    afterEach(() => {
-        jest.useRealTimers();
+describe('WebSocketConnectionPool', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('subscribing creates socket and subscribes on open', () => {
+    const sockets = [];
+    const subscribeHandler = jest.fn();
+    const pool = new WebSocketConnectionPool({
+      createWebSocket: () => {
+        const ws = new MockWebSocket();
+        sockets.push(ws);
+        return ws;
+      },
+      subscribe: subscribeHandler,
+      reconnectDelayMs: 5
     });
 
-    test("subscribing creates socket and subscribes on open", () => {
-        const sockets = [];
-        const subscribeHandler = jest.fn();
-        const pool = new WebSocketConnectionPool({
-            createWebSocket: () => {
-                const ws = new MockWebSocket();
-                sockets.push(ws);
-                return ws;
-            },
-            subscribe: subscribeHandler,
-            reconnectDelayMs: 5
+    const onData = jest.fn();
+    pool.subscribe('BTCUSDT', { onData });
+    expect(sockets).toHaveLength(1);
+
+    sockets[0].triggerOpen();
+    expect(subscribeHandler).toHaveBeenCalledWith(sockets[0], 'BTCUSDT', {});
+
+    pool.dispatch('BTCUSDT', { price: 1 });
+    expect(onData).toHaveBeenCalledWith({ price: 1 }, undefined, null);
+  });
+
+  test('unexpected close schedules reconnect and reuses subscribers', () => {
+    jest.useFakeTimers();
+    const sockets = [];
+    const pool = new WebSocketConnectionPool({
+      createWebSocket: () => {
+        const ws = new MockWebSocket();
+        sockets.push(ws);
+        return ws;
+      },
+      subscribe: jest.fn(),
+      reconnectDelayMs: 10
+    });
+
+    pool.subscribe('ETHUSDT', { onData: jest.fn() });
+    const firstSocket = sockets[0];
+    firstSocket.triggerOpen();
+    expect(pool.ws).toBe(firstSocket);
+
+    firstSocket.triggerClose({ code: 1006 });
+    expect(pool.ws).toBeNull();
+
+    jest.advanceTimersByTime(11);
+    expect(sockets).toHaveLength(2);
+  });
+
+  test('removing last subscriber unsubscribes from socket', () => {
+    const sockets = [];
+    const unsubscribeHandler = jest.fn();
+    const pool = new WebSocketConnectionPool({
+      createWebSocket: () => {
+        const ws = new MockWebSocket();
+        sockets.push(ws);
+        return ws;
+      },
+      subscribe: jest.fn(),
+      unsubscribe: unsubscribeHandler,
+      reconnectDelayMs: 10
+    });
+
+    const subscription = pool.subscribe('XRPUSDT', { onData: jest.fn() });
+    sockets[0].triggerOpen();
+    subscription.unsubscribe();
+
+    expect(unsubscribeHandler).toHaveBeenCalledWith(sockets[0], 'XRPUSDT', {});
+  });
+
+  test('ignores close events from a replaced socket', () => {
+    const sockets = [];
+    const pool = new WebSocketConnectionPool({
+      createWebSocket: () => {
+        const ws = new MockWebSocket();
+        ws.close = jest.fn(() => {
+          ws.readyState = MockWebSocket.CLOSED;
         });
-
-        const onData = jest.fn();
-        pool.subscribe("BTCUSDT", { onData });
-        expect(sockets).toHaveLength(1);
-
-        sockets[0].triggerOpen();
-        expect(subscribeHandler).toHaveBeenCalledWith(sockets[0], "BTCUSDT", {});
-
-        pool.dispatch("BTCUSDT", { price: 1 });
-        expect(onData).toHaveBeenCalledWith({ price: 1 }, undefined, null);
+        sockets.push(ws);
+        return ws;
+      },
+      subscribe: jest.fn()
     });
 
-    test("unexpected close schedules reconnect and reuses subscribers", () => {
-        jest.useFakeTimers();
-        const sockets = [];
-        const pool = new WebSocketConnectionPool({
-            createWebSocket: () => {
-                const ws = new MockWebSocket();
-                sockets.push(ws);
-                return ws;
-            },
-            subscribe: jest.fn(),
-            reconnectDelayMs: 10
-        });
+    const firstSubscription = pool.subscribe('BTCUSDT', { onData: jest.fn() });
+    const firstSocket = sockets[0];
+    firstSocket.triggerOpen();
+    firstSubscription.unsubscribe();
 
-        pool.subscribe("ETHUSDT", { onData: jest.fn() });
-        const firstSocket = sockets[0];
-        firstSocket.triggerOpen();
-        expect(pool.ws).toBe(firstSocket);
+    pool.subscribe('ETHUSDT', { onData: jest.fn() });
+    const secondSocket = sockets[1];
+    secondSocket.triggerOpen();
+    firstSocket.triggerClose({ code: 1000 });
 
-        firstSocket.triggerClose({ code: 1006 });
-        expect(pool.ws).toBeNull();
+    expect(pool.ws).toBe(secondSocket);
+  });
 
-        jest.advanceTimersByTime(11);
-        expect(sockets).toHaveLength(2);
+  test('retries when socket construction throws', () => {
+    jest.useFakeTimers();
+    let attempts = 0;
+    const pool = new WebSocketConnectionPool({
+      createWebSocket: () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error('constructor failed');
+        }
+        return new MockWebSocket();
+      },
+      subscribe: jest.fn(),
+      reconnectDelayMs: 10
     });
 
-    test("removing last subscriber unsubscribes from socket", () => {
-        const sockets = [];
-        const unsubscribeHandler = jest.fn();
-        const pool = new WebSocketConnectionPool({
-            createWebSocket: () => {
-                const ws = new MockWebSocket();
-                sockets.push(ws);
-                return ws;
-            },
-            subscribe: jest.fn(),
-            unsubscribe: unsubscribeHandler,
-            reconnectDelayMs: 10
-        });
+    pool.subscribe('ADAUSDT', { onData: jest.fn() });
+    jest.advanceTimersByTime(11);
 
-        const subscription = pool.subscribe("XRPUSDT", { onData: jest.fn() });
-        sockets[0].triggerOpen();
-        subscription.unsubscribe();
+    expect(attempts).toBe(2);
+    expect(pool.ws).not.toBeNull();
+  });
 
-        expect(unsubscribeHandler).toHaveBeenCalledWith(sockets[0], "XRPUSDT", {});
+  test('retries when a socket never opens', () => {
+    jest.useFakeTimers();
+    const sockets = [];
+    const pool = new WebSocketConnectionPool({
+      createWebSocket: () => {
+        const ws = new MockWebSocket();
+        sockets.push(ws);
+        return ws;
+      },
+      subscribe: jest.fn(),
+      connectionTimeoutMs: 10,
+      reconnectDelayMs: 5
     });
+
+    pool.subscribe('SOLUSDT', { onData: jest.fn() });
+    jest.advanceTimersByTime(11);
+    jest.advanceTimersByTime(6);
+
+    expect(sockets).toHaveLength(2);
+  });
 });

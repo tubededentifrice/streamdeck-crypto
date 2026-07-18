@@ -1,23 +1,29 @@
-"use strict";
+'use strict';
 (function loadTickerState(root, factory) {
     const exports = factory();
-    if (typeof module === "object" && module.exports) {
+    if (typeof module === 'object' && module.exports) {
         module.exports = exports;
     }
-    if (root && typeof root === "object") {
+    if (root && typeof root === 'object') {
         root.CryptoTickerState = exports;
     }
-})(typeof self !== "undefined" ? self : this, function buildTickerState() {
+})(typeof self !== 'undefined'
+    ? self
+    : this, function buildTickerState() {
     const contextDetails = {};
     const contextSubscriptions = {};
     const contextConnectionStates = {};
     const conversionRatesCache = {};
     const candlesCache = {};
     const lastGoodTickerValues = {};
+    const contextRevisions = {};
     function setContextDetails(context, settings) {
+        const revision = (contextRevisions[context] || 0) + 1;
+        contextRevisions[context] = revision;
         contextDetails[context] = {
             context,
-            settings
+            settings,
+            revision
         };
     }
     function getContextDetails(context) {
@@ -30,6 +36,7 @@
     }
     function clearContextDetails(context) {
         delete contextDetails[context];
+        delete contextRevisions[context];
         delete lastGoodTickerValues[context];
     }
     function setSubscription(context, subscription) {
@@ -90,9 +97,12 @@
         Object.keys(contextDetails).forEach((key) => {
             delete contextDetails[key];
         });
+        Object.keys(contextRevisions).forEach((key) => {
+            delete contextRevisions[key];
+        });
         Object.keys(contextSubscriptions).forEach((key) => {
             const sub = contextSubscriptions[key];
-            if (sub && typeof sub.unsubscribe === "function") {
+            if (sub && typeof sub.unsubscribe === 'function') {
                 try {
                     sub.unsubscribe();
                 }
@@ -119,7 +129,7 @@
         if (!context || !values) {
             return;
         }
-        const safeTimestamp = typeof timestamp === "number" ? timestamp : Date.now();
+        const safeTimestamp = typeof timestamp === 'number' ? timestamp : Date.now();
         lastGoodTickerValues[context] = {
             values: Object.assign({}, values),
             timestamp: safeTimestamp

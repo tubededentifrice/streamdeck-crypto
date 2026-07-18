@@ -2,19 +2,21 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
-    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root);
+    const globalRoot = (typeof globalThis !== 'undefined' ? globalThis : root);
     const exportsValue = factory();
-    if (typeof module === "object" && module.exports) {
+    if (typeof module === 'object' && module.exports) {
         module.exports = exportsValue;
     }
     if (globalRoot) {
         globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
         globalRoot.CryptoTickerProviders.WebSocketConnectionPool = exportsValue.WebSocketConnectionPool;
     }
-}(typeof self !== "undefined" ? self : this, function () {
+})(typeof self !== 'undefined'
+    ? self
+    : this, function () {
     function noop() { }
     function mergeMeta(target, updates) {
-        if (!updates || typeof updates !== "object") {
+        if (!updates || typeof updates !== 'object') {
             return target;
         }
         const keys = Object.keys(updates);
@@ -27,38 +29,44 @@
     class WebSocketConnectionPool {
         constructor(options) {
             const opts = options || {};
-            this.logger = typeof opts.logger === "function" ? opts.logger : noop;
-            this.createWebSocket = typeof opts.createWebSocket === "function" ? opts.createWebSocket : null;
-            this.subscribeHandler = typeof opts.subscribe === "function" ? opts.subscribe : null;
-            this.unsubscribeHandler = typeof opts.unsubscribe === "function" ? opts.unsubscribe : null;
-            this.handleMessageFn = typeof opts.handleMessage === "function" ? opts.handleMessage : null;
-            this.onOpen = typeof opts.onOpen === "function" ? opts.onOpen : null;
-            this.onError = typeof opts.onError === "function" ? opts.onError : null;
-            this.onClose = typeof opts.onClose === "function" ? opts.onClose : null;
-            this.reconnectDelayMs = typeof opts.reconnectDelayMs === "number" ? opts.reconnectDelayMs : 5000;
-            this.autoCloseDelayMs = typeof opts.autoCloseDelayMs === "number" ? opts.autoCloseDelayMs : 0;
+            this.logger = typeof opts.logger === 'function' ? opts.logger : noop;
+            this.createWebSocket =
+                typeof opts.createWebSocket === 'function' ? opts.createWebSocket : null;
+            this.subscribeHandler = typeof opts.subscribe === 'function' ? opts.subscribe : null;
+            this.unsubscribeHandler = typeof opts.unsubscribe === 'function' ? opts.unsubscribe : null;
+            this.handleMessageFn = typeof opts.handleMessage === 'function' ? opts.handleMessage : null;
+            this.onOpen = typeof opts.onOpen === 'function' ? opts.onOpen : null;
+            this.onError = typeof opts.onError === 'function' ? opts.onError : null;
+            this.onClose = typeof opts.onClose === 'function' ? opts.onClose : null;
+            this.reconnectDelayMs =
+                typeof opts.reconnectDelayMs === 'number' ? opts.reconnectDelayMs : 5000;
+            this.connectionTimeoutMs =
+                typeof opts.connectionTimeoutMs === 'number' ? opts.connectionTimeoutMs : 10000;
+            this.autoCloseDelayMs =
+                typeof opts.autoCloseDelayMs === 'number' ? opts.autoCloseDelayMs : 0;
             this.shouldResubscribeOnReconnect = opts.shouldResubscribeOnReconnect !== false;
             this.symbolEntries = {};
             this.ws = null;
             this.wsClosedByUser = false;
             this.reconnectTimer = null;
             this.closeTimer = null;
+            this.connectionTimer = null;
             this.isConnecting = false;
         }
         // Pool used by Binance/Bitfinex: multiplex symbols on one socket to stay under WebView limits.
         subscribe(symbol, subscriberOptions) {
-            const normalizedSymbol = typeof symbol === "string" ? symbol : "";
+            const normalizedSymbol = typeof symbol === 'string' ? symbol : '';
             if (!normalizedSymbol) {
-                this.logger("WebSocketConnectionPool: subscribe called without symbol");
+                this.logger('WebSocketConnectionPool: subscribe called without symbol');
                 return null;
             }
             if (!this.createWebSocket) {
-                this.logger("WebSocketConnectionPool: createWebSocket not configured");
+                this.logger('WebSocketConnectionPool: createWebSocket not configured');
                 return null;
             }
             const subscriber = this.buildSubscriber(subscriberOptions);
             if (!subscriber.onData) {
-                this.logger("WebSocketConnectionPool: subscriber missing onData handler for", normalizedSymbol);
+                this.logger('WebSocketConnectionPool: subscriber missing onData handler for', normalizedSymbol);
                 return null;
             }
             let entry = this.symbolEntries[normalizedSymbol];
@@ -105,12 +113,14 @@
             if (entry.subscribers.length > 0) {
                 return;
             }
-            if (this.isSocketOpen() && this.unsubscribeHandler && (entry.subscribed || entry.subscriptionRequested)) {
+            if (this.isSocketOpen() &&
+                this.unsubscribeHandler &&
+                (entry.subscribed || entry.subscriptionRequested)) {
                 try {
                     this.unsubscribeHandler(this.ws, symbol, entry.meta);
                 }
                 catch (err) {
-                    this.logger("WebSocketConnectionPool: unsubscribe handler error", err);
+                    this.logger('WebSocketConnectionPool: unsubscribe handler error', err);
                 }
             }
             delete this.symbolEntries[symbol];
@@ -125,11 +135,12 @@
                 ws = this.createWebSocket();
             }
             catch (err) {
-                this.logger("WebSocketConnectionPool: failed to create WebSocket", err);
+                this.logger('WebSocketConnectionPool: failed to create WebSocket', err);
+                this.scheduleReconnect();
                 return;
             }
             if (!ws) {
-                this.logger("WebSocketConnectionPool: createWebSocket returned falsy value");
+                this.logger('WebSocketConnectionPool: createWebSocket returned falsy value');
                 this.scheduleReconnect();
                 return;
             }
@@ -137,53 +148,65 @@
             this.wsClosedByUser = false;
             this.isConnecting = true;
             this.attachSocketHandlers(ws);
+            this.scheduleConnectionTimeout(ws);
         }
         attachSocketHandlers(ws) {
             const self = this;
             ws.onopen = function () {
+                if (self.ws !== ws) {
+                    return;
+                }
+                self.clearConnectionTimeout();
                 self.isConnecting = false;
                 if (self.onOpen) {
                     try {
                         self.onOpen(self.ws);
                     }
                     catch (err) {
-                        self.logger("WebSocketConnectionPool: onOpen handler error", err);
+                        self.logger('WebSocketConnectionPool: onOpen handler error', err);
                     }
                 }
                 self.flushPendingSubscriptions();
             };
             ws.onmessage = function (event) {
-                if (!self.handleMessageFn) {
+                if (self.ws !== ws || !self.handleMessageFn) {
                     return;
                 }
                 try {
                     self.handleMessageFn(event, self.buildMessageHelpers());
                 }
                 catch (err) {
-                    self.logger("WebSocketConnectionPool: handleMessage error", err);
+                    self.logger('WebSocketConnectionPool: handleMessage error', err);
                 }
             };
             ws.onerror = function (err) {
+                if (self.ws !== ws) {
+                    return;
+                }
                 if (self.onError) {
                     try {
                         self.onError(err);
                     }
                     catch (handlerErr) {
-                        self.logger("WebSocketConnectionPool: onError handler error", handlerErr);
+                        self.logger('WebSocketConnectionPool: onError handler error', handlerErr);
                     }
                 }
             };
             ws.onclose = function (event) {
-                self.handleSocketClose(event);
+                self.handleSocketClose(event, ws);
             };
         }
-        handleSocketClose(event) {
+        handleSocketClose(event, socket) {
+            if (this.ws !== socket) {
+                return;
+            }
+            this.clearConnectionTimeout();
             if (this.onClose) {
                 try {
                     this.onClose(event);
                 }
                 catch (err) {
-                    this.logger("WebSocketConnectionPool: onClose handler error", err);
+                    this.logger('WebSocketConnectionPool: onClose handler error', err);
                 }
             }
             const hadSubscribers = this.hasSubscribers();
@@ -225,6 +248,38 @@
                 this.reconnectTimer = null;
             }
         }
+        scheduleConnectionTimeout(socket) {
+            this.clearConnectionTimeout();
+            if (!this.connectionTimeoutMs) {
+                return;
+            }
+            this.connectionTimer = setTimeout(() => {
+                this.connectionTimer = null;
+                if (this.ws !== socket || !this.isConnecting) {
+                    return;
+                }
+                this.logger('WebSocketConnectionPool: connection attempt timed out');
+                try {
+                    socket.close();
+                }
+                catch (err) {
+                    this.logger('WebSocketConnectionPool: error closing timed-out socket', err);
+                    if (this.ws === socket) {
+                        this.ws = null;
+                        this.isConnecting = false;
+                        this.resetSubscriptionState();
+                        this.notifyAllDisconnected();
+                        this.scheduleReconnect();
+                    }
+                }
+            }, this.connectionTimeoutMs);
+        }
+        clearConnectionTimeout() {
+            if (this.connectionTimer) {
+                clearTimeout(this.connectionTimer);
+                this.connectionTimer = null;
+            }
+        }
         flushPendingSubscriptions() {
             const symbols = Object.keys(this.symbolEntries);
             for (let i = 0; i < symbols.length; i++) {
@@ -249,7 +304,7 @@
             }
             catch (err) {
                 entry.subscriptionRequested = false;
-                this.logger("WebSocketConnectionPool: subscribe handler error", err);
+                this.logger('WebSocketConnectionPool: subscribe handler error', err);
                 this.notifySubscribeError(entry.symbol, err);
             }
         }
@@ -269,7 +324,7 @@
             if (metaUpdates) {
                 mergeMeta(entry.meta, metaUpdates);
             }
-            const subscribers = entry.subscribers;
+            const subscribers = entry.subscribers.slice();
             for (let i = 0; i < subscribers.length; i++) {
                 const subscriber = subscribers[i];
                 if (subscriber.onSubscribed) {
@@ -277,7 +332,7 @@
                         subscriber.onSubscribed(subscriber.context);
                     }
                     catch (err) {
-                        this.logger("WebSocketConnectionPool: onSubscribed handler error", err);
+                        this.logger('WebSocketConnectionPool: onSubscribed handler error', err);
                     }
                 }
             }
@@ -287,7 +342,7 @@
             if (!entry) {
                 return;
             }
-            const subscribers = entry.subscribers;
+            const subscribers = entry.subscribers.slice();
             for (let i = 0; i < subscribers.length; i++) {
                 const subscriber = subscribers[i];
                 if (subscriber.onError) {
@@ -295,7 +350,7 @@
                         subscriber.onError(err, subscriber.context);
                     }
                     catch (handlerErr) {
-                        this.logger("WebSocketConnectionPool: onError handler error", handlerErr);
+                        this.logger('WebSocketConnectionPool: onError handler error', handlerErr);
                     }
                 }
             }
@@ -311,7 +366,7 @@
             if (!entry) {
                 return;
             }
-            const subscribers = entry.subscribers;
+            const subscribers = entry.subscribers.slice();
             for (let i = 0; i < subscribers.length; i++) {
                 const subscriber = subscribers[i];
                 if (subscriber.onDisconnected) {
@@ -319,7 +374,7 @@
                         subscriber.onDisconnected(subscriber.context);
                     }
                     catch (err) {
-                        this.logger("WebSocketConnectionPool: onDisconnected handler error", err);
+                        this.logger('WebSocketConnectionPool: onDisconnected handler error', err);
                     }
                 }
             }
@@ -330,7 +385,7 @@
             if (!entry) {
                 return;
             }
-            const subscribers = entry.subscribers;
+            const subscribers = entry.subscribers.slice();
             for (let i = 0; i < subscribers.length; i++) {
                 const subscriber = subscribers[i];
                 if (!subscriber.onData) {
@@ -340,7 +395,7 @@
                     subscriber.onData(payload, rawMessage, subscriber.context);
                 }
                 catch (err) {
-                    this.logger("WebSocketConnectionPool: subscriber onData error", err);
+                    this.logger('WebSocketConnectionPool: subscriber onData error', err);
                 }
             }
         }
@@ -373,7 +428,7 @@
             return entry ? entry.meta : null;
         }
         findSymbolByMeta(predicate) {
-            if (typeof predicate !== "function") {
+            if (typeof predicate !== 'function') {
                 return null;
             }
             const symbols = Object.keys(this.symbolEntries);
@@ -425,26 +480,29 @@
         }
         closeConnection() {
             this.clearReconnectTimer();
+            this.clearConnectionTimeout();
             if (!this.ws) {
                 return;
             }
+            const socket = this.ws;
             this.wsClosedByUser = true;
+            this.ws = null;
+            this.isConnecting = false;
             try {
-                this.ws.close();
+                socket.close();
             }
             catch (err) {
-                this.logger("WebSocketConnectionPool: error closing WebSocket", err);
+                this.logger('WebSocketConnectionPool: error closing WebSocket', err);
             }
-            this.ws = null;
         }
         buildSubscriber(options) {
             const opts = options || {};
             return {
                 context: opts.context || null,
-                onData: typeof opts.onData === "function" ? opts.onData : null,
-                onError: typeof opts.onError === "function" ? opts.onError : null,
-                onSubscribed: typeof opts.onSubscribed === "function" ? opts.onSubscribed : null,
-                onDisconnected: typeof opts.onDisconnected === "function" ? opts.onDisconnected : null
+                onData: typeof opts.onData === 'function' ? opts.onData : null,
+                onError: typeof opts.onError === 'function' ? opts.onError : null,
+                onSubscribed: typeof opts.onSubscribed === 'function' ? opts.onSubscribed : null,
+                onDisconnected: typeof opts.onDisconnected === 'function' ? opts.onDisconnected : null
             };
         }
         buildMessageHelpers() {
@@ -483,4 +541,4 @@
     return {
         WebSocketConnectionPool: WebSocketConnectionPool
     };
-}));
+});

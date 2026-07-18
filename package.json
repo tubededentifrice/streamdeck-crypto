@@ -8,16 +8,20 @@
     "@typescript-eslint/eslint-plugin": "^7.8.0",
     "@typescript-eslint/parser": "^7.8.0",
     "concurrently": "^8.2.2",
-    "esbuild": "^0.21.5",
+    "esbuild": "^0.28.1",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "husky": "^8.0.3",
     "jest": "^29.7.0",
+    "jsep": "^1.4.0",
     "lint-staged": "^15.2.2",
     "nodemon": "^3.0.0",
     "prettier": "^3.2.5",
     "ts-jest": "^29.1.1",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "canvas": "^3.2.0",
+    "jsdom": "^27.0.0",
+    "sharp": "^0.34.4"
   },
   "scripts": {
     "build": "node scripts/build.js",
@@ -45,11 +49,5 @@
     "**/*.{json,css,html}": [
       "prettier --write"
     ]
-  },
-  "dependencies": {
-    "canvas": "^3.2.0",
-    "expr-eval": "^2.0.2",
-    "jsdom": "^27.0.0",
-    "sharp": "^0.34.4"
   }
 }
