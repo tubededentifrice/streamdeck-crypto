@@ -402,30 +402,27 @@ async function fetchJsonWithRetry(url, options) {
 }
 // Normalize pair payloads into {value, symbol, display} regardless of backend format.
 function normalizePairsList(pairs) {
-    return (pairs || [])
+    const list = Array.isArray(pairs) ? pairs : [];
+    return list
         .map(function (item) {
-        if (!item) {
+        const source = typeof item === 'string' ? { value: item } : item;
+        if (!source || typeof source !== 'object') {
             return null;
         }
-        if (typeof item === 'string') {
-            const value = item.toUpperCase();
-            return {
-                value: value,
-                symbol: value.replace(/[:/]/g, ''),
-                display: value
-            };
+        const rawValue = source.value !== undefined ? source.value : source.display || source.symbol;
+        if (typeof rawValue !== 'string') {
+            return null;
         }
-        const rawValue = item.value !== undefined ? item.value : item.display || item.symbol || '';
-        const value = (rawValue || '').toUpperCase();
+        const value = rawValue.trim().toUpperCase();
         if (!value) {
             return null;
         }
-        const normalizedSymbol = (item.symbol || value.replace(/[:/]/g, '')).toUpperCase();
-        const display = (item.display || value).toUpperCase();
+        const symbol = typeof source.symbol === 'string' ? source.symbol.trim() : '';
+        const display = typeof source.display === 'string' ? source.display.trim() : '';
         return {
             value: value,
-            symbol: normalizedSymbol,
-            display: display
+            symbol: (symbol || value.replace(/\//g, '')).toUpperCase(),
+            display: (display || value).toUpperCase()
         };
     })
         .filter(function (item) {
@@ -1038,6 +1035,8 @@ const pi = {
     },
     populatePairsDropdown: async function (provider, options) {
         const opts = options || {};
+        const requestId = (this.pairRequestId || 0) + 1;
+        this.pairRequestId = requestId;
         const exchangeDropdown = settingsConfig['exchange']['value'];
         const currentProvider = provider || (exchangeDropdown ? exchangeDropdown.value : '');
         if (!currentProvider) {
@@ -1049,7 +1048,7 @@ const pi = {
             forceRefresh: !!opts.forceRefresh
         });
         const exchangeValue = exchangeDropdown ? (exchangeDropdown.value || '').toUpperCase() : '';
-        if (exchangeValue && exchangeValue !== expectedProvider) {
+        if (this.pairRequestId !== requestId || (exchangeValue && exchangeValue !== expectedProvider)) {
             return pairs;
         }
         const normalized = Array.isArray(pairs) ? pairs.slice(0) : [];
@@ -1134,12 +1133,12 @@ const pi = {
         await this.populatePairsDropdown(provider, {
             forceRefresh: !!opts.forceRefresh
         });
-        lastDisplayedExchange = provider;
+        if (exchangeDropdown && exchangeDropdown.value === provider) {
+            lastDisplayedExchange = provider;
+        }
     },
     initDom: function () {
         this.setupNetworkStatusElements();
-        this.initPairsDropDown();
-        this.initCurrenciesDropDown();
         this.renderConnectionStateHelp();
         const jThis = this;
         const callback = function () {
@@ -1153,6 +1152,8 @@ const pi = {
                 setting['value'].onkeyup = callback;
             }
         }
+        this.initPairsDropDown();
+        this.initCurrenciesDropDown();
     },
     renderConnectionStateHelp: function () {
         if (!connectionStatusIconsModule ||
@@ -1211,7 +1212,6 @@ const pi = {
                     originalCallback.call(this);
                 }
                 thisTmp.handleExchangeChange();
-                thisTmp.checkNewSettings();
             };
             selectPairDropdown.onchange = function () {
                 const pairInput = settingsConfig['pair']['value'];
@@ -1645,7 +1645,8 @@ const pi = {
         if (websocket && websocket.readyState === 1) {
             const jsonSetSettings = {
                 event: 'setSettings',
-                context: uuid,
+                action: actionInfo.action,
+                context: actionInfo.context || uuid,
                 payload: currentSettings
             };
             websocket.send(JSON.stringify(jsonSetSettings));
@@ -1673,9 +1674,13 @@ function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, infoJson
         websocket.send(JSON.stringify(json));
     };
     websocket.onmessage = function (evt) {
-        // Received message from Stream Deck
-        JSON.parse(evt.data);
-        // console.log("Received message", jsonObj);
+        const message = JSON.parse(evt.data);
+        if (message.event === 'didReceiveSettings' &&
+            (message.context === uuid || message.context === actionInfo.context) &&
+            message.payload &&
+            message.payload.settings) {
+            pi.extractSettings(message.payload.settings);
+        }
     };
 }
 if (typeof window !== 'undefined') {

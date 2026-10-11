@@ -407,3 +407,146 @@ describe('ticker data fallbacks', () => {
     expect(result.infoMessage).toBe(messageConfig.conversionError || 'CONVERSION ERROR');
   });
 });
+
+describe('action lifecycle and shared work', () => {
+  beforeEach(() => {
+    tickerState.resetAllState();
+  });
+
+  afterEach(() => {
+    tickerState.resetAllState();
+    jest.restoreAllMocks();
+  });
+
+  test('concurrent candle requests share one fetch and cache the result', async () => {
+    let finish;
+    const fetchCandles = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    jest.spyOn(ticker, 'getProviderRegistry').mockReturnValue({
+      getProvider: () => ({ fetchCandles })
+    });
+    const settings = ticker.applyDefaultSettings({ pair: 'BTCUSDT', exchange: 'BINANCE' });
+    const first = ticker.getCandles(settings);
+    const second = ticker.getCandles(settings);
+    expect(fetchCandles).toHaveBeenCalledTimes(1);
+    finish([{ ts: 1, open: 10, close: 12, high: 13, low: 9 }]);
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBe(b);
+    expect(a).toHaveLength(1);
+    expect(await ticker.getCandles(settings)).toBe(a);
+    expect(fetchCandles).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['hide', 'settings', 'reappear'])(
+    'late candle replies cannot repaint after %s',
+    async (change) => {
+      let finish;
+      jest.spyOn(ticker, 'getCandles').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      const paint = jest.spyOn(ticker, 'updateCanvasCandles').mockImplementation(() => {});
+      const settings = ticker.applyDefaultSettings({ mode: 'candles' });
+      tickerState.setContextDetails('ctx', settings);
+      const render = ticker.updateCanvas('ctx', settings, {});
+      if (change !== 'settings') ticker.onWillDisappear('ctx');
+      if (change !== 'hide') tickerState.setContextDetails('ctx', settings);
+      finish([]);
+      await render;
+      expect(paint).not.toHaveBeenCalled();
+    }
+  );
+
+  test('callbacks from a removed subscription cannot affect a new subscription for the same pair', async () => {
+    const callbacks = [];
+    const unsubscribe = jest.fn();
+    jest.spyOn(ticker, 'getProviderRegistry').mockReturnValue({
+      getProvider: () => ({
+        subscribeTicker: (_params, handlers) => {
+          callbacks.push(handlers);
+          return { unsubscribe };
+        }
+      })
+    });
+    const paint = jest.spyOn(ticker, 'updateCanvas').mockResolvedValue();
+    const settings = ticker.applyDefaultSettings({ pair: 'BTCUSDT', exchange: 'BINANCE' });
+    ticker.refreshSettings('ctx', settings);
+    ticker.onWillDisappear('ctx');
+    ticker.refreshSettings('ctx', settings);
+    await callbacks[0].onData({ last: 10 });
+    callbacks[0].onError(new Error('late error'));
+    expect(paint).not.toHaveBeenCalled();
+    expect(ticker.getContextConnectionState('ctx')).toBeNull();
+    await callbacks[1].onData({ last: 11 });
+    expect(paint).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test('late ticker replies cannot repaint a reappeared context', async () => {
+    let finish;
+    jest.spyOn(ticker, 'getTickerValue').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const paint = jest.spyOn(ticker, 'updateCanvas').mockResolvedValue();
+    const settings = ticker.applyDefaultSettings({ pair: 'BTCUSDT', exchange: 'BINANCE' });
+    const key = ticker.getSubscriptionContextKey('BINANCE', 'BTCUSDT', 'USD', null);
+    tickerState.setContextDetails('ctx', settings);
+    tickerState.setSubscription('ctx', { key });
+    const update = ticker.updateTicker('ctx', settings);
+    ticker.onWillDisappear('ctx');
+    tickerState.setContextDetails('ctx', settings);
+    tickerState.setSubscription('ctx', { key });
+    finish({ last: 10 });
+    await update;
+    expect(paint).not.toHaveBeenCalled();
+  });
+
+  test('unchanged key images are sent once and sent again after the key reappears', () => {
+    const previousDocument = global.document;
+    const previousDestination = global.DestinationEnum;
+    global.document = {
+      getElementById: () => ({
+        getContext: () => ({}),
+        toDataURL: () => 'data:image/png;base64,image'
+      })
+    };
+    global.DestinationEnum = { HARDWARE_AND_SOFTWARE: 0 };
+    const send = jest.spyOn(ticker, 'websocketSend').mockImplementation(() => {});
+    try {
+      ticker.initCanvas();
+      ticker.sendCanvas('image-ctx');
+      ticker.sendCanvas('image-ctx');
+      expect(send).toHaveBeenCalledTimes(1);
+      ticker.onWillDisappear('image-ctx');
+      ticker.sendCanvas('image-ctx');
+      expect(send).toHaveBeenCalledTimes(2);
+    } finally {
+      ticker.onWillDisappear('image-ctx');
+      global.document = previousDocument;
+      global.DestinationEnum = previousDestination;
+    }
+  });
+});
+
+test('a currency change clears the previous currency value used for stale display', () => {
+  tickerState.resetAllState();
+  jest.spyOn(ticker, 'updateSubscription').mockImplementation(() => {});
+  try {
+    ticker.refreshSettings('currency-ctx', { currency: 'EUR' });
+    tickerState.setLastGoodTicker('currency-ctx', { last: 90 });
+    ticker.refreshSettings('currency-ctx', { currency: 'GBP' });
+    expect(tickerState.getLastGoodTicker('currency-ctx')).toBeNull();
+  } finally {
+    tickerState.resetAllState();
+    jest.restoreAllMocks();
+  }
+});

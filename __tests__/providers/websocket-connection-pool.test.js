@@ -147,4 +147,55 @@ describe('WebSocketConnectionPool', () => {
 
     expect(sockets).toHaveLength(2);
   });
+  test('retries a timed-out socket without waiting for its close event', () => {
+    jest.useFakeTimers();
+    const sockets = [];
+    const onData = jest.fn();
+    const onDisconnected = jest.fn();
+    const pool = new WebSocketConnectionPool({
+      createWebSocket: () => {
+        const socket = new MockWebSocket();
+        socket.close = jest.fn();
+        sockets.push(socket);
+        return socket;
+      },
+      connectionTimeoutMs: 10,
+      reconnectDelayMs: 5,
+      handleMessage: (event, helpers) => helpers.dispatch('BTCUSDT', event.data)
+    });
+    const subscription = pool.subscribe('BTCUSDT', { onData, onDisconnected });
+    jest.advanceTimersByTime(15);
+    expect(sockets).toHaveLength(2);
+    expect(onDisconnected).toHaveBeenCalledTimes(1);
+    sockets[0].triggerOpen();
+    sockets[0].triggerMessage('old');
+    sockets[0].triggerClose();
+    expect(pool.ws).toBe(sockets[1]);
+    expect(onData).not.toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
+
+  test('old subscription handles cannot change replacement metadata', () => {
+    const pool = new WebSocketConnectionPool({ createWebSocket: () => new MockWebSocket() });
+    const first = pool.subscribe('BTCUSDT', { onData: jest.fn() });
+    first.unsubscribe();
+    const replacement = pool.subscribe('BTCUSDT', { onData: jest.fn() });
+    replacement.updateMetadata({ channel: 2 });
+    first.updateMetadata({ channel: 1 });
+    expect(first.getMetadata()).toBeNull();
+    expect(replacement.getMetadata()).toEqual({ channel: 2 });
+    replacement.unsubscribe();
+  });
+
+  test('reuses message helpers for all socket messages', () => {
+    const handleMessage = jest.fn();
+    const socket = new MockWebSocket();
+    const pool = new WebSocketConnectionPool({ createWebSocket: () => socket, handleMessage });
+    const subscription = pool.subscribe('BTCUSDT', { onData: jest.fn() });
+    socket.triggerOpen();
+    socket.triggerMessage('first');
+    socket.triggerMessage('second');
+    expect(handleMessage.mock.calls[0][1]).toBe(handleMessage.mock.calls[1][1]);
+    subscription.unsubscribe();
+  });
 });

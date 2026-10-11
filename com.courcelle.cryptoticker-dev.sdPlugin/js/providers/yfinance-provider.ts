@@ -1,116 +1,126 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-this-alias, no-var */
 // @ts-nocheck
 (function (root, factory) {
-    const globalRoot = (typeof globalThis !== "undefined" ? globalThis : root) as YFinanceProviderGlobalRoot | undefined;
-    const args = typeof module === "object" && module.exports
-        ? [
-            require("./provider-interface"),
-            require("./generic-provider"),
-            require("./ticker-subscription-manager"),
-            require("./subscription-key")
+  const globalRoot = (typeof globalThis !== 'undefined' ? globalThis : root) as
+    | YFinanceProviderGlobalRoot
+    | undefined;
+  const args =
+    typeof module === 'object' && module.exports
+      ? [
+          require('./provider-interface'),
+          require('./generic-provider'),
+          require('./ticker-subscription-manager'),
+          require('./subscription-key')
         ]
-        : [
-            root?.CryptoTickerProviders,
-            root?.CryptoTickerProviders,
-            root?.CryptoTickerProviders,
-            root?.CryptoTickerProviders
+      : [
+          root?.CryptoTickerProviders,
+          root?.CryptoTickerProviders,
+          root?.CryptoTickerProviders,
+          root?.CryptoTickerProviders
         ];
 
-    const exportsValue = factory(
-        args[0],
-        args[1],
-        args[2],
-        args[3]
-    );
+  const exportsValue = factory(args[0], args[1], args[2], args[3]);
 
-    if (typeof module === "object" && module.exports) {
-        module.exports = exportsValue;
-    }
+  if (typeof module === 'object' && module.exports) {
+    module.exports = exportsValue;
+  }
 
-    if (globalRoot) {
-        globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
-        globalRoot.CryptoTickerProviders.YFinanceProvider = exportsValue.YFinanceProvider;
-    }
-}(typeof self !== "undefined" ? (self as unknown as YFinanceProviderGlobalRoot) : (this as unknown as YFinanceProviderGlobalRoot), function (providerInterfaceModule, genericModule, managerModule, subscriptionKeyModule) {
+  if (globalRoot) {
+    globalRoot.CryptoTickerProviders = globalRoot.CryptoTickerProviders || {};
+    globalRoot.CryptoTickerProviders.YFinanceProvider = exportsValue.YFinanceProvider;
+  }
+})(
+  typeof self !== 'undefined'
+    ? (self as unknown as YFinanceProviderGlobalRoot)
+    : (this as unknown as YFinanceProviderGlobalRoot),
+  function (providerInterfaceModule, genericModule, managerModule, subscriptionKeyModule) {
     const ProviderInterface = providerInterfaceModule.ProviderInterface || providerInterfaceModule;
     const GenericProvider = genericModule.GenericProvider || genericModule;
     const TickerSubscriptionManager = managerModule.TickerSubscriptionManager || managerModule;
-    const buildSubscriptionKey = subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
+    const buildSubscriptionKey =
+      subscriptionKeyModule.buildSubscriptionKey || subscriptionKeyModule;
 
-    // Temporary GenericProvider wrapper so Yahoo wiring can ship later without breaking registry shape.
+    // Yahoo quotes use proxy REST polling.
     class YFinanceProvider extends ProviderInterface {
-        constructor(options) {
-            super(options);
-            const opts = options || {};
-            this.genericFallback = opts.genericFallback instanceof GenericProvider
-                ? opts.genericFallback
-                : new GenericProvider(options);
+      constructor(options) {
+        super(options);
+        const opts = options || {};
+        this.genericFallback =
+          opts.genericFallback instanceof GenericProvider
+            ? opts.genericFallback
+            : new GenericProvider(options);
 
-            const managerOptions = {
-                logger: (...args: unknown[]) => {
-                    this.logger(...args);
-                },
-                fetchTicker: (params: CryptoTickerTickerParams) => this.genericFallback.fetchTicker(params),
-                subscribeStreaming: null,
-                unsubscribeStreaming: null,
-                ensureConnection: null,
-                buildSubscriptionKey: function (exchange: string | null | undefined, symbol: string | null | undefined, fromCurrency: string | null | undefined, toCurrency: string | null | undefined) {
-                    return buildSubscriptionKey(exchange, symbol, fromCurrency, toCurrency);
-                },
-                fallbackPollIntervalMs: opts.fallbackPollIntervalMs,
-                staleTickerTimeoutMs: opts.staleTickerTimeoutMs
-            };
+        const managerOptions = {
+          logger: (...args: unknown[]) => {
+            this.logger(...args);
+          },
+          fetchTicker: (params: CryptoTickerTickerParams) =>
+            this.genericFallback.fetchTicker(params),
+          subscribeStreaming: null,
+          unsubscribeStreaming: null,
+          ensureConnection: null,
+          buildSubscriptionKey: function (
+            exchange: string | null | undefined,
+            symbol: string | null | undefined,
+            fromCurrency: string | null | undefined,
+            toCurrency: string | null | undefined
+          ) {
+            return buildSubscriptionKey(exchange, symbol, fromCurrency, toCurrency);
+          },
+          fallbackPollIntervalMs: opts.fallbackPollIntervalMs,
+          staleTickerTimeoutMs: opts.staleTickerTimeoutMs
+        };
 
-            this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
+        this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
+      }
+
+      getId() {
+        return 'YFINANCE';
+      }
+
+      ensureConnection() {
+        // No-op: YFinance relies on REST polling instead of SignalR streaming.
+      }
+
+      subscribeTicker(params, handlers) {
+        return this.subscriptionManager.subscribe(params, handlers);
+      }
+
+      async fetchTicker(params) {
+        return this.subscriptionManager.requestTicker(params);
+      }
+
+      async fetchCandles(params) {
+        if (this.genericFallback && typeof this.genericFallback.fetchCandles === 'function') {
+          return this.genericFallback.fetchCandles(params);
         }
+        return ProviderInterface.prototype.fetchCandles.call(this, params);
+      }
 
-        getId() {
-            return "YFINANCE";
+      getCachedTicker(key) {
+        const cached = this.subscriptionManager.getCachedTicker(key);
+        if (cached) {
+          return cached;
         }
-
-        ensureConnection() {
-            // No-op: YFinance relies on REST polling instead of SignalR streaming.
-        }
-
-        subscribeTicker(params, handlers) {
-            return this.subscriptionManager.subscribe(params, handlers);
-        }
-
-        async fetchTicker(params) {
-            // TODO: implement Yahoo Finance REST call before falling back to proxy.
-            return this.genericFallback.fetchTicker(params);
-        }
-
-        async fetchCandles(params) {
-            if (this.genericFallback && typeof this.genericFallback.fetchCandles === "function") {
-                return this.genericFallback.fetchCandles(params);
-            }
-            return ProviderInterface.prototype.fetchCandles.call(this, params);
-        }
-
-        getCachedTicker(key) {
-            const cached = this.subscriptionManager.getCachedTicker(key);
-            if (cached) {
-                return cached;
-            }
-            return this.genericFallback.getCachedTicker(key);
-        }
+        return this.genericFallback.getCachedTicker(key);
+      }
     }
 
     return {
-        YFinanceProvider: YFinanceProvider
+      YFinanceProvider: YFinanceProvider
     };
-}));
+  }
+);
 
 interface YFinanceProviderGlobalRoot extends Record<string, unknown> {
-    CryptoTickerProviders?: Record<string, unknown> & {
-        YFinanceProvider?: unknown;
-    };
+  CryptoTickerProviders?: Record<string, unknown> & {
+    YFinanceProvider?: unknown;
+  };
 }
 
 interface CryptoTickerTickerParams {
-    exchange: string;
-    symbol: string;
-    fromCurrency?: string | null;
-    toCurrency?: string | null;
+  exchange: string;
+  symbol: string;
+  fromCurrency?: string | null;
+  toCurrency?: string | null;
 }

@@ -7,7 +7,9 @@
     if (root && typeof root === 'object') {
         root.CryptoTickerDefaults = exports;
     }
-})(typeof self !== 'undefined' ? self : this, function buildDefaults() {
+})(typeof self !== 'undefined'
+    ? self
+    : this, function buildDefaults() {
     function clone(obj) {
         if (obj === null || typeof obj !== 'object') {
             return obj;
@@ -27,7 +29,9 @@
         const normalizeCase = options === null || options === void 0 ? void 0 : options.case;
         const allowEmpty = (options === null || options === void 0 ? void 0 : options.allowEmptyString) === true;
         const allowNull = (options === null || options === void 0 ? void 0 : options.allowNull) === true;
-        const trim = Object.prototype.hasOwnProperty.call(options || {}, 'trim') ? !!(options === null || options === void 0 ? void 0 : options.trim) : true;
+        const trim = Object.prototype.hasOwnProperty.call(options || {}, 'trim')
+            ? !!(options === null || options === void 0 ? void 0 : options.trim)
+            : true;
         const allowedValues = Array.isArray(options === null || options === void 0 ? void 0 : options.allowedValues) ? options === null || options === void 0 ? void 0 : options.allowedValues : null;
         return function normalizeString(value) {
             if (value === undefined) {
@@ -50,7 +54,11 @@
                 str = str.toLowerCase();
             }
             if (allowedValues && allowedValues.length > 0) {
-                const lookup = normalizeCase === 'lower' ? str.toLowerCase() : normalizeCase === 'upper' ? str.toUpperCase() : str;
+                const lookup = normalizeCase === 'lower'
+                    ? str.toLowerCase()
+                    : normalizeCase === 'upper'
+                        ? str.toUpperCase()
+                        : str;
                 const matches = allowedValues.some((allowed) => {
                     if (normalizeCase === 'lower') {
                         return allowed.toLowerCase() === lookup;
@@ -80,7 +88,7 @@
                 return null;
             }
             let numeric = typeof value === 'number' ? value : parseFloat(String(value));
-            if (Number.isNaN(numeric)) {
+            if (!Number.isFinite(numeric)) {
                 return null;
             }
             if (integer) {
@@ -139,7 +147,12 @@
         currency: {
             type: 'string',
             default: '',
-            normalize: buildStringNormalizer({ trim: true, allowEmptyString: true, case: 'upper', allowNull: true })
+            normalize: buildStringNormalizer({
+                trim: true,
+                allowEmptyString: true,
+                case: 'upper',
+                allowNull: true
+            })
         },
         candlesInterval: {
             type: 'string',
@@ -195,7 +208,11 @@
             type: 'string',
             default: 'auto',
             normalize: function (value) {
-                const baseNormalizer = buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'lower' });
+                const baseNormalizer = buildStringNormalizer({
+                    trim: true,
+                    allowEmptyString: false,
+                    case: 'lower'
+                });
                 const normalized = baseNormalizer(value);
                 if (!normalized) {
                     return null;
@@ -238,22 +255,42 @@
         displayHighLow: {
             type: 'string',
             default: 'on',
-            normalize: buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'lower', allowedValues: ['on', 'off'] })
+            normalize: buildStringNormalizer({
+                trim: true,
+                allowEmptyString: false,
+                case: 'lower',
+                allowedValues: ['on', 'off']
+            })
         },
         displayHighLowBar: {
             type: 'string',
             default: 'on',
-            normalize: buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'lower', allowedValues: ['on', 'off'] })
+            normalize: buildStringNormalizer({
+                trim: true,
+                allowEmptyString: false,
+                case: 'lower',
+                allowedValues: ['on', 'off']
+            })
         },
         displayDailyChange: {
             type: 'string',
             default: 'on',
-            normalize: buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'lower', allowedValues: ['on', 'off'] })
+            normalize: buildStringNormalizer({
+                trim: true,
+                allowEmptyString: false,
+                case: 'lower',
+                allowedValues: ['on', 'off']
+            })
         },
         displayConnectionStatusIcon: {
             type: 'string',
             default: 'OFF',
-            normalize: buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'upper', allowedValues: ['OFF', 'TOP_RIGHT', 'BOTTOM_LEFT'] })
+            normalize: buildStringNormalizer({
+                trim: true,
+                allowEmptyString: false,
+                case: 'upper',
+                allowedValues: ['OFF', 'TOP_RIGHT', 'BOTTOM_LEFT']
+            })
         },
         alertRule: {
             type: 'string',
@@ -273,7 +310,12 @@
         mode: {
             type: 'string',
             default: 'ticker',
-            normalize: buildStringNormalizer({ trim: true, allowEmptyString: false, case: 'lower', allowedValues: ['ticker', 'candles'] })
+            normalize: buildStringNormalizer({
+                trim: true,
+                allowEmptyString: false,
+                case: 'lower',
+                allowedValues: ['ticker', 'candles']
+            })
         }
     };
     function coerceValue(schemaEntry, value, hasValue) {
@@ -289,7 +331,9 @@
         const normalized = normalizer(value);
         if (normalized === null || normalized === undefined) {
             const fallbackNormalized = normalizer(defaultValue);
-            const fallback = fallbackNormalized === null || fallbackNormalized === undefined ? clone(defaultValue) : fallbackNormalized;
+            const fallback = fallbackNormalized === null || fallbackNormalized === undefined
+                ? clone(defaultValue)
+                : fallbackNormalized;
             return {
                 value: fallback,
                 error: hasValue ? 'Invalid ' + schemaEntry.type : null

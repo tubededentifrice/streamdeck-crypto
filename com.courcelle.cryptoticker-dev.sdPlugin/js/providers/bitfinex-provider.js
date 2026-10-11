@@ -55,12 +55,16 @@
         }
         return null;
     }
-    function toNumber(val) {
-        const parsed = parseFloat(val);
-        if (isNaN(parsed)) {
-            return 0;
+    function parseNumber(value) {
+        if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) {
+            return null;
         }
-        return parsed;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    function toNumber(value) {
+        var _a;
+        return (_a = parseNumber(value)) !== null && _a !== void 0 ? _a : 0;
     }
     function mapIntervalToBitfinex(interval) {
         switch (interval) {
@@ -118,7 +122,7 @@
                 staleTickerTimeoutMs: opts.staleTickerTimeoutMs
             };
             this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
-            this.channelIdToSymbol = {};
+            this.channelIdToSymbol = Object.create(null);
             // Bitfinex reuses one channel; store chanId metadata so unsubscribe works later.
             this.webSocketPool = new WebSocketConnectionPool({
                 logger: (...args) => {
@@ -153,7 +157,11 @@
                     this.logger('BitfinexProvider: pooled WebSocket error', err);
                 },
                 onClose: () => {
-                    this.channelIdToSymbol = {};
+                    this.channelIdToSymbol = Object.create(null);
+                    const symbols = Object.keys(this.webSocketPool.symbolEntries);
+                    for (const symbol of symbols) {
+                        this.webSocketPool.updateSymbolMetadata(symbol, { chanId: null });
+                    }
                 }
             });
         }
@@ -180,16 +188,7 @@
             });
         }
         async fetchTicker(params) {
-            try {
-                return await this.fetchTickerDirect(params);
-            }
-            catch (err) {
-                this.logger('BitfinexProvider: direct fetch failed, using fallback', err);
-                if (this.genericFallback && typeof this.genericFallback.fetchTicker === 'function') {
-                    return this.genericFallback.fetchTicker(params);
-                }
-                throw err;
-            }
+            return this.subscriptionManager.requestTicker(params);
         }
         async fetchTickerDirect(params) {
             const symbol = this.resolveSymbol(params);
@@ -226,9 +225,18 @@
                 return false;
             }
             const meta = this.ensureEntryMeta(entry);
+            if (meta.poolSubscription) {
+                this.webSocketPool.ensureConnection();
+                const pooled = this.webSocketPool.symbolEntries[meta.bitfinexSymbol];
+                return this.webSocketPool.isSocketOpen() && !!pooled && pooled.subscribed;
+            }
             meta.bitfinexSymbol = this.resolveSymbol(entry.params);
             if (!meta.bitfinexSymbol) {
                 this.logger('BitfinexProvider: cannot subscribe, unresolved symbol', entry.params);
+                return false;
+            }
+            if (!this.webSocketPool.getSymbolMetadata(meta.bitfinexSymbol) &&
+                Object.keys(this.webSocketPool.symbolEntries).length >= 30) {
                 return false;
             }
             meta.chanId = null;
@@ -283,20 +291,15 @@
             if (!params) {
                 return null;
             }
-            const original = (params.symbol || '').toUpperCase();
-            if (!original) {
+            const input = typeof params.symbol === 'string' ? params.symbol.trim() : '';
+            if (!input) {
                 return null;
             }
-            if (this.symbolOverrides && this.symbolOverrides[original]) {
-                return (this.symbolOverrides[original] || '').toUpperCase();
-            }
-            const sanitized = original.replace(/[:/]/g, '');
-            if (!sanitized) {
-                return null;
-            }
-            const upper = sanitized.toUpperCase();
-            const withoutLeadingT = upper.startsWith('T') ? upper.substring(1) : upper;
-            return 't' + withoutLeadingT;
+            const override = this.symbolOverrides && this.symbolOverrides[input.toUpperCase()];
+            const symbol = typeof override === 'string' ? override.trim() : input;
+            const pair = symbol.startsWith('t') && /^t[A-Z]/.test(symbol) ? symbol.slice(1) : symbol;
+            const sanitized = pair.replace(/\//g, '').toUpperCase();
+            return sanitized ? 't' + sanitized : null;
         }
         buildRestUrl(symbol) {
             const base = this.restBaseUrl.replace(/\/$/, '');
@@ -326,6 +329,7 @@
             if (!chanId) {
                 return;
             }
+            delete this.channelIdToSymbol[chanId];
             try {
                 ws.send(JSON.stringify({
                     event: 'unsubscribe',
@@ -375,6 +379,14 @@
                     return;
                 }
                 const chanId = eventObj.chanId;
+                const meta = helpers.getMetadata(symbol);
+                if (!meta) {
+                    this.sendBitfinexUnsubscribe(this.webSocketPool.ws, symbol, { chanId });
+                    return;
+                }
+                if (meta.chanId && meta.chanId !== chanId) {
+                    this.sendBitfinexUnsubscribe(this.webSocketPool.ws, symbol, meta);
+                }
                 if (chanId) {
                     this.channelIdToSymbol[chanId] = symbol;
                 }
@@ -394,7 +406,8 @@
                             });
                     delete this.channelIdToSymbol[chanId];
                 }
-                if (symbol) {
+                const meta = symbol ? helpers.getMetadata(symbol) : null;
+                if (meta && meta.chanId === chanId) {
                     helpers.markUnsubscribed(symbol);
                     helpers.updateMetadata(symbol, { chanId: null });
                 }
@@ -426,7 +439,7 @@
             helpers.dispatch(symbol, data, arr);
         }
         buildTickerFromArray(data, entry) {
-            if (!Array.isArray(data)) {
+            if (!Array.isArray(data) || data.length < 10 || parseNumber(data[6]) === null) {
                 return null;
             }
             const params = entry ? entry.params : null;
@@ -443,7 +456,7 @@
             };
         }
         transformRestTicker(json, params, resolvedSymbol) {
-            if (!Array.isArray(json)) {
+            if (!Array.isArray(json) || json.length < 10 || parseNumber(json[6]) === null) {
                 throw new Error('BitfinexProvider: unexpected REST payload for ' + resolvedSymbol);
             }
             const pair = params && params.symbol ? params.symbol : resolvedSymbol;

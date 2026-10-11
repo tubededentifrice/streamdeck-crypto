@@ -32,7 +32,7 @@ The property inspector persists settings with `setSettings`. Stream Deck then se
 
 ## Providers and fallback
 
-Binance and Bitfinex prefer a shared direct WebSocket, use their direct REST API when streaming is unavailable or stale, and fall back to the generic proxy when direct requests fail. YFinance currently uses proxy-backed REST polling. `GenericProvider` owns proxy SignalR subscriptions and proxy REST requests.
+Binance and Bitfinex prefer a shared direct WebSocket, use their direct REST API when streaming is unavailable or stale, and fall back to the generic proxy when direct requests fail. Binance batches subscription changes and sends at most one control message each 300 ms. Bitfinex uses up to 30 distinct symbols on one socket; additional symbols use REST polling until a channel is available. YFinance currently uses proxy-backed REST polling. `GenericProvider` owns proxy SignalR subscriptions and proxy REST requests.
 
 REST requests have a finite deadline so an unreachable exchange cannot permanently block initial rendering or fallback polling. The property inspector applies the same rule before falling back from direct pair discovery to the proxy list.
 
@@ -53,9 +53,12 @@ The renderer may continue showing a last-known-good value as stale while the con
 - Matching exchange, symbol, and source currency reuse the current subscription.
 - Changing that key unsubscribes before replacing it.
 - Multiple contexts for one provider symbol share the provider subscription and pooled WebSocket.
-- Initial and fallback REST requests for one subscription never overlap.
+- Initial and fallback REST requests for one subscription never overlap. Explicit refreshes share the same request and reuse data until the poll interval expires.
+- Each provider manager uses one polling timer, with a separate deadline for each symbol.
+- An older REST result cannot replace a newer stream update.
+- The proxy socket closes when its last subscription is removed.
 - Late async results must not notify or reactivate an entry that was removed.
-- Settings revisions prevent an older fetch or conversion from repainting a newly configured action.
+- Context and subscription identity checks prevent an older fetch or conversion from repainting a changed, hidden, or newly shown action.
 - Socket events are accepted only from the pool's current socket; late events from replaced sockets are ignored.
 - A socket that never opens is closed and retried instead of remaining permanently stuck in `CONNECTING`.
 
@@ -63,7 +66,7 @@ The renderer may continue showing a last-known-good value as stale while the con
 
 All settings entering the runtime or property inspector pass through `applyDefaults`. Invalid known values fall back to schema defaults; unknown keys are retained for forward compatibility.
 
-Currency conversion rates are cached for one hour and concurrent requests are coalesced. If refresh fails, an existing cached rate may be used. If no rate has ever been obtained, the ticker renders the configured conversion-error state instead of silently presenting an unconverted value.
+Currency conversion rates are cached for one hour and concurrent requests are coalesced. Candle requests with matching settings also share a request and cache the result for one minute. Changes to the pair or currency clear the previous last-good ticker. Identical key images are sent once until the action disappears. If refresh fails, an existing cached rate may be used. If no rate has ever been obtained, the ticker renders the configured conversion-error state instead of silently presenting an unconverted value.
 
 ## Rules and alerts
 

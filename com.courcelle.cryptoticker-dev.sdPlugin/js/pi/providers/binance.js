@@ -22,7 +22,7 @@
             throw new Error('Binance pairs response not ok');
         }
         const json = await response.json();
-        const symbols = Array.isArray(json.symbols) ? json.symbols : [];
+        const symbols = json && Array.isArray(json.symbols) ? json.symbols : [];
         return (symbols
             // Filter out delisted/maintenance symbols so the PI only lists live markets.
             .filter(function (item) {
@@ -32,11 +32,10 @@
             if (item.status && item.status !== 'TRADING') {
                 return false;
             }
-            const symbol = item.symbol || '';
-            return symbol.length > 0;
+            return typeof item.symbol === 'string' && item.symbol.trim().length > 0;
         })
             .map(function (item) {
-            const symbol = (item.symbol || '').toUpperCase();
+            const symbol = item.symbol.trim().toUpperCase();
             return {
                 value: symbol,
                 display: symbol,

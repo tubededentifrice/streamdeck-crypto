@@ -50,3 +50,19 @@ describe('expression evaluator', () => {
     );
   });
 });
+
+describe('expression cache', () => {
+  test('limits cache growth and compiles removed entries again', () => {
+    const jsep = require('jsep');
+    const parser = jest.fn((expression) => jsep(expression));
+    const evaluator = new expressionEvaluator.ExpressionEvaluator({}, parser);
+
+    for (let index = 0; index < 300; index++) {
+      expect(evaluator.evaluate('value + ' + index, { value: 1 })).toBe(index + 1);
+    }
+    evaluator.evaluate('value + 299', { value: 2 });
+    expect(parser).toHaveBeenCalledTimes(300);
+    expect(evaluator.evaluate('value + 0', { value: 2 })).toBe(2);
+    expect(parser).toHaveBeenCalledTimes(301);
+  });
+});

@@ -10,8 +10,6 @@
 })(typeof self !== 'undefined'
     ? self
     : this, function () {
-    // Use const assertion for literal types
-    const NUMERIC_FORMATS = ['auto', 'full', 'compact', 'plain'];
     const COMPACT_UNITS = [
         { value: 1000000000000, suffix: 'T' },
         { value: 1000000000, suffix: 'B' },

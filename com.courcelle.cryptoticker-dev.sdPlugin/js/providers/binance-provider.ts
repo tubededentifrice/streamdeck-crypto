@@ -2,8 +2,7 @@
 // @ts-nocheck
 (function (root, factory) {
   const globalRoot = (typeof globalThis !== 'undefined' ? globalThis : root) as
-    | BinanceProviderGlobalRoot
-    | undefined;
+    BinanceProviderGlobalRoot | undefined;
   const args =
     typeof module === 'object' && module.exports
       ? [
@@ -75,12 +74,16 @@
       return null;
     }
 
-    function toNumber(value) {
-      const parsed = parseFloat(value);
-      if (isNaN(parsed)) {
-        return 0;
+    function parseNumber(value) {
+      if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) {
+        return null;
       }
-      return parsed;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function toNumber(value) {
+      return parseNumber(value) ?? 0;
     }
 
     function toPercent(value) {
@@ -150,6 +153,9 @@
         this.subscriptionManager = new TickerSubscriptionManager(managerOptions);
 
         this.wsRequestId = 0;
+        this.pendingStreamChanges = new Map();
+        this.subscriptionTimer = null;
+        this.subscriptionSocket = null;
         // Binance multi-stream socket; pool keeps connection alive and muxes symbols.
         this.webSocketPool = new WebSocketConnectionPool({
           logger: (...args) => {
@@ -185,6 +191,7 @@
           },
           onClose: () => {
             this.wsRequestId = 0;
+            this.clearPendingSubscriptions();
           }
         });
       }
@@ -216,15 +223,7 @@
       }
 
       async fetchTicker(params) {
-        try {
-          return await this.fetchTickerDirect(params);
-        } catch (err) {
-          this.logger('BinanceProvider: direct fetch failed, using fallback', err);
-          if (this.genericFallback && typeof this.genericFallback.fetchTicker === 'function') {
-            return this.genericFallback.fetchTicker(params);
-          }
-          throw err;
-        }
+        return this.subscriptionManager.requestTicker(params);
       }
 
       async fetchTickerDirect(params) {
@@ -266,6 +265,11 @@
         }
 
         const meta = this.ensureEntryMeta(entry);
+        if (meta.poolSubscription) {
+          this.webSocketPool.ensureConnection();
+          const pooled = this.webSocketPool.symbolEntries[meta.binanceSymbol];
+          return this.webSocketPool.isSocketOpen() && !!pooled && pooled.subscribed;
+        }
         meta.binanceSymbol = this.resolveSymbol(entry.params);
         if (!meta.binanceSymbol) {
           this.logger('BinanceProvider: cannot subscribe, unresolved symbol', entry.params);
@@ -276,7 +280,9 @@
           context: entry,
           onData: (payload) => {
             const ticker = this.transformStreamTicker(payload, entry, meta.binanceSymbol);
-            this.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
+            if (ticker) {
+              this.subscriptionManager.handleStreamingUpdate(entry.key, ticker);
+            }
           },
           onSubscribed: () => {
             entry.streamingActive = true;
@@ -309,6 +315,9 @@
           meta.poolSubscription.unsubscribe();
         }
         meta.poolSubscription = null;
+        if (!this.webSocketPool.hasSubscribers()) {
+          this.clearPendingSubscriptions();
+        }
         entry.streamingActive = false;
         return true;
       }
@@ -344,19 +353,66 @@
         if (!ws || !symbol) {
           return;
         }
-
-        const streamName = symbol.toLowerCase() + '@ticker';
-        const payload = {
-          method: subscribe ? 'SUBSCRIBE' : 'UNSUBSCRIBE',
-          params: [streamName],
-          id: this.nextWsRequestId()
-        };
-
-        try {
-          ws.send(JSON.stringify(payload));
-        } catch (err) {
-          this.logger('BinanceProvider: error sending subscription message', err);
+        if (this.subscriptionSocket !== ws) {
+          this.clearPendingSubscriptions();
+          this.subscriptionSocket = ws;
         }
+        this.pendingStreamChanges.set(symbol, subscribe);
+        this.scheduleSubscriptionFlush();
+      }
+
+      // Batch page changes and keep control requests below Binance's five-message limit.
+      scheduleSubscriptionFlush() {
+        if (this.subscriptionTimer || this.pendingStreamChanges.size === 0) {
+          return;
+        }
+        this.subscriptionTimer = setTimeout(() => {
+          this.subscriptionTimer = null;
+          this.flushSubscriptionChanges();
+        }, 300);
+      }
+
+      flushSubscriptionChanges() {
+        const ws = this.subscriptionSocket;
+        if (!ws || this.webSocketPool.ws !== ws || ws.readyState !== 1) {
+          this.clearPendingSubscriptions();
+          return;
+        }
+        const subscribe = this.pendingStreamChanges.values().next().value;
+        const symbols = [];
+        for (const [symbol, change] of this.pendingStreamChanges) {
+          if (change === subscribe) {
+            symbols.push(symbol);
+            this.pendingStreamChanges.delete(symbol);
+          }
+        }
+        if (symbols.length > 0) {
+          try {
+            ws.send(
+              JSON.stringify({
+                method: subscribe ? 'SUBSCRIBE' : 'UNSUBSCRIBE',
+                params: symbols.map((symbol) => symbol.toLowerCase() + '@ticker'),
+                id: this.nextWsRequestId()
+              })
+            );
+          } catch (err) {
+            for (const symbol of symbols) {
+              this.webSocketPool.markSymbolUnsubscribed(symbol);
+              this.webSocketPool.notifySubscribeError(symbol, err);
+            }
+            this.logger('BinanceProvider: error sending subscription message', err);
+          }
+        }
+        this.scheduleSubscriptionFlush();
+      }
+
+      clearPendingSubscriptions() {
+        if (this.subscriptionTimer) {
+          clearTimeout(this.subscriptionTimer);
+        }
+        this.subscriptionTimer = null;
+        this.subscriptionSocket = null;
+        this.pendingStreamChanges.clear();
       }
 
       nextWsRequestId() {
@@ -423,6 +479,9 @@
       }
 
       transformRestTicker(json, params, resolvedSymbol) {
+        if (!json || Array.isArray(json) || parseNumber(json.lastPrice) === null) {
+          throw new Error('BinanceProvider: invalid REST ticker for ' + resolvedSymbol);
+        }
         const pair = params && params.symbol ? params.symbol : resolvedSymbol;
         return {
           changeDaily: toNumber(json['priceChange']),
@@ -437,12 +496,15 @@
       }
 
       transformStreamTicker(json, entry, resolvedSymbol) {
+        if (!json || parseNumber(json.c ?? json.lastPrice) === null) {
+          return null;
+        }
         const params = entry ? entry.params : null;
         const pair = params && params.symbol ? params.symbol : resolvedSymbol;
         return {
           changeDaily: toNumber(json['p'] || json['priceChange']),
           changeDailyPercent: toPercent(json['P'] || json['priceChangePercent']),
-          last: toNumber(json['c'] || json['lastPrice']),
+          last: toNumber(json['c'] ?? json['lastPrice']),
           volume: toNumber(json['v'] || json['volume']),
           high: toNumber(json['h'] || json['highPrice']),
           low: toNumber(json['l'] || json['lowPrice']),

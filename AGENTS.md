@@ -35,6 +35,8 @@ After relevant code or markup changes:
 
 ## Invariants
 
+- The `BITFINEX/BTCUSDT` button on Trading page 2 is an intentional invalid-pair test. Do not map it to `BTCUST` or change its saved settings.
+
 - One action context owns at most one subscription and releases it on `willDisappear`.
 - Providers share pooled sockets; ignore late events/results from replaced sockets or removed entries.
 - Normalize all settings and external payloads at boundaries.

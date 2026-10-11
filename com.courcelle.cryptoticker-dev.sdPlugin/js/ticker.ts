@@ -191,6 +191,7 @@ let loggingEnabled = false;
 let websocket = null;
 let canvas;
 let canvasContext;
+const lastCanvasImages = new Map();
 const screenshotMode = false; // Allows rendering the canvas in an external preview
 
 const CONVERSION_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -300,6 +301,7 @@ const tickerAction = {
     // this.updateTicker(context, settings); // Already done by refreshTimer
   },
   onWillDisappear: function (context) {
+    lastCanvasImages.delete(context);
     const subscription = tickerState.getSubscription(context);
     if (subscription && typeof subscription.unsubscribe === 'function') {
       try {
@@ -367,15 +369,16 @@ const tickerAction = {
       toCurrency: null
     };
     const self = this;
+    const subscription = { key: subscriptionKey, unsubscribe: function () {}, providerId: null };
+    tickerState.setSubscription(context, subscription);
 
     try {
       const handle = provider.subscribeTicker(params, {
         onData: async function (tickerValues) {
           const details = tickerState.getContextDetails(context);
-          if (!details) {
+          if (!details || tickerState.getSubscription(context) !== subscription) {
             return;
           }
-          const revision = details.revision;
 
           try {
             const convertedTicker = await self.convertTickerValues(
@@ -387,9 +390,8 @@ const tickerAction = {
             const currentSubscription = tickerState.getSubscription(context);
             if (
               !currentDetails ||
-              currentDetails.revision !== revision ||
-              !currentSubscription ||
-              currentSubscription.key !== subscriptionKey
+              currentDetails !== details ||
+              currentSubscription !== subscription
             ) {
               return;
             }
@@ -408,27 +410,39 @@ const tickerAction = {
         },
         onError: function (error) {
           self.log('Provider subscription error', error);
-          self.setContextConnectionState(context, connectionStates.BROKEN);
+          if (tickerState.getSubscription(context) === subscription) {
+            self.setContextConnectionState(context, connectionStates.BROKEN);
+          }
         }
       });
 
-      tickerState.setSubscription(context, {
-        key: subscriptionKey,
-        unsubscribe:
-          handle && typeof handle.unsubscribe === 'function' ? handle.unsubscribe : function () {},
-        providerId: provider.getId ? provider.getId() : null
-      });
+      subscription.unsubscribe =
+        handle && typeof handle.unsubscribe === 'function' ? handle.unsubscribe : function () {};
+      subscription.providerId = provider.getId ? provider.getId() : null;
       return tickerState.getSubscription(context);
     } catch (err) {
+      if (tickerState.getSubscription(context) === subscription) {
+        tickerState.clearSubscription(context);
+      }
       this.log('Error subscribing to provider', err);
     }
 
     return null;
   },
   refreshSettings: function (context, settings) {
+    const previous = tickerState.getContextDetails(context);
+    const normalized = applyDefaultSettings(settings);
+    if (
+      previous &&
+      ['exchange', 'pair', 'fromCurrency', 'currency'].some(
+        (key) => previous.settings[key] !== normalized[key]
+      )
+    ) {
+      tickerState.clearLastGoodTicker(context);
+    }
     return settingsManager.refreshSettings({
       context: context,
-      settings: settings,
+      settings: normalized,
       updateSubscription: (normalizedSettings) => {
         this.updateSubscription(context, normalizedSettings);
       }
@@ -681,7 +695,7 @@ const tickerAction = {
   updateTicker: async function (context, settings) {
     const pair = settings['pair'];
     const details = tickerState.getContextDetails(context);
-    const revision = details ? details.revision : null;
+    const expectedSubscription = tickerState.getSubscription(context);
     const currencies = this.resolveConversionCurrencies(
       settings['fromCurrency'],
       settings['currency']
@@ -702,7 +716,8 @@ const tickerAction = {
     const currentSubscription = tickerState.getSubscription(context);
     if (
       !currentDetails ||
-      currentDetails.revision !== revision ||
+      currentDetails !== details ||
+      currentSubscription !== expectedSubscription ||
       !currentSubscription ||
       currentSubscription.key !== expectedSubscriptionKey
     ) {
@@ -723,7 +738,11 @@ const tickerAction = {
 
     switch (settings.mode) {
       case 'candles': {
+        const details = tickerState.getContextDetails(context);
         const candleValues = await this.getCandles(settings);
+        if (!details || tickerState.getContextDetails(context) !== details) {
+          return;
+        }
         this.updateCanvasCandles(context, settings, candleValues, connectionState);
         break;
       }
@@ -1020,16 +1039,21 @@ const tickerAction = {
     this.sendCanvas(context);
   },
   sendCanvas: function (context) {
+    const image = canvas.toDataURL();
+    if (lastCanvasImages.get(context) === image) {
+      return;
+    }
     var json = {
       event: 'setImage',
       context: context,
       payload: {
-        image: canvas.toDataURL(),
+        image: image,
         target: DestinationEnum.HARDWARE_AND_SOFTWARE
       }
     };
 
     this.websocketSend(JSON.stringify(json));
+    lastCanvasImages.set(context, image);
   },
   getRoundedValue: function (value, digits, multiplier, format) {
     return formatters.getRoundedValue(value, digits, multiplier, format);
@@ -1103,7 +1127,17 @@ const tickerAction = {
     );
     const cacheCurrencyKey = currencies.to || currencies.from || '';
     const cacheKey =
-      exchange + '_' + pair + '_' + interval + '_' + candlesCount + '_' + cacheCurrencyKey;
+      exchange +
+      '_' +
+      pair +
+      '_' +
+      interval +
+      '_' +
+      candlesCount +
+      '_' +
+      currencies.from +
+      '_' +
+      cacheCurrencyKey;
     let cache = tickerState.getCandlesCacheEntry(cacheKey);
     if (!cache) {
       cache = {};
@@ -1118,6 +1152,23 @@ const tickerAction = {
       return cache[c];
     }
 
+    if (cache.promise) {
+      return cache.promise;
+    }
+
+    cache.promise = this.fetchCandlesForDisplay(settings, cache);
+    try {
+      return await cache.promise;
+    } finally {
+      delete cache.promise;
+    }
+  },
+  fetchCandlesForDisplay: async function (settings, cache) {
+    const exchange = settings.exchange;
+    const pair = settings.pair;
+    const interval = this.convertCandlesInterval(settings.candlesInterval || '1h');
+    const candlesCount = this.getCandlesDisplayCount(settings);
+    const currencies = this.resolveConversionCurrencies(settings.fromCurrency, settings.currency);
     const fetchParams = {
       exchange: exchange,
       symbol: pair,
@@ -1183,7 +1234,7 @@ const tickerAction = {
     }
 
     if (!Array.isArray(rawCandles)) {
-      return cache[c] || [];
+      return cache.candles || [];
     }
 
     const preparedCandles = this.prepareCandlesForDisplay(rawCandles, candlesCount);
@@ -1201,9 +1252,9 @@ const tickerAction = {
     }
 
     const val = this.getCandlesNormalized(candlesForDisplay);
-    cache[t] = now;
-    cache[c] = val;
-    return cache[c];
+    cache.time = Date.now();
+    cache.candles = val;
+    return val;
   },
   convertCandlesInterval: function (interval) {
     switch (interval) {

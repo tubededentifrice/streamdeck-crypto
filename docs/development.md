@@ -4,11 +4,11 @@
 
 Requirements:
 
-- Node.js compatible with the lockfile and native development dependencies.
+- Node.js 24 or later for development tools.
 - Stream Deck 6.9 or later for plugin testing.
 - The [Stream Deck CLI](https://docs.elgato.com/streamdeck/sdk/introduction/getting-started/) for linking, validation, and packaging.
 
-Install dependencies with `npm install`.
+Install the locked dependencies with `npm ci`.
 
 For local Stream Deck development:
 
@@ -27,6 +27,7 @@ The remote debugger is exposed by Stream Deck at `http://localhost:23654/`. When
 | `npm run build`              | Compile TypeScript and rebuild all runtime bundles.                                |
 | `npm run build -- --stage`   | Build and stage the production runtime under `dist/release/`.                      |
 | `npm run build -- --package` | Build, stage, validate through the CLI packer, and create the `.streamDeckPlugin`. |
+| `npm run watch`              | Watch source files and restart the development plugin after build changes.         |
 | `npm run build:watch`        | Watch TypeScript and bundle inputs.                                                |
 | `npm run bundle`             | Rebuild bundles without compiling adjacent CommonJS files.                         |
 | `npm run preview`            | Watch builds and run the preview server.                                           |
@@ -34,7 +35,7 @@ The remote debugger is exposed by Stream Deck at `http://localhost:23654/`. When
 | `npm run lint`               | Lint TypeScript, tests, and the preview server.                                    |
 | `npm test -- --runInBand`    | Build, then run Jest serially.                                                     |
 
-Run `npm run lint` and `npm test -- --runInBand` after relevant code changes.
+Run `npm run lint` and `npm test -- --runInBand` after relevant code changes. ESLint uses `eslint.config.js`. Jest runs the compiled JavaScript tests.
 
 ## Source and generated files
 

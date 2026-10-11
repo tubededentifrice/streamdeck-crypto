@@ -3,25 +3,23 @@
   "version": "2.1.2",
   "description": "StreamDeck Crypto ticker plugin",
   "devDependencies": {
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.12.7",
-    "@typescript-eslint/eslint-plugin": "^7.8.0",
-    "@typescript-eslint/parser": "^7.8.0",
-    "concurrently": "^8.2.2",
-    "esbuild": "^0.28.1",
-    "eslint": "^8.57.0",
-    "eslint-config-prettier": "^9.1.0",
-    "husky": "^8.0.3",
-    "jest": "^29.7.0",
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.19.2",
+    "@typescript-eslint/eslint-plugin": "^8.71.1",
+    "@typescript-eslint/parser": "^8.71.1",
+    "concurrently": "^10.0.6",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "jest": "^30.5.2",
     "jsep": "^1.4.0",
-    "lint-staged": "^15.2.2",
-    "nodemon": "^3.0.0",
-    "prettier": "^3.2.5",
-    "ts-jest": "^29.1.1",
-    "typescript": "^5.4.5",
-    "canvas": "^3.2.0",
-    "jsdom": "^27.0.0",
-    "sharp": "^0.34.4"
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "sharp": "^0.35.5",
+    "typescript": "^5.9.3"
   },
   "scripts": {
     "build": "node scripts/build.js",
@@ -31,12 +29,12 @@
     "test": "jest",
     "preview": "concurrently -k --names \"tsc,preview\" \"npm:build:watch\" \"npm:preview:serve\"",
     "preview:serve": "node preview-server.js",
-    "watch": "concurrently -k --names \"tsc,streamdeck\" \"npm:build:watch\" \"nodemon --watch com.courcelle.cryptoticker-dev.sdPlugin --exec \\\"streamdeck restart com.courcelle.cryptoticker-dev\\\"\"",
+    "watch": "concurrently -k --names \"tsc,streamdeck\" \"npm:build:watch\" \"node scripts/watch-streamdeck.js\"",
     "pretest": "npm run build",
-    "lint": "eslint \"com.courcelle.cryptoticker-dev.sdPlugin/**/*.ts\" \"__tests__/**/*.{js,ts}\" preview-server.js",
+    "lint": "eslint \"com.courcelle.cryptoticker-dev.sdPlugin/**/*.ts\" \"__tests__/**/*.{js,ts}\" preview-server.js scripts/watch-streamdeck.js eslint.config.js",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write \"**/*.{ts,js,json,css,html}\"",
-    "prepare": "husky install",
+    "prepare": "husky",
     "release:patch": "node scripts/release.js patch",
     "release:minor": "node scripts/release.js minor",
     "release:major": "node scripts/release.js major"
@@ -49,5 +47,8 @@
     "**/*.{json,css,html}": [
       "prettier --write"
     ]
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }

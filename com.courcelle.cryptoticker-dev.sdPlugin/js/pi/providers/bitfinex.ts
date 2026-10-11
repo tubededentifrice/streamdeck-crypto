@@ -28,16 +28,18 @@
     const json = await response.json();
     const list = Array.isArray(json) && Array.isArray(json[0]) ? json[0] : [];
 
-    return list.map(function (value) {
-      const display = (value || '').toUpperCase();
-      // Strip punctuation (e.g., ":") so subscription keys match provider expectations.
-      const sanitized = display.replace(/[:/]/g, '');
-      return {
-        value: display,
-        display: display,
-        symbol: sanitized
-      };
-    });
+    return list
+      .filter((value) => typeof value === 'string' && value.trim())
+      .map(function (value) {
+        const display = value.trim().toUpperCase();
+        // Colons are part of official Bitfinex symbols with long currency codes.
+        const sanitized = display.replace(/\//g, '');
+        return {
+          value: display,
+          display: display,
+          symbol: sanitized
+        };
+      });
   }
 
   return {
