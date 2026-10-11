@@ -19,6 +19,8 @@ describe('property inspector provider helpers', () => {
         symbols: [
           { symbol: 'btcusdt', status: 'TRADING' },
           { symbol: 'ADAUSDT', status: 'BREAK' },
+          { symbol: ['ETHUSDT'], status: 'TRADING' },
+          { symbol: '  ', status: 'TRADING' },
           null
         ]
       })
@@ -31,13 +33,14 @@ describe('property inspector provider helpers', () => {
   test('bitfinex provider normalizes symbols', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => [['tBTCUSD', 'eth/usd']]
+      json: async () => [['tBTCUSD', 'eth/usd', 'aave:usd', null, 42, {}, '   ']]
     });
 
     const pairs = await bitfinexPI.getPairs();
     expect(pairs).toEqual([
       { value: 'TBTCUSD', display: 'TBTCUSD', symbol: 'TBTCUSD' },
-      { value: 'ETH/USD', display: 'ETH/USD', symbol: 'ETHUSD' }
+      { value: 'ETH/USD', display: 'ETH/USD', symbol: 'ETHUSD' },
+      { value: 'AAVE:USD', display: 'AAVE:USD', symbol: 'AAVE:USD' }
     ]);
   });
 });

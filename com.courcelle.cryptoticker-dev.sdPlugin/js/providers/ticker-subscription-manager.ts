@@ -75,23 +75,26 @@
             ? opts.buildSubscriptionKey
             : buildSubscriptionKey;
         this.fallbackPollIntervalMs =
-          typeof opts.fallbackPollIntervalMs === 'number'
+          Number.isFinite(opts.fallbackPollIntervalMs) && opts.fallbackPollIntervalMs > 0
             ? opts.fallbackPollIntervalMs
             : DEFAULT_FALLBACK_POLL_INTERVAL_MS;
         this.staleTickerTimeoutMs =
-          typeof opts.staleTickerTimeoutMs === 'number'
+          Number.isFinite(opts.staleTickerTimeoutMs) && opts.staleTickerTimeoutMs >= 0
             ? opts.staleTickerTimeoutMs
             : DEFAULT_STALE_TICKER_TIMEOUT_MS;
         this.connectionStates = ConnectionStates;
 
-        this.entries = {};
-        this.cache = {};
+        this.entries = Object.create(null);
+        this.cache = Object.create(null);
+        this.fallbackTimerId = null;
+        this.fallbackTimerDueAt = null;
       }
 
       // Subscribe entry: start streaming if possible and kick REST fetch so key paints immediately.
       subscribe(params, handlers) {
         const normalizedHandlers = normalizeHandlers(handlers);
         const entry = this.getOrCreateEntry(params);
+        const firstSubscriber = entry.subscribers.length === 0;
         entry.subscribers.push(normalizedHandlers);
 
         if (this.ensureConnectionFn) {
@@ -105,7 +108,18 @@
         this.ensureStreaming(entry);
         this.startFallbackPolling(entry);
 
-        this.fetchEntry(entry, 'fetchTicker');
+        if (firstSubscriber) {
+          this.fetchEntry(entry, 'fetchTicker');
+        } else {
+          const cached = this.getCachedTicker(entry.key);
+          if (cached && normalizedHandlers.onData) {
+            try {
+              normalizedHandlers.onData(cached);
+            } catch (err) {
+              this.logger('TickerSubscriptionManager: onData handler threw', err);
+            }
+          }
+        }
 
         return {
           key: entry.key,
@@ -122,14 +136,15 @@
         }
 
         const idx = entry.subscribers.indexOf(subscriber);
-        if (idx >= 0) {
-          entry.subscribers.splice(idx, 1);
+        if (idx < 0) {
+          return;
         }
+        entry.subscribers.splice(idx, 1);
 
         if (entry.subscribers.length === 0) {
+          delete this.entries[key];
           this.stopFallbackPolling(entry);
           this.stopStreaming(entry);
-          delete this.entries[key];
         }
       }
 
@@ -144,6 +159,7 @@
         }
 
         entry.lastStreamUpdate = Date.now();
+        entry.streamRevision++;
         this.setEntryConnectionState(entry, this.connectionStates.LIVE, ticker);
         this.cache[key] = ticker;
         this.notifySubscribers(entry, ticker);
@@ -181,7 +197,7 @@
 
       ensureStreaming(entry) {
         if (
-          !entry ||
+          !this.isEntryActive(entry) ||
           entry.streamingActive ||
           entry.streamingPending ||
           !this.subscribeStreamingFn
@@ -191,20 +207,27 @@
 
         try {
           entry.streamingPending = true;
+          const generation = ++entry.streamingGeneration;
           const result = this.subscribeStreamingFn(entry);
           if (result && typeof result.then === 'function') {
             result
               .then((subscribed) => {
+                if (entry.streamingGeneration !== generation) {
+                  return;
+                }
                 entry.streamingPending = false;
                 if (!this.isEntryActive(entry)) {
-                  if (subscribed !== false && this.unsubscribeStreamingFn) {
-                    this.unsubscribeStreamingFn(entry);
+                  if (subscribed !== false) {
+                    this.stopStreaming(entry);
                   }
                   return;
                 }
                 entry.streamingActive = subscribed !== false;
               })
               .catch((err) => {
+                if (entry.streamingGeneration !== generation) {
+                  return;
+                }
                 entry.streamingPending = false;
                 entry.streamingActive = false;
                 this.logger('TickerSubscriptionManager: subscribeStreaming promise rejected', err);
@@ -224,11 +247,7 @@
       }
 
       stopStreaming(entry) {
-        if (
-          !entry ||
-          !this.unsubscribeStreamingFn ||
-          (!entry.streamingActive && !entry.streamingPending)
-        ) {
+        if (!entry || !this.unsubscribeStreamingFn) {
           return;
         }
 
@@ -260,10 +279,10 @@
           return;
         }
 
-        const subscribers = entry.subscribers;
+        const subscribers = entry.subscribers.slice();
         for (let i = 0; i < subscribers.length; i++) {
           const subscriber = subscribers[i];
-          if (subscriber && subscriber.onData) {
+          if (subscriber && entry.subscribers.includes(subscriber) && subscriber.onData) {
             try {
               subscriber.onData(ticker);
             } catch (err) {
@@ -274,31 +293,75 @@
       }
 
       startFallbackPolling(entry) {
-        if (!entry || entry.fallbackTimerId || !this.fetchTickerFn) {
+        if (!this.isEntryActive(entry) || entry.nextPollAt !== null || !this.fetchTickerFn) {
           return;
         }
-
-        const self = this;
-        entry.fallbackTimerId = setInterval(function () {
-          self.pollEntryIfNeeded(entry);
-        }, this.fallbackPollIntervalMs);
+        entry.nextPollAt = Date.now() + this.fallbackPollIntervalMs;
+        this.scheduleFallbackPolling();
       }
 
       stopFallbackPolling(entry) {
-        if (!entry || !entry.fallbackTimerId) {
+        if (!entry) {
           return;
         }
+        entry.nextPollAt = null;
+        this.scheduleFallbackPolling();
+      }
 
-        clearInterval(entry.fallbackTimerId);
-        entry.fallbackTimerId = null;
+      scheduleFallbackPolling() {
+        let nextPollAt = null;
+        this.forEachEntry((entry) => {
+          if (
+            this.isEntryActive(entry) &&
+            entry.nextPollAt !== null &&
+            (nextPollAt === null || entry.nextPollAt < nextPollAt)
+          ) {
+            nextPollAt = entry.nextPollAt;
+          }
+        });
+        if (this.fallbackTimerId !== null && this.fallbackTimerDueAt === nextPollAt) {
+          return;
+        }
+        if (this.fallbackTimerId !== null) {
+          clearTimeout(this.fallbackTimerId);
+          this.fallbackTimerId = null;
+        }
+        this.fallbackTimerDueAt = nextPollAt;
+        if (nextPollAt === null) {
+          return;
+        }
+        this.fallbackTimerId = setTimeout(
+          () => {
+            this.fallbackTimerId = null;
+            this.fallbackTimerDueAt = null;
+            const now = Date.now();
+            this.forEachEntry((entry) => {
+              if (
+                this.isEntryActive(entry) &&
+                entry.nextPollAt !== null &&
+                entry.nextPollAt <= now
+              ) {
+                entry.nextPollAt = now + this.fallbackPollIntervalMs;
+                this.pollEntryIfNeeded(entry);
+              }
+            });
+            this.scheduleFallbackPolling();
+          },
+          Math.max(0, nextPollAt - Date.now())
+        );
       }
 
       pollEntryIfNeeded(entry) {
-        if (!entry || !this.fetchTickerFn || entry.fetchInFlight) {
+        if (!this.isEntryActive(entry)) {
           return;
         }
 
-        if (!this.shouldPollEntry(entry)) {
+        this.ensureStreaming(entry);
+        if (!this.fetchTickerFn || entry.fetchInFlight) {
+          return;
+        }
+
+        if (!this.shouldPollEntry(entry) || this.hasFreshFetch(entry)) {
           return;
         }
 
@@ -315,8 +378,8 @@
           return true;
         }
 
-        const lastUpdate = entry.lastStreamUpdate || 0;
-        if (!lastUpdate) {
+        const lastUpdate = entry.lastStreamUpdate;
+        if (lastUpdate === null) {
           return true;
         }
 
@@ -334,9 +397,13 @@
             subscribers: [],
             streamingActive: false,
             streamingPending: false,
+            streamingGeneration: 0,
             fetchInFlight: false,
-            lastStreamUpdate: 0,
-            fallbackTimerId: null,
+            fetchPromise: null,
+            streamRevision: 0,
+            lastStreamUpdate: null,
+            lastFetchUpdate: null,
+            nextPollAt: null,
             meta: {},
             connectionState: null
           };
@@ -350,41 +417,92 @@
         return !!entry && this.entries[entry.key] === entry && entry.subscribers.length > 0;
       }
 
+      hasFreshFetch(entry) {
+        const cached = this.getCachedTicker(entry.key);
+        return (
+          entry.lastFetchUpdate !== null &&
+          cached &&
+          cached.connectionState !== this.connectionStates.BROKEN &&
+          Date.now() - entry.lastFetchUpdate < this.fallbackPollIntervalMs
+        );
+      }
+
+      requestTicker(params) {
+        const entry = this.getEntry(this.buildKeyFromParams(params));
+        if (!entry) {
+          return this.fetchTickerFn
+            ? Promise.resolve(this.fetchTickerFn(params))
+            : Promise.resolve(null);
+        }
+        if (entry.fetchPromise) {
+          return entry.fetchPromise;
+        }
+        if (!this.shouldPollEntry(entry) || this.hasFreshFetch(entry)) {
+          return Promise.resolve(this.getCachedTicker(entry.key));
+        }
+        return this.fetchEntry(entry, 'fetchTicker');
+      }
+
       fetchEntry(entry, label) {
-        if (!entry || !this.fetchTickerFn || entry.fetchInFlight) {
+        if (!this.isEntryActive(entry) || !this.fetchTickerFn) {
           return null;
+        }
+        if (entry.fetchInFlight) {
+          return entry.fetchPromise;
         }
 
         entry.fetchInFlight = true;
+        const streamRevision = entry.streamRevision;
         let request;
         try {
           request = Promise.resolve(this.fetchTickerFn(entry.params));
         } catch (err) {
           request = Promise.reject(err);
         }
-        request
+        entry.fetchPromise = request
           .then((ticker) => {
-            entry.fetchInFlight = false;
             if (!this.isEntryActive(entry)) {
-              return;
+              return ticker;
+            }
+            if (entry.streamRevision !== streamRevision) {
+              return this.getCachedTicker(entry.key);
             }
             if (!ticker || typeof ticker !== 'object') {
               throw new Error('TickerSubscriptionManager: empty ticker response');
             }
+            if (ticker.connectionState === this.connectionStates.BROKEN && this.cache[entry.key]) {
+              ticker = Object.assign({}, this.cache[entry.key], {
+                connectionState: this.connectionStates.BROKEN
+              });
+            }
             this.applyTickerStateFromFetch(entry, ticker);
+            entry.lastFetchUpdate =
+              ticker.connectionState === this.connectionStates.BROKEN ? null : Date.now();
             this.cache[entry.key] = ticker;
+            if (entry.lastFetchUpdate !== null && entry.nextPollAt !== null) {
+              entry.nextPollAt = entry.lastFetchUpdate + this.fallbackPollIntervalMs;
+              this.scheduleFallbackPolling();
+            }
             this.notifySubscribers(entry, ticker);
+            return ticker;
           })
           .catch((err) => {
-            entry.fetchInFlight = false;
             if (!this.isEntryActive(entry)) {
-              return;
+              return null;
+            }
+            if (entry.streamRevision !== streamRevision) {
+              return this.getCachedTicker(entry.key);
             }
             this.logger('TickerSubscriptionManager: ' + label + ' error', err);
             this.notifySubscriberErrors(entry, err);
             this.handleFetchError(entry);
+            return this.getCachedTicker(entry.key);
+          })
+          .finally(() => {
+            entry.fetchInFlight = false;
+            entry.fetchPromise = null;
           });
-        return request;
+        return entry.fetchPromise;
       }
 
       notifySubscriberErrors(entry, error) {
@@ -394,7 +512,7 @@
         const subscribers = entry.subscribers.slice();
         for (let i = 0; i < subscribers.length; i++) {
           const handler = subscribers[i] && subscribers[i].onError;
-          if (!handler) {
+          if (!handler || !entry.subscribers.includes(subscribers[i])) {
             continue;
           }
           try {
@@ -421,24 +539,26 @@
           return;
         }
 
-        const state =
-          ticker.connectionState ||
-          (entry.streamingActive ? this.connectionStates.LIVE : this.connectionStates.DETACHED);
+        const state = ticker.connectionState || this.connectionStates.DETACHED;
         this.setEntryConnectionState(entry, state, ticker);
       }
 
       // REST failure: mark BROKEN and cache placeholder so later subscribers see same status tile.
       handleFetchError(entry) {
-        if (!entry) {
+        if (!this.isEntryActive(entry)) {
           return;
         }
 
+        entry.lastFetchUpdate = null;
         this.setEntryConnectionState(entry, this.connectionStates.BROKEN);
         const key = entry.key;
         const cached = this.cache[key];
         if (cached) {
-          cached.connectionState = this.connectionStates.BROKEN;
-          this.notifySubscribers(entry, cached);
+          const brokenTicker = Object.assign({}, cached, {
+            connectionState: this.connectionStates.BROKEN
+          });
+          this.cache[key] = brokenTicker;
+          this.notifySubscribers(entry, brokenTicker);
           return;
         }
 

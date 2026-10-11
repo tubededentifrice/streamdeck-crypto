@@ -16,18 +16,40 @@
     : undefined, function buildFetchUtils() {
     const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
     function fetchWithTimeout(url, options, timeoutMs) {
-        const requestTimeout = typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : DEFAULT_REQUEST_TIMEOUT_MS;
+        const requestTimeout = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+            ? timeoutMs
+            : DEFAULT_REQUEST_TIMEOUT_MS;
         const requestOptions = Object.assign({}, options || {});
-        if (typeof AbortController === 'undefined' || requestOptions.signal) {
-            return fetch(url, requestOptions);
+        const callerSignal = requestOptions.signal;
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        if (controller) {
+            requestOptions.signal = controller.signal;
         }
-        const controller = new AbortController();
-        const timerId = setTimeout(function abortTimedOutRequest() {
-            controller.abort();
-        }, requestTimeout);
-        requestOptions.signal = controller.signal;
-        return fetch(url, requestOptions).finally(function clearRequestTimeout() {
+        let timerId;
+        let abortCaller;
+        const request = new Promise((resolve, reject) => {
+            abortCaller = () => {
+                controller === null || controller === void 0 ? void 0 : controller.abort();
+                reject((callerSignal === null || callerSignal === void 0 ? void 0 : callerSignal.reason) || new Error('Request aborted'));
+            };
+            if (callerSignal === null || callerSignal === void 0 ? void 0 : callerSignal.aborted) {
+                abortCaller();
+                return;
+            }
+            callerSignal === null || callerSignal === void 0 ? void 0 : callerSignal.addEventListener('abort', abortCaller, { once: true });
+            timerId = setTimeout(() => {
+                controller === null || controller === void 0 ? void 0 : controller.abort();
+                const error = new Error('Request timed out');
+                error.name = 'TimeoutError';
+                reject(error);
+            }, requestTimeout);
+            Promise.resolve(fetch(url, requestOptions)).then(resolve, reject);
+        });
+        return request.finally(() => {
             clearTimeout(timerId);
+            if (abortCaller) {
+                callerSignal === null || callerSignal === void 0 ? void 0 : callerSignal.removeEventListener('abort', abortCaller);
+            }
         });
     }
     return {

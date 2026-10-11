@@ -45,13 +45,14 @@
             this.autoCloseDelayMs =
                 typeof opts.autoCloseDelayMs === 'number' ? opts.autoCloseDelayMs : 0;
             this.shouldResubscribeOnReconnect = opts.shouldResubscribeOnReconnect !== false;
-            this.symbolEntries = {};
+            this.symbolEntries = Object.create(null);
             this.ws = null;
             this.wsClosedByUser = false;
             this.reconnectTimer = null;
             this.closeTimer = null;
             this.connectionTimer = null;
             this.isConnecting = false;
+            this.messageHelpers = this.buildMessageHelpers();
         }
         // Pool used by Binance/Bitfinex: multiplex symbols on one socket to stay under WebView limits.
         subscribe(symbol, subscriberOptions) {
@@ -93,11 +94,13 @@
                     self.removeSubscriber(normalizedSymbol, subscriber);
                 },
                 updateMetadata: function (updates) {
-                    self.updateSymbolMetadata(normalizedSymbol, updates);
+                    if (self.symbolEntries[normalizedSymbol] === entry) {
+                        self.updateSymbolMetadata(normalizedSymbol, updates);
+                    }
                 },
                 getMetadata: function () {
                     const target = self.symbolEntries[normalizedSymbol];
-                    return target ? target.meta : null;
+                    return target === entry ? target.meta : null;
                 }
             };
         }
@@ -173,7 +176,7 @@
                     return;
                 }
                 try {
-                    self.handleMessageFn(event, self.buildMessageHelpers());
+                    self.handleMessageFn(event, self.messageHelpers);
                 }
                 catch (err) {
                     self.logger('WebSocketConnectionPool: handleMessage error', err);
@@ -259,18 +262,12 @@
                     return;
                 }
                 this.logger('WebSocketConnectionPool: connection attempt timed out');
+                this.handleSocketClose({ code: 1006 }, socket);
                 try {
                     socket.close();
                 }
                 catch (err) {
                     this.logger('WebSocketConnectionPool: error closing timed-out socket', err);
-                    if (this.ws === socket) {
-                        this.ws = null;
-                        this.isConnecting = false;
-                        this.resetSubscriptionState();
-                        this.notifyAllDisconnected();
-                        this.scheduleReconnect();
-                    }
                 }
             }, this.connectionTimeoutMs);
         }
@@ -479,6 +476,7 @@
             }
         }
         closeConnection() {
+            this.clearCloseTimer();
             this.clearReconnectTimer();
             this.clearConnectionTimeout();
             if (!this.ws) {

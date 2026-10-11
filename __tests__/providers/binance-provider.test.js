@@ -16,6 +16,10 @@ function createProvider(overrides) {
 }
 
 describe('BinanceProvider', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
   test('percent change normalizes to decimal', () => {
     const provider = createProvider();
     const params = { symbol: 'BTCUSDT' };
@@ -53,12 +57,16 @@ describe('BinanceProvider', () => {
   });
 
   test('sendBinanceSubscription emits subscribe payload with incrementing id', () => {
+    jest.useFakeTimers();
     const provider = createProvider();
     provider.wsRequestId = 0;
-    const ws = { send: jest.fn() };
+    const ws = { send: jest.fn(), readyState: 1 };
+    provider.webSocketPool.ws = ws;
 
     provider.sendBinanceSubscription(ws, 'BTCUSDT', true);
+    jest.advanceTimersByTime(300);
     provider.sendBinanceSubscription(ws, 'BTCUSDT', false);
+    jest.advanceTimersByTime(300);
 
     const [firstPayload, secondPayload] = ws.send.mock.calls.map((call) => JSON.parse(call[0]));
     expect(firstPayload.method).toBe('SUBSCRIBE');
@@ -69,7 +77,7 @@ describe('BinanceProvider', () => {
 
   test('fetchTicker falls back to generic provider on failure', async () => {
     const provider = createProvider();
-    provider.fetchTickerDirect = jest.fn().mockRejectedValue(new Error('network'));
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network'));
     provider.genericFallback = {
       fetchTicker: jest.fn().mockResolvedValue({ pair: 'fallback' })
     };
@@ -126,5 +134,66 @@ describe('BinanceProvider', () => {
     } finally {
       global.fetch = originalFetch;
     }
+  });
+  test('keeps one pool subscription after disconnect and retry', () => {
+    const provider = createProvider();
+    const socket = { readyState: 0, close: jest.fn() };
+    provider.webSocketPool.createWebSocket = () => socket;
+    const entry = { key: 'key', params: { symbol: 'BTCUSD' }, meta: {} };
+    expect(provider.subscribeStream(entry)).toBe(true);
+    provider.webSocketPool.notifyAllDisconnected();
+    expect(provider.subscribeStream(entry)).toBe(false);
+    const symbol = provider.resolveSymbol(entry.params);
+    expect(provider.webSocketPool.symbolEntries[symbol].subscribers).toHaveLength(1);
+    provider.unsubscribeStream(entry);
+    expect(provider.webSocketPool.hasSubscribers()).toBe(false);
+  });
+  test('batches many page subscriptions into one control request', () => {
+    jest.useFakeTimers();
+    const provider = createProvider();
+    const ws = { send: jest.fn(), readyState: 1 };
+    provider.webSocketPool.ws = ws;
+    for (let index = 0; index < 40; index++) {
+      provider.sendBinanceSubscription(ws, 'COIN' + index + 'USDT', true);
+    }
+    expect(ws.send).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(300);
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(ws.send.mock.calls[0][0]).params).toHaveLength(40);
+    provider.clearPendingSubscriptions();
+  });
+
+  test('uses only the last subscription change and discards old socket requests', () => {
+    jest.useFakeTimers();
+    const provider = createProvider();
+    const ws = { send: jest.fn(), readyState: 1 };
+    provider.webSocketPool.ws = ws;
+    provider.sendBinanceSubscription(ws, 'BTCUSDT', true);
+    provider.sendBinanceSubscription(ws, 'BTCUSDT', false);
+    provider.sendBinanceSubscription(ws, 'ETHUSDT', true);
+    jest.advanceTimersByTime(300);
+    expect(JSON.parse(ws.send.mock.calls[0][0])).toMatchObject({
+      method: 'UNSUBSCRIBE',
+      params: ['btcusdt@ticker']
+    });
+    provider.webSocketPool.ws = { readyState: 1 };
+    jest.advanceTimersByTime(300);
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test.each([{}, { lastPrice: null }, { lastPrice: '1bad' }, { lastPrice: 'Infinity' }])(
+    'rejects malformed REST ticker %j',
+    (payload) => {
+      const provider = createProvider();
+      expect(() => provider.transformRestTicker(payload, {}, 'BTCUSDT')).toThrow(
+        'invalid REST ticker'
+      );
+    }
+  );
+
+  test.each([undefined, null, 'bad', Infinity])('ignores invalid stream price %p', (price) => {
+    const provider = createProvider();
+    expect(provider.transformStreamTicker({ c: price }, { params: {} }, 'BTCUSDT')).toBeNull();
   });
 });

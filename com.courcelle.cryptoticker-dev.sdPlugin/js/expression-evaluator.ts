@@ -55,6 +55,8 @@ interface ExpressionEvaluatorExports {
   allowedVariables: string[];
 }
 
+const MAX_EXPRESSION_CACHE_ENTRIES = 256;
+
 const DEFAULT_ALLOWED_VARIABLES = [
   'value',
   'high',
@@ -207,6 +209,12 @@ class ExpressionEvaluator {
       disallowedVariables,
       validationError
     };
+    if (this.cache.size >= MAX_EXPRESSION_CACHE_ENTRIES) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
+    }
     this.cache.set(normalized, entry);
     return entry;
   }

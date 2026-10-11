@@ -33,21 +33,42 @@ interface FetchUtilsExports {
       timeoutMs?: number
     ): Promise<Response> {
       const requestTimeout =
-        typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : DEFAULT_REQUEST_TIMEOUT_MS;
+        typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+          ? timeoutMs
+          : DEFAULT_REQUEST_TIMEOUT_MS;
       const requestOptions = Object.assign({}, options || {});
-
-      if (typeof AbortController === 'undefined' || requestOptions.signal) {
-        return fetch(url, requestOptions);
+      const callerSignal = requestOptions.signal;
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      if (controller) {
+        requestOptions.signal = controller.signal;
       }
 
-      const controller = new AbortController();
-      const timerId = setTimeout(function abortTimedOutRequest() {
-        controller.abort();
-      }, requestTimeout);
-      requestOptions.signal = controller.signal;
+      let timerId: ReturnType<typeof setTimeout> | undefined;
+      let abortCaller: (() => void) | undefined;
+      const request = new Promise<Response>((resolve, reject) => {
+        abortCaller = () => {
+          controller?.abort();
+          reject(callerSignal?.reason || new Error('Request aborted'));
+        };
+        if (callerSignal?.aborted) {
+          abortCaller();
+          return;
+        }
+        callerSignal?.addEventListener('abort', abortCaller, { once: true });
+        timerId = setTimeout(() => {
+          controller?.abort();
+          const error = new Error('Request timed out');
+          error.name = 'TimeoutError';
+          reject(error);
+        }, requestTimeout);
+        Promise.resolve(fetch(url, requestOptions)).then(resolve, reject);
+      });
 
-      return fetch(url, requestOptions).finally(function clearRequestTimeout() {
+      return request.finally(() => {
         clearTimeout(timerId);
+        if (abortCaller) {
+          callerSignal?.removeEventListener('abort', abortCaller);
+        }
       });
     }
 

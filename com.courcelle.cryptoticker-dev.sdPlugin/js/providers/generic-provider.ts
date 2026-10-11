@@ -60,6 +60,14 @@
     const DEFAULT_RETRY_DELAY_MS = 5000;
     const TPROXY_CACHE_BYPASS_PARAM = '_ctBust';
 
+    function toFiniteNumber(value) {
+      if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) {
+        return NaN;
+      }
+      const number = Number(value);
+      return Number.isFinite(number) ? number : NaN;
+    }
+
     // Ensure requests to the proxy always bypass client-side caches.
     function appendCacheBypassParam(url) {
       if (!url || typeof url !== 'string') {
@@ -81,9 +89,15 @@
         super(options);
         const opts = options || {};
         this.retryDelayMs =
-          typeof opts.retryDelayMs === 'number' ? opts.retryDelayMs : DEFAULT_RETRY_DELAY_MS;
+          Number.isFinite(opts.retryDelayMs) && opts.retryDelayMs > 0
+            ? opts.retryDelayMs
+            : DEFAULT_RETRY_DELAY_MS;
         this.connection = null;
         this.shouldReconnect = true;
+        this.retryTimerId = null;
+        this.connectionGeneration = 0;
+        this.tickerRequests = new Map();
+        this.candleRequests = new Map();
         this.connectionState = 'Disconnected';
         this.startingConnection = false;
         this.normalizedBaseUrl = (this.baseUrl || '').replace(/\/$/, '');
@@ -120,72 +134,128 @@
         return this.subscriptionManager.getCachedTicker(key);
       }
 
+      hasSubscribers() {
+        return Object.keys(this.subscriptionManager.entries).length > 0;
+      }
+
       ensureConnection() {
-        if (
-          this.connection &&
-          (this.connectionState === CONNECTION_STATE_CONNECTED || this.startingConnection)
-        ) {
+        if (!this.hasSubscribers()) {
           return;
         }
-
+        if (this.connection) {
+          this.startConnection();
+          return;
+        }
         if (typeof signalR === 'undefined' || !signalR.HubConnectionBuilder) {
-          this.logger('GenericProvider: SignalR not available, skipping WebSocket connection.');
           return;
         }
 
-        if (!this.connection) {
-          this.connection = new signalR.HubConnectionBuilder()
-            .withUrl(this.baseUrl + '/tickerhub')
-            .withAutomaticReconnect()
-            .configureLogging(signalR.LogLevel.Warning)
-            .build();
+        const connection = new signalR.HubConnectionBuilder()
+          .withUrl(this.normalizedBaseUrl + '/tickerhub')
+          .withAutomaticReconnect()
+          .configureLogging(signalR.LogLevel.Warning)
+          .build();
+        this.connection = connection;
+        connection.on('ticker', (ticker) => {
+          if (this.connection === connection) {
+            this.handleTickerMessage(ticker);
+          }
+        });
+        connection.onreconnecting(() => {
+          if (this.connection === connection) {
+            this.markConnectionDisconnected('Reconnecting');
+          }
+        });
+        connection.onreconnected(() => {
+          if (this.connection === connection) {
+            this.connectionState = CONNECTION_STATE_CONNECTED;
+            this.onConnectionEstablished();
+          }
+        });
+        connection.onclose(() => {
+          if (this.connection === connection) {
+            this.markConnectionDisconnected('Disconnected');
+            this.scheduleReconnect();
+          }
+        });
+        this.startConnection();
+      }
 
-          const self = this;
-          this.connection.on('ticker', function (ticker) {
-            self.handleTickerMessage(ticker);
-          });
-          this.connection.onreconnected(function () {
-            self.logger('GenericProvider: connection re-established, resubscribing.');
-            self.onConnectionEstablished();
-          });
-          this.connection.onclose(function () {
-            self.connectionState = 'Disconnected';
-            if (self.shouldReconnect) {
-              setTimeout(function () {
-                self.startConnection();
-              }, self.retryDelayMs);
-            }
+      markConnectionDisconnected(state) {
+        this.connectionState = state;
+        this.connectionGeneration++;
+        this.subscriptionManager.forEachEntry((entry) => {
+          entry.streamingActive = false;
+          entry.streamingPending = false;
+          entry.streamingGeneration++;
+          entry.meta.isSubscribed = false;
+          entry.meta.pending = false;
+        });
+      }
+
+      scheduleReconnect() {
+        if (!this.shouldReconnect || !this.hasSubscribers() || this.retryTimerId !== null) {
+          return;
+        }
+        this.retryTimerId = setTimeout(() => {
+          this.retryTimerId = null;
+          this.startConnection();
+        }, this.retryDelayMs);
+      }
+
+      stopConnectionIfIdle() {
+        if (this.hasSubscribers()) {
+          return;
+        }
+        if (this.retryTimerId !== null) {
+          clearTimeout(this.retryTimerId);
+          this.retryTimerId = null;
+        }
+        const connection = this.connection;
+        this.connection = null;
+        this.startingConnection = false;
+        this.markConnectionDisconnected('Disconnected');
+        if (connection) {
+          Promise.resolve(connection.stop()).catch((err) => {
+            this.logger('GenericProvider: error stopping connection', err);
           });
         }
-
-        this.startConnection();
       }
 
       startConnection() {
         if (
           !this.connection ||
+          !this.hasSubscribers() ||
           this.startingConnection ||
+          this.connectionState === 'Reconnecting' ||
           this.connectionState === CONNECTION_STATE_CONNECTED
         ) {
           return;
         }
-
-        const self = this;
+        if (this.retryTimerId !== null) {
+          clearTimeout(this.retryTimerId);
+          this.retryTimerId = null;
+        }
+        const connection = this.connection;
         this.startingConnection = true;
-        this.connection
+        connection
           .start()
-          .then(function () {
-            self.connectionState = CONNECTION_STATE_CONNECTED;
-            self.startingConnection = false;
-            self.onConnectionEstablished();
+          .then(() => {
+            if (this.connection !== connection) {
+              return;
+            }
+            this.connectionState = CONNECTION_STATE_CONNECTED;
+            this.startingConnection = false;
+            this.onConnectionEstablished();
           })
-          .catch(function (err) {
-            self.connectionState = 'Disconnected';
-            self.startingConnection = false;
-            self.logger('GenericProvider: error starting connection', err);
-            setTimeout(function () {
-              self.startConnection();
-            }, self.retryDelayMs);
+          .catch((err) => {
+            if (this.connection !== connection) {
+              return;
+            }
+            this.markConnectionDisconnected('Disconnected');
+            this.startingConnection = false;
+            this.logger('GenericProvider: error starting connection', err);
+            this.scheduleReconnect();
           });
       }
 
@@ -194,16 +264,13 @@
       }
 
       onConnectionEstablished() {
-        const self = this;
-        this.subscriptionManager.forEachEntry(function (entry) {
-          if (entry) {
-            entry.streamingActive = false;
-            if (entry.meta) {
-              entry.meta.isSubscribed = false;
-              entry.meta.pending = true;
-            }
-            self.subscriptionManager.ensureStreaming(entry);
-          }
+        this.connectionGeneration++;
+        this.subscriptionManager.forEachEntry((entry) => {
+          entry.streamingActive = false;
+          entry.streamingPending = false;
+          entry.meta.isSubscribed = false;
+          entry.meta.pending = false;
+          this.subscriptionManager.ensureStreaming(entry);
         });
       }
 
@@ -237,8 +304,10 @@
         entry.meta.pending = true;
         const params = entry.params;
         const self = this;
+        const connection = this.connection;
+        const generation = this.connectionGeneration;
 
-        return this.connection
+        return connection
           .invoke(
             'Subscribe',
             params.exchange,
@@ -247,12 +316,18 @@
             params.toCurrency
           )
           .then(function () {
+            if (self.connection !== connection || self.connectionGeneration !== generation) {
+              return false;
+            }
             entry.meta.isSubscribed = true;
             entry.meta.pending = false;
             entry.streamingActive = true;
             return true;
           })
           .catch(function (err) {
+            if (self.connection !== connection || self.connectionGeneration !== generation) {
+              return false;
+            }
             entry.meta.isSubscribed = false;
             entry.meta.pending = false;
             entry.streamingActive = false;
@@ -268,16 +343,21 @@
 
         entry.meta = entry.meta || {};
 
+        const replacement = this.subscriptionManager.getEntry(entry.key);
+        if (replacement && replacement !== entry) {
+          return true;
+        }
         if (!this.connection || !entry.meta.isSubscribed) {
           entry.meta.isSubscribed = false;
           entry.streamingActive = false;
+          this.stopConnectionIfIdle();
           return true;
         }
 
         const params = entry.params;
         const self = this;
 
-        return this.connection
+        const request = this.connection
           .invoke(
             'Unsubscribe',
             params.exchange,
@@ -296,13 +376,28 @@
             self.logger('GenericProvider: error invoking Unsubscribe', err);
             return false;
           });
+        this.stopConnectionIfIdle();
+        return request;
       }
 
       fetchTicker(params) {
-        return this.rawFetchTicker(params);
+        return this.subscriptionManager.requestTicker(params);
       }
 
       rawFetchTicker(params) {
+        params = params || {};
+        const key = this.subscriptionManager.buildKeyFromParams(params);
+        if (this.tickerRequests.has(key)) {
+          return this.tickerRequests.get(key);
+        }
+        const request = this.performTickerFetch(params).finally(() => {
+          this.tickerRequests.delete(key);
+        });
+        this.tickerRequests.set(key, request);
+        return request;
+      }
+
+      performTickerFetch(params) {
         const exchange = params.exchange || '';
         const symbol = params.symbol || '';
         const fromCurrency = params.fromCurrency || 'USD';
@@ -346,8 +441,7 @@
             );
             const cached = self.subscriptionManager.getCachedTicker(key);
             if (cached) {
-              cached.connectionState = cached.connectionState || ConnectionStates.BACKUP;
-              return cached;
+              return Object.assign({}, cached, { connectionState: ConnectionStates.BROKEN });
             }
             // Fallback: return empty ticker so renderer shows BROKEN, not runtime error.
             const fallback = self.buildEmptyTicker(symbol);
@@ -367,24 +461,46 @@
           message.conversionFromCurrency || message['conversionFromCurrency'] || null;
         const toCurrency = message.conversionToCurrency || message['conversionToCurrency'] || null;
         const key = this.subscriptionManager.buildKey(provider, symbol, fromCurrency, toCurrency);
-        const ticker = this.transformTickerResponse(message);
-
         const entry = this.subscriptionManager.getEntry(key);
-        if (entry && entry.meta) {
+        if (!entry) {
+          return;
+        }
+        let ticker;
+        try {
+          ticker = this.transformTickerResponse(message);
+        } catch (err) {
+          this.logger('GenericProvider: invalid streaming ticker', err);
+          return;
+        }
+
+        if (entry.meta) {
           entry.meta.isSubscribed = true;
           entry.meta.pending = false;
           entry.streamingActive = true;
         }
 
-        // Notify all contexts; manager marks entry live and stops fallback polling.
         this.subscriptionManager.handleStreamingUpdate(key, ticker);
       }
 
-      async fetchCandles(params) {
+      fetchCandles(params) {
+        params = params || {};
+        const limit = Number.isFinite(params.limit) && params.limit > 0 ? params.limit : 24;
+        const key = JSON.stringify([params.exchange, params.symbol, params.interval, limit]);
+        if (this.candleRequests.has(key)) {
+          return this.candleRequests.get(key);
+        }
+        const request = this.performCandlesFetch(params).finally(() => {
+          this.candleRequests.delete(key);
+        });
+        this.candleRequests.set(key, request);
+        return request;
+      }
+
+      async performCandlesFetch(params) {
         const exchange = params.exchange;
         const symbol = params.symbol;
         const interval = params.interval;
-        const limit = typeof params.limit === 'number' && params.limit > 0 ? params.limit : 24;
+        const limit = Number.isFinite(params.limit) && params.limit > 0 ? params.limit : 24;
         const base = this.baseUrl.replace(/\/$/, '');
         const url =
           base +
@@ -393,7 +509,7 @@
           '/' +
           encodeURIComponent(symbol) +
           '/' +
-          interval +
+          encodeURIComponent(interval) +
           '?limit=' +
           limit;
 
@@ -452,15 +568,25 @@
 
       transformTickerResponse(responseJson) {
         const json = responseJson || {};
+        const last = toFiniteNumber(json.last);
+        if (!Number.isFinite(last) || last < 0) {
+          throw new Error('GenericProvider: invalid ticker price');
+        }
+        const pair =
+          typeof json.symbol === 'string'
+            ? json.symbol
+            : typeof json.pair === 'string'
+              ? json.pair
+              : '';
         return {
-          changeDaily: json['dailyChange'] || 0,
-          changeDailyPercent: json['dailyChangeRelative'] || 0,
-          last: json['last'] || 0,
-          volume: json['volume'] || 0,
-          high: json['high24h'] || 0,
-          low: json['low24h'] || 0,
-          pair: json['symbol'] || json['pair'] || '',
-          pairDisplay: json['symbolDisplay'] || json['symbol'] || json['pair'] || ''
+          changeDaily: toFiniteNumber(json.dailyChange) || 0,
+          changeDailyPercent: toFiniteNumber(json.dailyChangeRelative) || 0,
+          last,
+          volume: toFiniteNumber(json.volume) || 0,
+          high: toFiniteNumber(json.high24h) || 0,
+          low: toFiniteNumber(json.low24h) || 0,
+          pair,
+          pairDisplay: typeof json.symbolDisplay === 'string' ? json.symbolDisplay : pair
         };
       }
 
